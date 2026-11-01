@@ -6,10 +6,12 @@ import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { credentialStore } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, plain } from '../lib/login.mjs';
-import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted } from '../lib/workspace.mjs';
+import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine } from '../lib/workspace.mjs';
+import { linkWorktree } from '../lib/run.mjs';
 import { writeJsonAtomic } from '../lib/state.mjs';
 
 const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' } };
+const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
 const APPROVE = 'pairing requested: approve in Account → Agents within 15 minutes';
 
 class Usage extends Error {
@@ -70,6 +72,13 @@ const commands = {
     if (pending) out(committedLine(pending));
   },
 
+  async link({ positionals: [answer], env, cwd, out, data, spawnFlush }) {
+    if (answer !== 'none' && !LINK_KEY.test(answer ?? '')) throw new Usage('usage: eocrm link <KEY|none>');
+    const taskKey = answer === 'none' ? null : answer;
+    await linkWorktree({ data, env, now: Date.now, spawnFlush }, cwd, taskKey);
+    out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
+  },
+
   async logout({ env, out, data, store }) {
     const account = loadAccount(data);
     const keys = new Set(Array.isArray(account.keys) ? account.keys : []);
@@ -89,10 +98,6 @@ const commands = {
   },
 };
 
-function committedLine({ workspace, region }) {
-  return `.claude/eocrm.json names ${workspace} (${region}): ask the member, then run /eocrm:use --accept or /eocrm:use --decline`;
-}
-
 export async function main({
   argv = process.argv.slice(2),
   env = process.env,
@@ -102,6 +107,7 @@ export async function main({
   version = process.versions.node,
   store,
   openBrowser: open = openBrowser,
+  spawnFlush,
 } = {}) {
   if (!(Number(String(version).split('.')[0]) >= 20)) {
     err('eocrm needs Node 20+ on PATH');
@@ -111,14 +117,14 @@ export async function main({
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
-    if (!command) throw new Usage('usage: eocrm login|use|pair|status|logout --data <dir>');
+    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|logout --data <dir>');
     let data;
     try {
       data = dataDir({ argv, env, data: values.data });
     } catch (e) {
       throw new Usage(e.message);
     }
-    const code = await command({ values, positionals: rest, env, cwd, out, data, store: store ?? credentialStore({ data }), open });
+    const code = await command({ values, positionals: rest, env, cwd, out, data, store: store ?? credentialStore({ data }), open, spawnFlush });
     return code ?? 0;
   } catch (e) {
     for (const line of e.lines ?? []) out(line);
