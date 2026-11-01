@@ -37,7 +37,7 @@ export function slice(spec) {
   return { openapi: spec.openapi, info: { title: spec.info.title, version: spec.info.version }, paths, components };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = process.argv[2];
   if (!root) throw new Error('usage: node scripts/sync-openapi.mjs <eocrm checkout>');
   const spec = JSON.parse(readFileSync(join(root, 'apps/api/openapi/openapi.json'), 'utf8'));

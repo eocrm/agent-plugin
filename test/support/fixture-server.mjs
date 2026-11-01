@@ -182,6 +182,14 @@ export async function startFixtureServer({ responses = {} } = {}) {
     const ctx = { body, query, params: r.params ?? [], headers: req.headers };
     if (r.entry) {
       if (req.headers.authorization !== `Bearer ${auth.access}`) return { status: 401, body: { message: 'Unauthenticated.' } };
+      const names = [...r.entry.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
+      const errors = {};
+      (r.entry.op.parameters ?? []).forEach((param, i) => {
+        const value = param.in === 'path' ? ctx.params[names.indexOf(param.name)] : param.in === 'query' ? query[param.name] : undefined;
+        const validate = ajv.getSchema(`snap#/${r.entry.at}/parameters/${i}/schema`);
+        if (value === undefined ? param.required : !validate(value)) errors[param.name] = [value === undefined ? 'required' : ajv.errorsText(validate.errors)];
+      });
+      if (Object.keys(errors).length) return { status: 422, body: { message: 'The given data was invalid.', errors } };
       const rb = r.entry.op.requestBody;
       if (rb && (body !== undefined || rb.required)) {
         const validate = ajv.getSchema(`snap#/${r.entry.at}/requestBody/${JSON_SCHEMA}`);

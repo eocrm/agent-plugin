@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { endpoints } from '../../lib/endpoints.mjs';
-import { createClient, NetworkError } from '../../lib/api.mjs';
+import { createClient, NetworkError, MAX_BODY } from '../../lib/api.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { LockTimeout } from '../../lib/state.mjs';
 import { LIMITS } from '../../lib/scrub.mjs';
@@ -20,10 +21,13 @@ function memoryStore(tokens) {
   const saved = new Map(tokens ? [[null, tokens]] : []);
   return {
     sets: 0,
-    async get() {
+    keys: new Set(),
+    async get(key) {
+      if (key !== undefined) this.keys.add(key);
       return saved.get(null) ?? null;
     },
-    async set(_issuer, t) {
+    async set(key, t) {
+      this.keys.add(key);
       this.sets += 1;
       saved.set(null, t);
       return 'file';
@@ -113,6 +117,7 @@ test('401 refreshes once, retries, and stores the rotated tokens', async (t) => 
   assert.deepEqual(server.requests[1].body, { grant_type: 'refresh_token', client_id: 'fixture-client', refresh_token: 'fixture-refresh-0' });
   assert.equal(server.requests[2].headers.authorization, 'Bearer fixture-access-1');
   const saved = await store.get();
+  assert.deepEqual([...store.keys], [`${server.url} ${server.url}`]);
   assert.equal(saved.refresh_token, 'fixture-refresh-1');
   assert.equal(saved.access_token, 'fixture-access-1');
   assert.equal(saved.client_id, 'fixture-client');
@@ -135,7 +140,7 @@ test('two processes refreshing at once spend the refresh token once', async (t) 
   const data = mkdtempSync(join(tmpdir(), 'eocrm-api-'));
   const ep = endpoints({ region: 'eu', env: server.endpointsEnv });
   const stale = { access_token: 'stale', refresh_token: server.auth.refresh, expires_at: 0, client_id: server.auth.clientId };
-  writeFileSync(join(data, 'credentials.json'), JSON.stringify({ [ep.issuer]: stale }), { mode: 0o600 });
+  writeFileSync(join(data, 'credentials.json'), JSON.stringify({ [ep.key]: stale }), { mode: 0o600 });
   const client = () => createClient({ endpoints: ep, workspace: 'acme', store: credentialStore({ data, platform: 'none' }) });
   const results = await Promise.all([client().conventions(), client().conventions()]);
   assert.deepEqual(results.map((r) => r.status), [200, 200]);
@@ -281,4 +286,58 @@ test('fixture IdP: register, authorize with PKCE, token', async (t) => {
   const ok = await token(verifier);
   assert.equal(ok.status, 200);
   assert.equal((await ok.json()).access_token, server.auth.access);
+});
+
+const STALE = { access_token: 'stale', refresh_token: 'fixture-refresh-0', expires_at: 0, client_id: 'fixture-client' };
+
+test('a refresh answered 5xx or 429 is transient, never the 401', async (t) => {
+  for (const status of [500, 503, 429]) {
+    const { client, store } = await setup(t, { tokens: { ...STALE }, responses: { 'oauth.token': { status, body: { message: 'busy' } } } });
+    assert.deepEqual(await client.conventions(), { status, body: null });
+    assert.equal(store.sets, 0);
+  }
+});
+
+test('a refresh answered 401 returns the original 401', async (t) => {
+  const { client } = await setup(t, { tokens: { ...STALE }, responses: { 'oauth.token': { status: 401, body: { error: 'invalid_client' } } } });
+  assert.deepEqual((await client.conventions()).body, { message: 'Unauthenticated.' });
+});
+
+test('an unexpected refresh answer is a network-class error', async (t) => {
+  for (const r of [{ status: 404, body: { message: 'x' } }, { status: 200, body: { nope: 1 } }]) {
+    const { client } = await setup(t, { tokens: { ...STALE }, responses: { 'oauth.token': r } });
+    await assert.rejects(client.conventions(), (e) => e instanceof NetworkError && /oauth\/token/.test(e.message));
+  }
+});
+
+test('redirects are refused, not followed', async (t) => {
+  const target = await startFixtureServer();
+  t.after(() => target.close());
+  const hop = createServer((_req, res) => res.writeHead(302, { location: `${target.url}/acme/api/v1/agent-work/conventions` }).end());
+  await new Promise((r) => hop.listen(0, '127.0.0.1', r));
+  t.after(() => hop.close());
+  const url = `http://127.0.0.1:${hop.address().port}`;
+  const ep = endpoints({ region: 'eu', env: { EOCRM_ENDPOINTS: JSON.stringify({ issuer: url, api: `${url}/{workspace}/api` }) } });
+  const client = createClient({ endpoints: ep, workspace: 'acme', store: memoryStore({ ...STALE, access_token: target.auth.access }) });
+  await assert.rejects(client.conventions(), NetworkError);
+  assert.equal(target.requests.length, 0);
+});
+
+test('response bodies are capped', async (t) => {
+  const reply = (body, headers) => async () => new Response(body, { status: 200, headers });
+  const ok = await setup(t, { fetch: reply(`"${'x'.repeat(MAX_BODY - 2)}"`) });
+  assert.equal((await ok.client.conventions()).body.length, MAX_BODY - 2);
+  const big = await setup(t, { fetch: reply('x'.repeat(MAX_BODY + 1)) });
+  await assert.rejects(big.client.conventions(), (e) => e instanceof NetworkError && /too large/.test(e.message));
+  const declared = await setup(t, { fetch: reply('{}', { 'content-length': String(MAX_BODY + 1) }) });
+  await assert.rejects(declared.client.conventions(), (e) => e instanceof NetworkError && /too large/.test(e.message));
+});
+
+test('fixture validates path and query parameters', async (t) => {
+  const { client } = await setup(t);
+  const { body: run } = await client.startRun({ client_run_id: 's1' });
+  const r = await client.listEvents(run.id, 'c'.repeat(201));
+  assert.equal(r.status, 422);
+  assert.ok(r.body.errors.cursor);
+  assert.equal((await client.listEvents(run.id, 'c'.repeat(200))).status, 200);
 });

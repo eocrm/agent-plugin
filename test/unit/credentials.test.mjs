@@ -217,6 +217,17 @@ test('an issuer that could break the security -i line is refused', async () => {
   await assert.rejects(store.set('https://x" -w "y', TOKENS), /issuer/);
 });
 
+test('an issuer plus api origin key is stored apart from others; other spaces are refused', async () => {
+  const store = credentialStore({ data: tmp(), platform: 'aix' });
+  const key = 'https://id.eocrm.local https://{workspace}.eocrm.local';
+  await store.set(key, TOKENS);
+  assert.deepEqual(await store.get(key), TOKENS);
+  assert.equal(await store.get('https://id.eocrm.local'), null);
+  for (const bad of ['https://a  https://b', 'https://a https://b https://c', 'https://x -w y', 'https://a https://b ']) {
+    await assert.rejects(store.get(bad), /issuer/, bad);
+  }
+});
+
 test('a keychain write that does not read back falls back to the file', async () => {
   const store = credentialStore({ data: tmp(), platform: 'darwin', run: async () => ({ code: 0, stdout: '' }) });
   assert.equal(await store.set(ISSUER, TOKENS), 'file');
