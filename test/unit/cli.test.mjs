@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { main } from '../../scripts/eocrm.mjs';
-import { openBrowser } from '../../lib/login.mjs';
+import { openBrowser, plain } from '../../lib/login.mjs';
 import { normaliseRemote, resolveWorkspace } from '../../lib/workspace.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
@@ -171,7 +171,7 @@ test('the script sets its exit code', () => {
 test('login, pair, status and logout never print a token, code, verifier or state', async (t) => {
   const server = await startFixtureServer({ responses: { 'agentRun.pairable': { status: 200, body: { items: [
     { id: '01JZ0000000000000000000010', label: 'Claude\u001b[31m Code\u0007 A', created_at: '2026-10-30T09:00:00+00:00' },
-    { id: '01JZ0000000000000000000002', label: 'Claude Code B', created_at: '2026-10-30T09:00:00+00:00' },
+    { id: '01JZ0000000000000000000002', label: 'Claude\u009b[2J Code\u202e B\u200b\u2028', created_at: '2026-10-30T09:00:00+00:00' },
   ] } } } });
   t.after(() => server.close());
   const data = tmp('data');
@@ -197,7 +197,7 @@ test('login, pair, status and logout never print a token, code, verifier or stat
     `tokens stored in ${join(data, 'credentials.json')}: no keychain found`,
     'pairing: choose a connection, then run pair <id>',
     'connection 01JZ0000000000000000000010 Claude [31m Code A',
-    'connection 01JZ0000000000000000000002 Claude Code B',
+    'connection 01JZ0000000000000000000002 Claude [2J Code B',
   ].join('\n'));
   assert.equal(runs[1].out, 'pairing requested: approve in Account → Agents within 15 minutes: https://workspace.example.test/account/agents');
   assert.equal(runs[2].out, 'signed in (eu)\nworkspace acme (default)\npairing requested');
@@ -210,7 +210,7 @@ test('login, pair, status and logout never print a token, code, verifier or stat
   const secrets = [authorize.query.state, token.body.code, token.body.code_verifier, 'fixture-access', 'fixture-refresh'];
   const printed = runs.map((r) => r.out + r.err).join('\n');
   for (const s of secrets) assert.ok(!printed.includes(s), s);
-  assert.ok(![...printed].some((c) => c !== '\n' && (c < ' ' || c === '\u007f')), 'no control characters from the server');
+  assert.ok(!/[\p{Cf}\u2028\u2029]|(?!\n)\p{Cc}/u.test(printed), 'no control or format characters from the server');
 });
 
 function fakeSpawn() {
@@ -249,4 +249,8 @@ test('on WSL without wslview, openBrowser falls back to cmd.exe start', () => {
     ['wslview', ['http://127.0.0.1:53682/start']],
     ['cmd.exe', ['/c', 'start', '""', 'http://127.0.0.1:53682/start']],
   ]);
+});
+
+test('plain() blanks control, format and line-separator characters', () => {
+  assert.equal(plain('a\u2028b\u2029c\u009bd\u202ee\u200bf\u0007g'), 'a b c d e f g');
 });
