@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { testRun, prEvent, isCommit, sddStep, ledgerPresent } from '../../lib/detect.mjs';
+import { budget } from '../../lib/git.mjs';
+import { testRun, prEvent, isCommit, sddStep, ledgerPresent, segments } from '../../lib/detect.mjs';
 import { handle } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
 import { loadRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
@@ -43,6 +44,19 @@ test('the command matcher', () => {
   for (const c of ['curl -u me:pw https://x', 'make testing', 'npm install', 'git commit -m "add tests"', 'echo latest']) assert.equal(testRun(bash(c, 'ok')), null, c);
 });
 
+test('test runs are matched by the command word of each segment, never inside quoted text', () => {
+  for (const c of ['CI=1 npm test', 'sudo -E make test', 'time pytest -q', 'env -i FOO=1 cargo test', './vendor/bin/pest', '"C:\\tools\\vitest.cmd" run', 'cd api && make test FILTER=X', 'make test | tail -5', '(go test ./...)']) {
+    assert.ok(testRun(bash(c, 'ok')), c);
+  }
+  for (const c of ['git commit -m "make test"', "echo 'npm test'", 'npm i -D vitest', 'cat jest.config.js', 'grep vitest package.json', 'git commit -m "fix" -m "run make test"']) {
+    assert.equal(testRun(bash(c, 'ok')), null, c);
+  }
+});
+
+test('segments split on unquoted operators and keep quoted words whole', () => {
+  assert.deepEqual(segments(`a "b; c" 'd|e' f\\ g && h;i|j\nk`), [['a', 'b; c', 'd|e', 'f g'], ['h'], ['i'], ['j'], ['k']]);
+});
+
 test('background, interrupted and non-Bash calls are not test runs', () => {
   assert.equal(testRun(bash('npm test', 'ok', { tool_input: { command: 'npm test', run_in_background: true } })), null);
   assert.equal(testRun(bash('npm test', 'ok', { tool_response: { stdout: 'ok', interrupted: true } })), null);
@@ -62,7 +76,10 @@ test('isCommit', () => {
 
 test('gh pr create: opened, from the stdout URL', () => {
   const out = 'Creating pull request for feat into main\n\nhttps://github.com/o/r/pull/42\n';
-  assert.deepEqual(prEvent(bash('gh pr create --fill', out)), { action: 'opened', url: 'https://github.com/o/r/pull/42', number: 42 });
+  assert.deepEqual(prEvent(bash('gh pr create --fill', out), { branch: () => 'feat' }), { action: 'opened', url: 'https://github.com/o/r/pull/42', number: 42, branch: 'feat' });
+  assert.equal(prEvent(bash('gh pr create -H other --fill', out), { branch: () => 'feat' }).branch, 'other');
+  assert.equal(prEvent(bash('gh pr create --head=other', out), { branch: () => 'feat' }).branch, 'other');
+  assert.equal(prEvent(bash('git commit -m "gh pr create"', out)), null);
   assert.equal(prEvent(bash('gh pr create --fill', 'no url')), null);
   assert.equal(prEvent(failed('gh pr create', 'Exit code 1\nhttps://github.com/o/r/pull/9 already exists')), null);
 });
@@ -75,7 +92,8 @@ test('gh pr merge: merged, url from gh pr view of the argument', () => {
   };
   const merged = { action: 'merged', url: 'https://github.com/o/r/pull/5', number: 5 };
   assert.deepEqual(prEvent(bash('gh pr merge 5 --squash'), { view }), merged);
-  assert.deepEqual(prEvent(bash('gh pr merge --squash --delete-branch'), { view }), merged);
+  assert.deepEqual(prEvent(bash('gh pr merge --squash'), { view }), merged);
+  assert.equal(prEvent(bash('gh pr merge --squash --delete-branch'), { view: () => assert.fail('gh sees the default branch now') }), null);
   assert.deepEqual(prEvent(bash('gh pr merge -s feat/x'), { view }), merged);
   assert.deepEqual(prEvent(bash('gh pr merge --squash --subject "Ship it" 7'), { view }), merged);
   assert.deepEqual(asked, ['5', null, 'feat/x', '7']);
@@ -86,6 +104,18 @@ test('gh pr merge: merged, url from gh pr view of the argument', () => {
   assert.equal(prEvent(failed('gh pr merge 5', 'Exit code 1\n'), { view }), null);
 });
 
+test('gh pr merge resolves from the PRs recorded at create before asking gh', () => {
+  const open = () => [{ branch: 'feat', url: 'https://github.com/o/r/pull/3' }, { branch: 'other', url: 'https://github.com/o/r/pull/4' }];
+  const noGh = () => assert.fail('gh not needed');
+  const three = { action: 'merged', url: 'https://github.com/o/r/pull/3', number: 3 };
+  assert.deepEqual(prEvent(bash('gh pr merge --squash'), { open, branch: () => 'feat', view: noGh }), three);
+  assert.deepEqual(prEvent(bash('gh pr merge 3'), { open, view: noGh }), three);
+  assert.deepEqual(prEvent(bash('gh pr merge feat'), { open, view: noGh }), three);
+  assert.deepEqual(prEvent(bash('gh pr merge -d --squash'), { open, branch: () => 'main', branches: () => ['main', 'other'], view: noGh }), three);
+  assert.equal(prEvent(bash('gh pr merge -d'), { open, branch: () => 'main', branches: () => ['main'], view: noGh }), null);
+  assert.equal(prEvent(bash('gh pr merge -d'), { open, branch: () => 'main', branches: () => null, view: noGh }), null);
+});
+
 test('sddStep: started before, finished after, only with a ledger', () => {
   const agent = (hook_event_name) => ({ hook_event_name, tool_name: 'Agent', tool_input: { description: `Task 3 ${SECRET}`, prompt: 'p', subagent_type: 'general-purpose' }, tool_use_id: 'toolu_9' });
   assert.deepEqual(sddStep(agent('PreToolUse'), true), { phase: 'started', label: 'Task 3 [redacted]' });
@@ -93,6 +123,8 @@ test('sddStep: started before, finished after, only with a ledger', () => {
   assert.equal(sddStep(agent('PreToolUse'), false), null);
   assert.equal(sddStep({ ...agent('PreToolUse'), tool_name: 'Bash' }, true), null);
   assert.equal(sddStep({ ...agent('PreToolUse'), tool_input: {} }, true), null);
+  const bg = { ...agent('PostToolUse'), tool_input: { description: 'bg', run_in_background: true } };
+  assert.deepEqual(sddStep(bg, true), { phase: 'started', label: 'bg' });
 });
 
 test('ledgerPresent looks for .superpowers/sdd/*/progress.md', () => {
@@ -144,9 +176,23 @@ test('a commit hook queues each new branch commit once', async () => {
   assert.equal(events(data, s, 'test_run').length, 1);
   assert.equal(ctx.spawned, spawned + 1);
   assert.equal(loadWorktree(data, worktreeOf(dir).key).reportedCommits.length, 2);
+  assert.equal(loadWorktree(data, worktreeOf(dir).key).root, dir);
   writeOutbox(data, []);
-  await fire('PostToolUse', bash('git commit --amend --no-edit', ''));
+  await fire('PostToolUse', bash('git commit -m again', ''));
   assert.equal(events(data, s, 'commit').length, 0);
+});
+
+test('an amend is a new sha, so it is reported as a new commit', async () => {
+  const data = signedIn();
+  const dir = branchRepo();
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'one');
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  await fire('PostToolUse', bash('git commit -m one', ''));
+  writeOutbox(data, []);
+  git(dir, 'commit', '-q', '--allow-empty', '--amend', '-m', 'one amended');
+  await fire('PostToolUse', bash('git commit --amend -m "one amended"', ''));
+  assert.deepEqual(events(data, s, 'commit').map((c) => [c.sha, c.subject]), [[git(dir, 'rev-parse', 'HEAD'), 'one amended']]);
 });
 
 test('a failed Bash call that committed still reports the commit and a failing test run', async () => {
@@ -187,10 +233,70 @@ test('gh pr create queues an opened PR with repo and number and remembers it ope
   await fire('PostToolUse', bash('gh pr create --fill', 'https://github.com/o/r/pull/42\n'));
   const [pr] = events(data, s, 'pull_request');
   assert.deepEqual([pr.action, pr.url, pr.repo, pr.number, pr.id], ['opened', 'https://github.com/o/r/pull/42', 'o/r', 42, eventId('pull_request', 'opened:https://github.com/o/r/pull/42')]);
-  assert.deepEqual(loadWorktree(data, worktreeOf(dir).key).openPrs, ['https://github.com/o/r/pull/42']);
+  assert.deepEqual(loadWorktree(data, worktreeOf(dir).key).openPrs, [{ branch: 'feat/AB-1-x', url: 'https://github.com/o/r/pull/42' }]);
+  assert.equal(pr.branch, undefined);
   await fire('PostToolUse', bash('gh pr merge https://github.com/o/r/pull/42 --squash'));
   assert.deepEqual(events(data, s, 'pull_request').map((p) => p.action), ['opened', 'merged']);
   assert.deepEqual(loadWorktree(data, worktreeOf(dir).key).openPrs, []);
+});
+
+test('gh pr merge --delete-branch on a real branch resolves the PR recorded at create, without gh', async () => {
+  const data = signedIn();
+  const dir = branchRepo();
+  const { ctx, s, fire } = session(data, dir);
+  ctx.git = { exec: (cmd, args, opts) => (cmd === 'gh' ? assert.fail('gh not needed') : execFileSync(cmd, args, opts)) };
+  await fire('SessionStart', { source: 'startup' });
+  await fire('PostToolUse', bash('gh pr create --fill', 'https://github.com/o/r/pull/42\n'));
+  git(dir, 'checkout', '-q', 'main');
+  git(dir, 'branch', '-q', '-D', 'feat/AB-1-x');
+  await fire('PostToolUse', bash('gh pr merge --squash --delete-branch'));
+  assert.deepEqual(events(data, s, 'pull_request').map((p) => [p.action, p.number]), [['opened', 42], ['merged', 42]]);
+  assert.deepEqual(loadWorktree(data, worktreeOf(dir).key).openPrs, []);
+});
+
+test('hook git and gh work shares one 8 s budget, however many calls hang', async () => {
+  const data = signedIn();
+  const dir = branchRepo();
+  const { ctx, s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  let clock = 0;
+  const calls = [];
+  ctx.git = {
+    now: () => clock,
+    exec: (cmd, args, opts) => {
+      calls.push([cmd, opts.timeout]);
+      clock += opts.timeout;
+      throw new Error('timed out');
+    },
+  };
+  await fire('PostToolUse', bash('git commit -m x && gh pr merge 9 -d && npm test', '1 passed'));
+  assert.ok(calls.length >= 2, JSON.stringify(calls));
+  assert.ok(clock <= 8000, `${clock} ms over ${calls.length} calls`);
+  assert.equal(events(data, s, 'test_run').length, 1);
+});
+
+test('budget caps each call at what is left and refuses once spent', () => {
+  let clock = 0;
+  const seen = [];
+  const run = budget(1000, { now: () => clock, exec: (cmd, args, opts) => { seen.push(opts.timeout); clock += 700; return 'ok'; } });
+  assert.equal(run('git', [], { timeout: 5000 }), 'ok');
+  assert.equal(run('git', [], { timeout: 5000 }), 'ok');
+  assert.throws(() => run('git', [], { timeout: 5000 }), /budget/);
+  assert.deepEqual(seen, [1000, 300]);
+});
+
+test('a step without a tool_use_id still gets a unique id', async () => {
+  const data = signedIn();
+  const dir = branchRepo();
+  mkdirSync(join(dir, '.superpowers', 'sdd', 'p'), { recursive: true });
+  writeFileSync(join(dir, '.superpowers', 'sdd', 'p', 'progress.md'), '# SDD ledger — plan: docs/p.md\n');
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  await fire('PreToolUse', { tool_name: 'Agent', tool_input: { description: 'a' } });
+  await fire('PreToolUse', { tool_name: 'Agent', tool_input: { description: 'b' } });
+  const ids = events(data, s, 'step').map((e) => e.id);
+  assert.equal(new Set(ids).size, 2);
+  assert.ok(!ids.includes(eventId('step', 'undefinedstarted')));
 });
 
 test('Agent dispatch queues started and finished steps only while a ledger exists', async () => {
@@ -209,6 +315,11 @@ test('Agent dispatch queues started and finished steps only while a ledger exist
     ['started', 'Task 2: outbox', eventId('step', 'toolu_7started')],
     ['finished', 'Task 2: outbox', eventId('step', 'toolu_7finished')],
   ]);
+  writeOutbox(data, []);
+  const bg = { tool_name: 'Agent', tool_input: { description: 'bg', run_in_background: true }, tool_use_id: 'toolu_8' };
+  await fire('PreToolUse', bg);
+  await fire('PostToolUse', { ...bg, tool_response: {} });
+  assert.deepEqual(events(data, s, 'step').map((e) => e.phase), ['started']);
 });
 
 test('an ended run queues no detected events', async () => {

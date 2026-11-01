@@ -56,3 +56,15 @@ test('prView asks gh for the url with a 5 s timeout and windowsHide, and survive
   const missing = () => { throw Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }); };
   assert.equal(prView('/w', null, missing), null);
 });
+
+test('branchCommits finds the base with one ref lookup and one merge-base', () => {
+  const calls = [];
+  const run = (cmd, args) => {
+    calls.push(args[0]);
+    if (args[0] === 'for-each-ref') return 'refs/heads/main\nrefs/remotes/origin/main\n';
+    if (args[0] === 'merge-base') return `${'a'.repeat(40)}\n`;
+    return '';
+  };
+  branchCommits('/w', 200, run);
+  assert.deepEqual(calls, ['for-each-ref', 'merge-base', 'log']);
+});
