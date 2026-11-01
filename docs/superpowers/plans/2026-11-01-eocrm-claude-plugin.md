@@ -627,11 +627,11 @@
 - Produces:
   - `marketplace.json`: `{name: 'eocrm', owner: {name: 'eocrm'}, description, plugins: [{name: 'eocrm', source: './', description}]}`. The version is not duplicated, so `plugin.json` wins.
   - **Nightly smoke**, `schedule: cron '30 3 * * *'` plus `workflow_dispatch`. Secrets are OPS-2 placeholders:
-    - `EOCRM_SMOKE_REGION`, `EOCRM_SMOKE_WORKSPACE`, `EOCRM_SMOKE_CLIENT_ID`, `EOCRM_SMOKE_REFRESH_TOKEN`;
+    - `EOCRM_SMOKE_REGION`, `EOCRM_SMOKE_WORKSPACE`, `EOCRM_SMOKE_TASK`, `EOCRM_SMOKE_CLIENT_ID`, `EOCRM_SMOKE_REFRESH_TOKEN` (OPS-2 set up workspace `test` with task `TEST-1` and Conventions; those two go in as repo variables, not hardcoded);
     - `SMOKE_SECRETS_PAT` (secrets write), used to `gh secret set EOCRM_SMOKE_REFRESH_TOKEN` with the rotated token (Ruling 13).
   - **The smoke run** goes through `createClient` with REST only:
     1. refresh;
-    2. `startRun({client_run_id: 'smoke-<YYYYMMDD>-<run_id>'})`;
+    2. `startRun({client_run_id: 'smoke-<YYYYMMDD>-<run_id>', task: EOCRM_SMOKE_TASK})`;
     3. `recordEvents` with plan, step, commit and test_run;
     4. `listEvents` reads them back;
     5. the same batch is replayed and must return `duplicates === 4`;
