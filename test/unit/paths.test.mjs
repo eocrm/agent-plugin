@@ -35,3 +35,10 @@ test('data dir is 0700 on POSIX, tightened if it already exists', { skip: proces
 test('a data dir that cannot be chmodded is used as it is', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
   assert.equal(dataDir({ argv: ['--data', '/'], env: {} }), '/');
 });
+
+test('--data=<dir> and a parsed value are honoured', () => {
+  const eq = tmp();
+  assert.equal(dataDir({ argv: [`--data=${eq}`], env: { CLAUDE_PLUGIN_DATA: tmp() } }), eq);
+  const parsed = tmp();
+  assert.equal(dataDir({ argv: [], env: {}, data: parsed }), parsed);
+});

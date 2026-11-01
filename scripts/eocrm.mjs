@@ -74,16 +74,18 @@ const commands = {
     const account = loadAccount(data);
     const keys = new Set(Array.isArray(account.keys) ? account.keys : []);
     if (account.region) keys.add(endpoints({ region: account.region, env }).key);
+    const failed = [];
     for (const key of keys) {
       try {
         await store.del(key);
         out(`signed out of ${plain(String(key).split(' ')[0])}`);
       } catch {
-        // a malformed key in account.json names nothing stored
+        failed.push(key);
       }
     }
-    writeJsonAtomic(accountFile(data), { ...account, keys: [] });
-    if (!keys.size) out('signed out');
+    writeJsonAtomic(accountFile(data), { ...account, keys: failed });
+    if (failed.length) out('sign-out incomplete, run /eocrm:logout again');
+    else if (!keys.size) out('signed out');
   },
 };
 
@@ -112,7 +114,7 @@ export async function main({
     if (!command) throw new Usage('usage: eocrm login|use|pair|status|logout --data <dir>');
     let data;
     try {
-      data = dataDir({ argv, env });
+      data = dataDir({ argv, env, data: values.data });
     } catch (e) {
       throw new Usage(e.message);
     }

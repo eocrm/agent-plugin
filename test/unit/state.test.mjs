@@ -190,3 +190,14 @@ test('withLock gives up after giveUpMs', async () => {
   await assert.rejects(withLock(dir, async () => 1, { giveUpMs: 100 }), LockTimeout);
   assert.ok(Date.now() - t < 2000);
 });
+
+test('a hung git times out and yields an empty answer instead of throwing', async () => {
+  const { git } = await import('../../lib/state.mjs');
+  let opts;
+  const hung = (cmd, args, o) => {
+    opts = o;
+    throw Object.assign(new Error('ETIMEDOUT'), { code: 'ETIMEDOUT' });
+  };
+  assert.equal(git('.', ['status'], hung), '');
+  assert.equal(opts.timeout, 5000);
+});

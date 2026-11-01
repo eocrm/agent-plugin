@@ -254,3 +254,14 @@ test('on WSL without wslview, openBrowser falls back to cmd.exe start', () => {
 test('plain() blanks control, format and line-separator characters', () => {
   assert.equal(plain('a\u2028b\u2029c\u009bd\u202ee\u200bf\u0007g'), 'a b c d e f g');
 });
+
+test('logout keeps keys whose delete failed and says so', async () => {
+  const data = tmp('data');
+  account(data, { keys: ['https://a.example https://b.example', 'https://c.example https://d.example'] });
+  const store = { async del(k) { if (k.startsWith('https://c')) throw new Error('LockTimeout'); } };
+  const r = await cli(['logout', '--data', data], { env: {}, store });
+  assert.match(r.out, /signed out of https:\/\/a\.example/);
+  assert.match(r.out, /sign-out incomplete, run \/eocrm:logout again$/);
+  const kept = JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).keys;
+  assert.deepEqual(kept.filter((k) => k.startsWith('https://')), ['https://c.example https://d.example']);
+});

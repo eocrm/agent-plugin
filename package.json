@@ -8,9 +8,9 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "test": "node --test test/unit/*.test.mjs",
-    "test:contract": "node --test test/contract/*.test.mjs",
-    "test:budget": "node --test test/budget/*.test.mjs"
+    "test": "node scripts/run-tests.mjs test/unit",
+    "test:contract": "node scripts/run-tests.mjs test/contract",
+    "test:budget": "node scripts/run-tests.mjs test/budget --optional"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
