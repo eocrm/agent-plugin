@@ -1897,5 +1897,29 @@
   "input": "TOKEN = {a: 1, b: 2} x",
   "expected": "TOKEN = [redacted] x",
   "group": "php-checked-276bfb4b2"
+ },
+ {
+  "input": "PASSWORD=[]hunter2X",
+  "expected": "PASSWORD=[redacted]hunter2X",
+  "plugin": "PASSWORD=[redacted]",
+  "group": "plugin-stricter-eocrm#1518"
+ },
+ {
+  "input": "TOKEN={}x",
+  "expected": "TOKEN=[redacted]x",
+  "plugin": "TOKEN=[redacted]",
+  "group": "plugin-stricter-eocrm#1518"
+ },
+ {
+  "input": "api_key=[a]x",
+  "expected": "api_key=[redacted]x",
+  "plugin": "api_key=[redacted]",
+  "group": "plugin-stricter-eocrm#1518"
+ },
+ {
+  "input": "TOKEN={x}x",
+  "expected": "TOKEN=[redacted]x",
+  "plugin": "TOKEN=[redacted]",
+  "group": "plugin-stricter-eocrm#1518"
  }
 ]

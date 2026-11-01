@@ -108,6 +108,14 @@ for (const unit of units) {
   });
 }
 
+for (const unit of ['token', 'a_TOKEN_b', 'TOKENX']) {
+  test(`does not blank a field that repeats a key word without a value: ${unit}`, () => {
+    const text = `x ${unit.repeat(1500)}`;
+    assert.equal(scrub(text), text);
+    assert.ok(ms(() => scrub(text)) < 200);
+  });
+}
+
 test('scans a long backslash run once', () => {
   const text = '\\'.repeat(16000);
   assert.ok(ms(() => scrub(text)) < 50);
