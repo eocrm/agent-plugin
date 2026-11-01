@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eventId } from '../../lib/ids.mjs';
-import { enqueue, readOutbox } from '../../lib/outbox.mjs';
+import { enqueue, readOutbox, MAX_ENTRIES, MAX_SPILLS } from '../../lib/outbox.mjs';
 import { readJson } from '../../lib/state.mjs';
 
 const tmp = () => realpathSync.native(mkdtempSync(join(tmpdir(), 'eocrm-outbox-')));
@@ -76,12 +76,45 @@ test('a torn or CRLF line is skipped, not fatal', async () => {
   assert.deepEqual(readOutbox(data).map((e) => e.event.id), ['commit:1', 'commit:2']);
 });
 
-test('enqueue never throws on an unusable data dir or a held lock', async () => {
+test('enqueue never throws on an unusable data dir', async () => {
   const data = tmp();
   const file = join(data, 'not-a-dir');
   writeFileSync(file, '');
   await enqueue(file, ev(1));
+  assert.deepEqual(readOutbox(file), []);
+});
+
+test('a held lock spills the entry, and the next locked pass merges it', async () => {
+  const data = tmp();
+  await enqueue(data, ev(0));
   mkdirSync(join(data, '.lock'));
   await enqueue(data, ev(1));
-  assert.deepEqual(readOutbox(data), []);
+  rmSync(join(data, '.lock'), { recursive: true });
+  assert.deepEqual(readOutbox(data).map((e) => e.event.id), ['commit:0']);
+  await enqueue(data, ev(2));
+  assert.deepEqual(readOutbox(data).map((e) => e.event.id), ['commit:0', 'commit:1', 'commit:2']);
+  assert.deepEqual(readdirSync(data).filter((f) => f.startsWith('outbox.') && f !== 'outbox.jsonl'), []);
+});
+
+test('spill files are bounded', async () => {
+  const data = tmp();
+  for (let i = 0; i < MAX_SPILLS; i++) writeFileSync(join(data, `outbox.1.${i.toString(16).padStart(4, '0')}.jsonl`), '');
+  mkdirSync(join(data, '.lock'));
+  await enqueue(data, ev(1));
+  assert.equal(readdirSync(data).filter((f) => f.startsWith('outbox.')).length, MAX_SPILLS);
+});
+
+test('the cap drops the oldest events first and keeps start and finish', async () => {
+  const data = tmp();
+  await enqueue(data, { kind: 'start', sessionId: 's1' });
+  await enqueue(data, { kind: 'step', sessionId: 's1', step: 'x' });
+  for (let i = 0; i < MAX_ENTRIES - 3; i++) await enqueue(data, ev(i));
+  await enqueue(data, { kind: 'finish', sessionId: 's1' });
+  await enqueue(data, ev('late'));
+  await enqueue(data, ev('later'));
+  const kinds = readOutbox(data);
+  assert.equal(kinds.length, MAX_ENTRIES);
+  assert.deepEqual(kinds.slice(0, 3).map((e) => e.kind + (e.event?.id ?? '')), ['start', 'step', 'eventcommit:2']);
+  assert.ok(kinds.some((e) => e.kind === 'finish'));
+  assert.equal(readJson(join(data, 'dropped.json')).count, 2);
 });

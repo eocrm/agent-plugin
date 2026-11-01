@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { endpoints } from '../../lib/endpoints.mjs';
@@ -83,7 +83,6 @@ test('a 422 on events.1.url rejects only entry 1', async (t) => {
   assert.deepEqual(batches, [['commit:0', 'pull_request:x', 'commit:2'], ['commit:0', 'commit:2']]);
   assert.deepEqual(readOutbox(data), []);
   assert.deepEqual(loadRun(data, SID).rejected.map((r) => r.eventId), ['pull_request:x']);
-  assert.deepEqual(readFileSync(join(data, 'rejected.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l).eventId), ['pull_request:x']);
 });
 
 test('any other 422 rejects the whole batch', async (t) => {
@@ -94,28 +93,6 @@ test('any other 422 rejects the whole batch', async (t) => {
   assert.deepEqual(result.rejected.map((r) => [r.eventId, r.message]), [['commit:0', 'Bad.'], ['commit:1', 'Bad.']]);
   assert.equal(result.retryable, false);
   assert.deepEqual(readOutbox(data), []);
-});
-
-test('a 409 run_ended rolls to generation 1 and keeps the events', async (t) => {
-  let ended = true;
-  const { server, data, go } = await setup(t, {
-    'agentRun.events.store': () => (ended ? ((ended = false), { status: 409, body: { code: 'run_ended', message: 'This run has already ended.' } }) : undefined),
-  });
-  await enqueue(data, ev(0));
-  const result = await go();
-  assert.deepEqual(result, { sent: 1, rejected: [], retryable: false, signedOut: false });
-  const starts = server.requests.filter((r) => r.path === '/v1/agent-runs').map((r) => r.body.client_run_id);
-  assert.deepEqual(starts, [SID, `${SID}.1`]);
-  const run = loadRun(data, SID);
-  assert.deepEqual([run.generation, run.clientRunId], [1, `${SID}.1`]);
-  assert.equal(server.requests.filter((r) => r.path.endsWith('/events')).at(-1).body.events[0].id, 'commit:0');
-});
-
-test('a 409 on finish means the run is already over', async (t) => {
-  const { data, go } = await setup(t, { 'agentRun.update': { status: 409, body: { code: 'run_ended', message: 'ended' } } });
-  await enqueue(data, { kind: 'finish', sessionId: SID });
-  assert.deepEqual(await go(), { sent: 1, rejected: [], retryable: false, signedOut: false });
-  assert.equal(loadRun(data, SID).generation, 0);
 });
 
 test('a 503 keeps every entry and is retryable', async (t) => {
@@ -162,14 +139,6 @@ test('a flush already running elsewhere makes this one a retryable no-op', async
   assert.ok(Date.now() - began < 1000);
 });
 
-test('a run that keeps answering 409 rolls once per flush, then retries later', async (t) => {
-  const { server, data, go } = await setup(t, { 'agentRun.events.store': { status: 409, body: { code: 'run_ended', message: 'ended' } } });
-  await enqueue(data, ev(0));
-  assert.equal((await go()).retryable, true);
-  assert.deepEqual(server.requests.filter((r) => r.path === '/v1/agent-runs').map((r) => r.body.client_run_id), [SID, `${SID}.1`]);
-  assert.equal(readOutbox(data).length, 1);
-});
-
 test('a 404 on start rejects it instead of rolling', async (t) => {
   const { server, data, go } = await setup(t, { 'agentRun.store': { status: 404, body: { message: 'Not Found' } } });
   await enqueue(data, { kind: 'start', sessionId: SID });
@@ -179,19 +148,6 @@ test('a 404 on start rejects it instead of rolling', async (t) => {
   assert.equal(server.requests.length, 1);
   assert.equal(loadRun(data, SID).generation ?? 0, 0);
   assert.deepEqual(readOutbox(data).map((e) => e.kind), ['event']);
-});
-
-test('an off-contract reply ends the session pass instead of looping', async () => {
-  const data = realpathSync.native(mkdtempSync(join(tmpdir(), 'eocrm-flush-')));
-  let calls = 0;
-  const reply = (r) => async () => ((calls += 1), r);
-  await enqueue(data, ev(0));
-  const noId = await flush({ data, sessionId: SID, deadlineMs: 5000, clientFor: () => ({ startRun: reply({ status: 200, body: {} }) }) });
-  assert.deepEqual([noId.sent, calls], [0, 1]);
-  calls = 0;
-  saveRun(data, SID, { runId: 'r1' });
-  const stray = await flush({ data, sessionId: SID, deadlineMs: 5000, clientFor: () => ({ recordEvents: reply({ status: 422, body: { message: 'x', errors: { 'events.9.url': ['bad'] } } }) }) });
-  assert.deepEqual([stray.rejected, calls, readOutbox(data).length], [[], 1, 1]);
 });
 
 test('a 401 stops the whole flush, not just one session', async (t) => {
@@ -210,4 +166,72 @@ test('one broken session does not hold back the others', async (t) => {
   const result = await flush({ data, deadlineMs: 5000, clientFor });
   assert.deepEqual([result.sent, result.retryable], [1, true]);
   assert.equal(server.requests.filter((r) => r.path.endsWith('/events')).length, 1);
+});
+
+test('a 404 on events rolls to generation 1 and keeps the events', async (t) => {
+  const { server, data, go } = await setup(t);
+  saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
+  await enqueue(data, ev(0));
+  assert.deepEqual(await go(), { sent: 1, rejected: [], retryable: false, signedOut: false });
+  assert.deepEqual(server.requests.filter((r) => r.path === '/v1/agent-runs').map((r) => r.body.client_run_id), [`${SID}.1`]);
+  const run = loadRun(data, SID);
+  assert.deepEqual([run.generation, run.clientRunId], [1, `${SID}.1`]);
+  assert.equal(server.requests.at(-1).body.events[0].id, 'commit:0');
+});
+
+test('a run whose events keep answering 404 rolls once per flush, then retries later', async (t) => {
+  const { server, data, go } = await setup(t, { 'agentRun.events.store': { status: 404, body: { message: 'gone' } } });
+  await enqueue(data, ev(0));
+  assert.equal((await go()).retryable, true);
+  assert.deepEqual(server.requests.filter((r) => r.path === '/v1/agent-runs').map((r) => r.body.client_run_id), [SID, `${SID}.1`]);
+  assert.equal(readOutbox(data).length, 1);
+});
+
+for (const kind of ['step', 'heartbeat', 'task', 'finish']) {
+  test(`a 409 on ${kind} drops it and never rolls`, async (t) => {
+    const name = kind === 'heartbeat' ? 'agentRun.heartbeat' : 'agentRun.update';
+    const { server, data, go } = await setup(t, { [name]: { status: 409, body: { code: 'run_ended', message: 'ended' } } });
+    await enqueue(data, { kind, sessionId: SID, step: 's', task: 'AB-1' });
+    assert.deepEqual(await go(), { sent: 0, rejected: [], retryable: false, signedOut: false });
+    assert.equal(loadRun(data, SID).generation, 0);
+    assert.equal(server.requests.filter((r) => r.path === '/v1/agent-runs').length, 1);
+    assert.deepEqual(readOutbox(data), []);
+  });
+}
+
+test('a rejected implicit start leaves a rejection record and stops', async (t) => {
+  const { server, data, go } = await setup(t, { 'agentRun.store': { status: 422, body: { message: 'Bad.', errors: { branch: ['too long'] } } } });
+  await enqueue(data, ev(0));
+  const result = await go();
+  assert.deepEqual(result.rejected, [{ eventId: null, type: 'start', label: 'start', status: 422, message: 'Bad.' }]);
+  assert.deepEqual(loadRun(data, SID).rejected, result.rejected);
+  assert.equal(server.requests.length, 1);
+  assert.equal(readOutbox(data).length, 1);
+});
+
+test('a 422 whose event indexes are all out of range rejects the whole batch', async (t) => {
+  const { server, data, go } = await setup(t, { 'agentRun.events.store': { status: 422, body: { message: 'Bad.', errors: { 'events.9.url': ['bad'] } } } });
+  await enqueue(data, ev(0));
+  const result = await go();
+  assert.deepEqual(result.rejected.map((r) => r.eventId), ['commit:0']);
+  assert.equal(server.requests.filter((r) => r.path.endsWith('/events')).length, 1);
+  assert.deepEqual(readOutbox(data), []);
+});
+
+test('run.rejected keeps the last 50', async (t) => {
+  const { data, go } = await setup(t, { 'agentRun.events.store': { status: 422, body: { message: 'Bad.', errors: { events: ['no'] } } } });
+  for (let i = 0; i < 60; i++) await enqueue(data, ev(i));
+  assert.equal((await go()).rejected.length, 60);
+  const kept = loadRun(data, SID).rejected.map((r) => r.eventId);
+  assert.deepEqual([kept.length, kept[0], kept.at(-1)], [50, 'commit:10', 'commit:59']);
+});
+
+test('a flush merges entries spilled while the lock was held', async (t) => {
+  const { server, data, go } = await setup(t);
+  mkdirSync(join(data, '.lock'));
+  await enqueue(data, ev(0));
+  rmSync(join(data, '.lock'), { recursive: true });
+  assert.equal((await go()).sent, 1);
+  assert.equal(server.requests.at(-1).body.events[0].id, 'commit:0');
+  assert.deepEqual(readOutbox(data), []);
 });
