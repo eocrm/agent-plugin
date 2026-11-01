@@ -500,6 +500,14 @@ test('SessionEnd under a held lock spills its finish for the next hook', async (
   assert.match(readFileSync(join(data, spilled[0]), 'utf8'), /"kind":"finish"/);
 });
 
+test('SessionEnd under a held lock leaves no finish for an untracked session', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-12-x');
+  mkdirSync(join(data, '.lock'));
+  await handle('SessionEnd', input(sid(), dir), ctxFor(data));
+  assert.deepEqual(readdirSync(data).filter((f) => /^outbox\.\d+\.[0-9a-f]+\.jsonl$/.test(f)), []);
+});
+
 test('SessionStart prunes settled runs idle over 7 days and reads at most 50', async () => {
   const data = signedIn();
   const dir = repo('feat/AB-12-x');

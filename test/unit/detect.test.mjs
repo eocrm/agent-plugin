@@ -84,6 +84,12 @@ test('gh pr create: opened, from the stdout URL', () => {
   assert.equal(prEvent(failed('gh pr create', 'Exit code 1\nhttps://github.com/o/r/pull/9 already exists')), null);
 });
 
+test('gh pr merge -R takes its value, not the PR argument', () => {
+  const seen = [];
+  prEvent(bash('gh pr merge -R o/r 5 --squash'), { view: (cwd, arg) => { seen.push(arg); return { url: 'https://github.com/o/r/pull/5', number: 5 }; } });
+  assert.deepEqual(seen, ['5']);
+});
+
 test('gh pr merge: merged, url from gh pr view of the argument', () => {
   const asked = [];
   const view = (cwd, arg) => {

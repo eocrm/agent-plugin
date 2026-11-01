@@ -235,3 +235,73 @@ test('a flush merges entries spilled while the lock was held', async (t) => {
   assert.equal(server.requests.at(-1).body.events[0].id, 'commit:0');
   assert.deepEqual(readOutbox(data), []);
 });
+
+test('a settled finish marks the run ended', async (t) => {
+  const { data, go } = await setup(t);
+  saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
+  await enqueue(data, { kind: 'finish', sessionId: SID });
+  await go();
+  assert.equal(loadRun(data, SID).ended, true);
+});
+
+test('a dropped finish (409) also marks the run ended', async (t) => {
+  const { data, go } = await setup(t, { 'agentRun.update': { status: 409, body: { code: 'run_ended', message: 'ended' } } });
+  saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
+  await enqueue(data, { kind: 'finish', sessionId: SID });
+  await go();
+  assert.equal(loadRun(data, SID).ended, true);
+});
+
+test('an entry enqueued mid-pass is sent by the same flush', async (t) => {
+  const { server, data, clientFor } = await setup(t);
+  await enqueue(data, { kind: 'start', sessionId: SID });
+  await enqueue(data, ev(0));
+  let late = false;
+  const wrapped = (run) => {
+    const c = clientFor(run);
+    return { ...c, recordEvents: async (...a) => { const r = await c.recordEvents(...a); if (!late) { late = true; await enqueue(data, ev(1)); } return r; } };
+  };
+  const result = await flush({ data, sessionId: SID, deadlineMs: 5000, clientFor: wrapped });
+  assert.equal(result.retryable, false);
+  assert.equal(server.requests.filter((r) => r.path.endsWith('/events')).length, 2);
+  assert.deepEqual(readOutbox(data), []);
+});
+
+// 410/413/415 are undocumented, so the fixture server would refuse them: stub the client.
+const stub = (status) => () => ({ startRun: async () => ({ status, body: { message: 'nope' } }), recordEvents: async () => ({ status, body: { message: 'nope' } }) });
+
+for (const status of [410, 413, 415]) {
+  test(`a ${status} on events is recorded and dropped, not retried`, async (t) => {
+    const { data } = await setup(t);
+    saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
+    await enqueue(data, ev(0));
+    const result = await flush({ data, sessionId: SID, deadlineMs: 5000, clientFor: stub(status) });
+    assert.deepEqual([result.rejected.map((r) => r.status), result.retryable], [[status], false]);
+    assert.deepEqual(readOutbox(data), []);
+  });
+}
+
+test('a 410 on start is dropped without blocking the gate', async (t) => {
+  const { data } = await setup(t);
+  await enqueue(data, { kind: 'start', sessionId: SID });
+  const result = await flush({ data, sessionId: SID, deadlineMs: 5000, clientFor: stub(410) });
+  assert.equal(result.rejected[0].status, 410);
+  assert.equal(loadRun(data, SID).startBlocked ?? null, null);
+  assert.deepEqual(readOutbox(data), []);
+});
+
+test('a session enqueued mid-pass is sent by the same flush', async (t) => {
+  const { server, data, clientFor } = await setup(t);
+  await enqueue(data, { kind: 'start', sessionId: SID });
+  await enqueue(data, { kind: 'start', sessionId: 'sess-2' });
+  await enqueue(data, ev(0));
+  let late = false;
+  const wrapped = (run) => {
+    const c = clientFor(run);
+    return { ...c, recordEvents: async (...a) => { const r = await c.recordEvents(...a); if (!late) { late = true; await enqueue(data, { ...ev(1), sessionId: 'sess-3' }); await enqueue(data, { kind: 'start', sessionId: 'sess-3' }); } return r; } };
+  };
+  const result = await flush({ data, deadlineMs: 5000, clientFor: wrapped });
+  assert.equal(result.retryable, false);
+  assert.equal(server.requests.filter((r) => r.path.endsWith('/events')).length, 2);
+  assert.deepEqual(readOutbox(data), []);
+});
