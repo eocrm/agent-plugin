@@ -118,3 +118,47 @@ test('the cap drops the oldest events first and keeps start and finish', async (
   assert.ok(kinds.some((e) => e.kind === 'finish'));
   assert.equal(readJson(join(data, 'dropped.json')).count, 2);
 });
+
+const spillFiles = (data) => readdirSync(data).filter((f) => /^outbox\.\d+\.[0-9a-f]+\.jsonl$/.test(f));
+
+test('concurrent spills stop at the cap and every drop is counted', async () => {
+  const data = tmp();
+  mkdirSync(join(data, '.lock'));
+  const outbox = new URL('../../lib/outbox.mjs', import.meta.url).href;
+  const n = MAX_SPILLS + 20;
+  const one = (i) => new Promise((resolve, reject) => {
+    const script = `const { enqueue } = await import(${JSON.stringify(outbox)});
+      await enqueue(process.argv[1], { kind: 'event', sessionId: 's1', event: { id: 'c:${i}', type: 'step' } }, { giveUpMs: 0 });`;
+    spawn(process.execPath, ['--input-type=module', '-e', script, data], { stdio: 'inherit' })
+      .on('error', reject).on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
+  });
+  await Promise.all(Array.from({ length: n }, (_, i) => one(i)));
+  assert.equal(spillFiles(data).length, MAX_SPILLS);
+  rmSync(join(data, '.lock'), { recursive: true });
+  await enqueue(data, ev('x'));
+  assert.equal(readOutbox(data).length, MAX_SPILLS + 1);
+  assert.equal(readJson(join(data, 'dropped.json')).count, n - MAX_SPILLS);
+  assert.deepEqual(spillFiles(data), []);
+});
+
+test('a finish spills even when the spill cap is reached', async () => {
+  const data = tmp();
+  for (let i = 0; i < MAX_SPILLS; i++) writeFileSync(join(data, `outbox.1.${i.toString(16).padStart(4, '0')}.jsonl`), '');
+  mkdirSync(join(data, '.lock'));
+  await enqueue(data, { kind: 'finish', sessionId: 's1' }, { giveUpMs: 0 });
+  await enqueue(data, ev(1), { giveUpMs: 0 });
+  const files = spillFiles(data);
+  assert.equal(files.length, MAX_SPILLS + 1);
+  assert.ok(files.some((f) => readFileSync(join(data, f), 'utf8').includes('"kind":"finish"')));
+});
+
+test('a spill is written only under the spill lock; without it the entry is counted as dropped', async () => {
+  const data = tmp();
+  mkdirSync(join(data, '.lock'));
+  mkdirSync(join(data, 'spill', '.lock'), { recursive: true });
+  await enqueue(data, ev(1), { giveUpMs: 0 });
+  assert.deepEqual(spillFiles(data), []);
+  rmSync(join(data, '.lock'), { recursive: true });
+  await enqueue(data, ev(2));
+  assert.equal(readJson(join(data, 'dropped.json')).count, 1);
+});

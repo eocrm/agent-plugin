@@ -438,7 +438,8 @@ test('SessionStart gives up on a held lock within its budget', () => {
   const data = signedIn();
   mkdirSync(join(data, '.lock'));
   const r = hook('SessionStart', JSON.stringify(input(sid(), repo('main'))), { data });
-  assert.deepEqual([r.status, r.stdout], [0, '']);
+  assert.equal(r.status, 0);
+  assert.deepEqual(JSON.parse(r.stdout), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: LINK_ASK } });
   assert.ok(r.ms < 3000, `${r.ms} ms`);
 });
 
@@ -534,4 +535,22 @@ test('resuming a session idle over 7 days rolls instead of losing its run', asyn
   utimesSync(join(data, 'runs', `${s}.json`), t, t);
   await handle('SessionStart', input(s, dir, { source: 'resume' }), ctx);
   assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).clientRunId], [1, `${s}.1`]);
+});
+
+test('a pruned run leaves a generation tombstone, so its resume starts the next generation', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-12-x');
+  const ctx = ctxFor(data, Date.now());
+  const s = sid();
+  await handle('SessionStart', input(s, dir), ctx);
+  saveRun(data, s, { runId: 'r1', ended: true, generation: 2 });
+  writeOutbox(data, []);
+  const t = new Date(Date.now() - 8 * 86400000);
+  utimesSync(join(data, 'runs', `${s}.json`), t, t);
+  writeFileSync(join(data, 'generations.json'), JSON.stringify({ ancient: { generation: 0, at: Date.now() - 91 * 86400000 } }));
+  await handle('SessionStart', input(sid(), dir, { source: 'startup' }), ctx);
+  assert.ok(!readdirSync(join(data, 'runs')).includes(`${s}.json`));
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(data, 'generations.json'), 'utf8'))), [s]);
+  await handle('SessionStart', input(s, dir, { source: 'resume' }), ctx);
+  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).clientRunId], [3, `${s}.3`]);
 });

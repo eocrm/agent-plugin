@@ -1,18 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { handle, runClient } from '../../lib/run.mjs';
-import { flush } from '../../lib/flush.mjs';
+import { flush, fingerprint } from '../../lib/flush.mjs';
+import { loadRun } from '../../lib/state.mjs';
+import { readOutbox } from '../../lib/outbox.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 
 const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe' });
 
-async function setup(t) {
-  const server = await startFixtureServer();
+async function setup(t, responses) {
+  const server = await startFixtureServer({ responses });
   t.after(() => server.close());
   const data = tmp('data');
   writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
@@ -64,4 +66,45 @@ test('link KEY after start sends PATCH {task}', async (t) => {
   assert.equal(await main({ argv: ['link', 'AB-99', '--data', ctx.data], cwd: dir, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} }), 0);
   await go();
   assert.deepEqual(server.requests.at(-1).body, { task: 'AB-99' });
+});
+
+test('a resume after its run file was pruned starts a new run, not the old one', async (t) => {
+  const { server, data, dir, ctx, go } = await setup(t);
+  const input = { session_id: 'sess-c4', cwd: dir };
+  await handle('SessionStart', { ...input, source: 'startup' }, ctx);
+  await handle('SessionEnd', input, ctx);
+  await go();
+  const firstId = loadRun(data, 'sess-c4').runId;
+  const old = new Date(Date.now() - 8 * 86400000);
+  utimesSync(join(data, 'runs', 'sess-c4.json'), old, old);
+  await handle('SessionStart', { session_id: 'sess-c5', cwd: dir, source: 'startup' }, ctx);
+  await handle('SessionStart', { ...input, source: 'resume' }, ctx);
+  await go();
+  const starts = server.requests.filter((r) => r.method === 'POST' && r.path === '/v1/agent-runs');
+  assert.deepEqual(starts.map((r) => r.body.client_run_id), ['sess-c4', 'sess-c5', 'sess-c4.1']);
+  assert.notEqual(loadRun(data, 'sess-c4').runId, firstId);
+});
+
+test('a rejected start is not re-sent until the run changes, and its record is kept once', async (t) => {
+  const { server, data, dir, transcript, ctx, go } = await setup(t, { 'agentRun.store': { status: 422, body: { message: 'Bad.', errors: { branch: ['too long'] } } } });
+  const { main } = await import('../../scripts/eocrm.mjs');
+  const input = { session_id: 'sess-c6', cwd: dir };
+  const starts = () => server.requests.filter((r) => r.path === '/v1/agent-runs').length;
+  await handle('SessionStart', input, ctx);
+  await go();
+  await handle('PostToolUse', { ...input, transcript_path: transcript }, ctx);
+  assert.ok(readOutbox(data).some((e) => e.sessionId === 'sess-c6'));
+  await go();
+  await go();
+  assert.equal(starts(), 1);
+  const run = loadRun(data, 'sess-c6');
+  assert.equal(run.startBlocked, fingerprint(run.rejected[0]));
+  assert.deepEqual(run.rejectedFingerprints, [fingerprint(run.rejected[0])]);
+  await main({ argv: ['link', 'AB-5', '--data', data], cwd: dir, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} });
+  await go();
+  assert.equal(starts(), 2);
+  await handle('SessionStart', { ...input, source: 'resume' }, ctx);
+  await go();
+  assert.equal(starts(), 3);
+  assert.equal(loadRun(data, 'sess-c6').rejected.length, 1);
 });
