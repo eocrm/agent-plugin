@@ -608,8 +608,9 @@
   "expected": "the token expires soon"
  },
  {
+  "group": "shared-2026-11-01",
   "input": "cli --token-ttl --verbose",
-  "expected": "cli --token-ttl --verbose"
+  "expected": "cli --token-ttl [redacted]"
  },
  {
   "input": "feature/risk-assessment-for-the-quarter",
@@ -744,12 +745,14 @@
   "expected": "see https://example.com/a:b@c and ssh://git@host:22/repo"
  },
  {
+  "group": "shared-2026-11-01",
   "input": "curl -b -v https://x",
-  "expected": "curl -b -v https://x"
+  "expected": "curl -b [redacted] https://x"
  },
  {
+  "group": "shared-2026-11-01",
   "input": "mysql --pass --verbose db",
-  "expected": "mysql --pass --verbose db"
+  "expected": "mysql --pass [redacted] db"
  },
  {
   "input": "wget -b https://x",
@@ -784,11 +787,167 @@
   "expected": "echo $(curl https://x) | git checkout -b y"
  },
  {
+  "group": "shared-2026-11-01",
   "input": "app --token-ttl --verbose",
-  "expected": "app --token-ttl --verbose"
+  "expected": "app --token-ttl [redacted]"
  },
  {
   "input": "echo $(git checkout -b x)",
   "expected": "echo $(git checkout -b x)"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "before -----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\nBKcwggSjAgEAAoIBAQC7",
+  "expected": "before [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n",
+  "expected": "[redacted]\n"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=\"ab\\\"cd\"",
+  "expected": "TOKEN=\"[redacted]\""
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=\"abc",
+  "expected": "TOKEN=\"[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN='abc\nnext",
+  "expected": "TOKEN='[redacted]\nnext"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --password -secret db",
+  "expected": "mysql --password [redacted] db"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --token -secret",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=abc def",
+  "expected": "TOKEN=[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "curl -u -s https://x",
+  "expected": "curl -u -s https://x"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "app -u -a:b c",
+  "expected": "app -u -a:b c"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x eyJabcdefghi.abcdefghij.abcdefghij y",
+  "expected": "x eyJabcdefghi.abcdefghij.abcdefghij y"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x eyJabcdefghij.abcdefghij.abcdefghij y",
+  "expected": "x [redacted] y"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij. abcdefghij.abcdefghij",
+  "expected": "eyJabcdefghij. abcdefghij.abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij,abcdefghij.abcdefghij",
+  "expected": "eyJabcdefghij,abcdefghij.abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij.abcdefghi.abcdefghij",
+  "expected": "eyJabcdefghij.abcdefghi.abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij.abcdefghij.abcdefghi",
+  "expected": "eyJabcdefghij.abcdefghij.abcdefghi"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij.eyJabcdefghij.abcdefghij.abcdefghij",
+  "expected": "[redacted].abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "abcdefghijklm.abcdefghij.abcdefghij eyJ",
+  "expected": "abcdefghijklm.abcdefghij.abcdefghij eyJ"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "abc-eyJabcdefghij.abcdefghij.abcdefghij",
+  "expected": "abc-[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token secret",
+  "expected": "x --password --token [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password -u a:b",
+  "expected": "x --password -u [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Bearer abcdefgh12345",
+  "expected": "Bearer [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Bearer abcdefgh12345",
+  "expected": "Bearer [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "TOKEN = abc",
+  "expected": "TOKEN = [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "TOKEN = abc",
+  "expected": "TOKEN = [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Authorization: token abcdefgh1234",
+  "expected": "Authorization: token [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Cookie : sid=1",
+  "expected": "Cookie : [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --token -uvalue",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token",
+  "expected": "x --password --token"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token=abc",
+  "expected": "x --password --token=[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --password -psecret db",
+  "expected": "mysql --password -p[redacted] db"
  }
 ]
