@@ -194,3 +194,57 @@ test('spawnWithStdin pipes stdin, returns stdout and maps a missing binary to -1
   assert.deepEqual(r, { code: 0, stdout: 'hello' });
   assert.equal((await spawnWithStdin('eocrm-no-such-binary', [], 'x')).code, -1);
 });
+
+test('a fallback write clears the keychain entry so it cannot shadow newer tokens', async () => {
+  const kc = new Map();
+  let storeWorks = true;
+  const { run } = fakeRun((cmd, args, stdin) => {
+    const account = args[args.indexOf('account') + 1];
+    if (args[0] === 'store') {
+      if (!storeWorks) return { code: 1, stdout: '' };
+      kc.set(account, stdin);
+      return { code: 0, stdout: '' };
+    }
+    if (args[0] === 'lookup') return kc.has(account) ? { code: 0, stdout: kc.get(account) } : { code: 1, stdout: '' };
+    if (args[0] === 'clear') { kc.delete(account); return { code: 0, stdout: '' }; }
+  });
+  const store = credentialStore({ data: tmp(), platform: 'linux', run });
+  assert.equal(await store.set(ISSUER, TOKENS), 'keychain');
+  storeWorks = false;
+  const fresh = { ...TOKENS, access_token: 'AT-newer' };
+  assert.equal(await store.set(ISSUER, fresh), 'file');
+  assert.deepEqual(await store.get(ISSUER), fresh);
+});
+
+test('darwin refuses a security -i line over 3500 bytes and uses the file', async () => {
+  const { run, calls } = fakeRun(() => ({ code: 0, stdout: '' }));
+  const store = credentialStore({ data: tmp(), platform: 'darwin', run });
+  assert.equal(await store.set(ISSUER, { ...TOKENS, access_token: 'a'.repeat(2700) }), 'file');
+  assert.equal(calls.some((c) => c.args[0] === '-i'), false);
+  let last = '';
+  const run2 = async (cmd, args, stdin) => {
+    if (args[0] === '-i') last = stdin.match(/-w "([^"]+)"/)[1];
+    return { code: 0, stdout: args[0] === '-i' ? '' : last };
+  };
+  assert.equal(await credentialStore({ data: tmp(), platform: 'darwin', run: run2 }).set(ISSUER, { ...TOKENS, access_token: 'a'.repeat(2400) }), 'keychain');
+});
+
+for (const platform of ['darwin', 'linux', 'win32']) {
+  test(`${platform}: get passes timeoutMs to the tool`, async () => {
+    const seen = [];
+    const run = async (cmd, args, stdin, opts) => { seen.push(opts); return { code: 1, stdout: '' }; };
+    const store = credentialStore({ data: tmp(), platform, run });
+    await store.get(ISSUER, { timeoutMs: 2500 });
+    assert.deepEqual(seen, [{ timeoutMs: 2500 }]);
+    seen.length = 0;
+    await store.get(ISSUER);
+    assert.equal(seen[0]?.timeoutMs, undefined);
+  });
+}
+
+test('spawnWithStdin kills a child past timeoutMs', async () => {
+  const t = Date.now();
+  const r = await spawnWithStdin(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], '', { timeoutMs: 200 });
+  assert.notEqual(r.code, 0);
+  assert.ok(Date.now() - t < 5000);
+});

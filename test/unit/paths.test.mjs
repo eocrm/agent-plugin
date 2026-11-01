@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync, statSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dataDir } from '../../lib/paths.mjs';
@@ -21,4 +21,13 @@ test('env is used without --data', () => {
 
 test('throws when neither is given', () => {
   assert.throws(() => dataDir({ argv: [], env: {} }), /eocrm: no data dir/);
+});
+
+test('data dir is 0700 on POSIX, tightened if it already exists', { skip: process.platform === 'win32' }, () => {
+  const dir = tmp();
+  dataDir({ argv: ['--data', dir], env: {} });
+  assert.equal(statSync(dir).mode & 0o777, 0o700);
+  chmodSync(dir, 0o755);
+  dataDir({ argv: ['--data', dir], env: {} });
+  assert.equal(statSync(dir).mode & 0o777, 0o700);
 });
