@@ -382,7 +382,7 @@
 
     | event | matcher | async | timeout |
     |---|---|---|---|
-    | `SessionStart` | `startup\|resume\|clear\|compact` | false | 10 |
+    | `SessionStart` | `startup\|resume\|clear\|compact\|fork` | false | 10 |
     | `UserPromptSubmit` | — | true | — |
     | `PreToolUse` | `Agent\|Task` | true | — |
     | `PostToolUse` | `Bash\|Write\|Edit\|MultiEdit\|TodoWrite\|TaskCreate\|TaskUpdate\|Agent\|Task` | true | — |
