@@ -1109,5 +1109,60 @@
   "group": "js-only-2026-11-01",
   "input": "x \"-v --token\"",
   "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"redis-cli -a hunter2\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "bash -lc \"mysql -phunter2 db\"",
+  "expected": "bash -lc [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "\"git --cookie='sid'\"",
+  "expected": "[redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"zip -P hunter2 a.zip\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --tokenhunter2",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token​hunter2",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "\"x --token \\\n hunter2\"",
+  "expected": "[redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token $'a\\' hunter2'",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x $'--token' hunter2",
+  "expected": "x $'--token' [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"git status --short\"",
+  "expected": "sh -c \"git status --short\""
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"mysql -p db\"",
+  "expected": "sh -c \"mysql -p db\""
  }
 ]

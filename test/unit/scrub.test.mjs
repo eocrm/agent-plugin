@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { scrub, clean, LIMITS } from '../../lib/scrub.mjs';
+import { cases, accepted, SEC } from '../support/reviewer-gen.mjs';
 
 const vectors = JSON.parse(readFileSync(new URL('../fixtures/scrubber-vectors.json', import.meta.url), 'utf8'));
 
@@ -170,4 +171,33 @@ test('a planted secret value never survives scrub (seeded grammar)', () => {
     if (scrub(text).includes(SECRET)) leaks.push(text);
   }
   assert.deepEqual(leaks.slice(0, 5), [], `${leaks.length} leaks`);
+});
+
+test("the reviewer's attack grammar leaves no secret outside the accepted rows (seeded sample)", () => {
+  let seed = 20261101;
+  const pick = (list) => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return list[seed % list.length];
+  };
+  const leaks = [];
+  let n = 0;
+  for (const t of cases(pick)) {
+    n++;
+    if (accepted(t)) continue;
+    const outs = [scrub(t), ...[40, 80, 200].map((lim) => clean(t, lim))];
+    if (outs.some((o) => [...Array(SEC.length - 7).keys()].some((i) => o.includes(SEC.slice(i, i + 8))))) leaks.push(t);
+  }
+  assert.ok(n > 20000, String(n));
+  assert.deepEqual(leaks.slice(0, 5), [], `${leaks.length} of ${n}`);
+});
+
+test('nested commands are scanned a few levels deep, then fail closed', () => {
+  const wrap = (s) => `sh -c "${s.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+  let ok = 'git status --short';
+  let secret = 'redis-cli -a hunter2';
+  for (let i = 0; i < 3; i++) [ok, secret] = [wrap(ok), wrap(secret)];
+  assert.equal(scrub(ok), ok);
+  assert.doesNotMatch(scrub(secret), /hunter2/);
+  for (let i = 0; i < 3; i++) ok = wrap(ok);
+  assert.match(scrub(ok), /\[redacted\]/);
 });
