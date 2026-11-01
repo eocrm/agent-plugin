@@ -1164,5 +1164,33 @@
   "group": "js-only-2026-11-01",
   "input": "sh -c \"mysql -p db\"",
   "expected": "sh -c \"mysql -p db\""
+ },
+ {
+  "input": "cmd $'\\x2d\\x2dpassword' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "cmd $'\\055\\055password' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "cmd $'\\u002d-password' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "cmd -$'\\x2dpassword' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "x --password=$'\\x41bc' tail",
+  "expected": "x [redacted] tail"
+ },
+ {
+  "input": "echo $'it\\'s' ok",
+  "expected": "echo $'it\\'s' ok"
+ },
+ {
+  "input": "echo $'a\\\\b' ok",
+  "expected": "echo $'a\\\\b' ok"
  }
 ]
