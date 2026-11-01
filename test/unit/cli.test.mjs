@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -164,7 +165,7 @@ test('an old Node is refused with one line', async () => {
 });
 
 test('the script sets its exit code', () => {
-  const r = spawnSync(process.execPath, [new URL('../../scripts/eocrm.mjs', import.meta.url).pathname, 'use', '--data', tmp('data')], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../scripts/eocrm.mjs', import.meta.url)), 'use', '--data', tmp('data')], { encoding: 'utf8' });
   assert.deepEqual([r.status, r.stdout, r.stderr], [2, '', 'eocrm: workspace required\n']);
 });
 

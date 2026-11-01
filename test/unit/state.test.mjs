@@ -161,7 +161,7 @@ test('worktreeOf uses the git toplevel', () => {
   const sub = join(dir, 'a', 'b');
   mkdirSync(sub, { recursive: true });
   execFileSync('git', ['init', '-q'], { cwd: dir });
-  assert.equal(realpathSync(worktreeOf(sub).root), realpathSync(dir));
+  assert.equal(realpathSync.native(worktreeOf(sub).root), realpathSync.native(dir));
   assert.equal(worktreeOf(sub).key, worktreeOf(dir).key);
 });
 
