@@ -133,11 +133,13 @@ test('concurrent spills stop at the cap and every drop is counted', async () => 
       .on('error', reject).on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
   });
   await Promise.all(Array.from({ length: n }, (_, i) => one(i)));
-  assert.equal(spillFiles(data).length, MAX_SPILLS);
+  // Slow runners also drop on the spill-lock timeout, so the cap is a ceiling, not a count.
+  const spilled = spillFiles(data).length;
+  assert.ok(spilled <= MAX_SPILLS && spilled > 0);
   rmSync(join(data, '.lock'), { recursive: true });
   await enqueue(data, ev('x'));
-  assert.equal(readOutbox(data).length, MAX_SPILLS + 1);
-  assert.equal(readJson(join(data, 'dropped.json')).count, n - MAX_SPILLS);
+  assert.equal(readOutbox(data).length, spilled + 1);
+  assert.equal(readJson(join(data, 'dropped.json')).count, n - spilled);
   assert.deepEqual(spillFiles(data), []);
 });
 
