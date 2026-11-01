@@ -365,6 +365,12 @@
 
 ### Task 8: Hook dispatcher, run lifecycle, linking and heartbeat
 **Files:**
+**Model on the run (dpws, 2026-11-01).** The run shows which model did the work (Claude Code can route to OpenRouter or other providers):
+- read the model id from the hook input when present, else from the session transcript's latest assistant message (`message.model`); never ask the model;
+- send it as a `usage` event `{model}` (eocrm already accepts `usage.model`, max 100 chars) at run start and whenever it changes (`/model` switch), deduped by event id `model-<hash(model)>-<generation>`;
+- scrub with `clean()`; an unreadable transcript sends nothing (silent);
+- test: a transcript fixture with two models in sequence yields exactly two usage events; no transcript → none.
+- eocrm side (PR B): the run DTO exposes the latest usage `model`, and the run chip/panel shows `Claude Code · <model>`.
 - Create: `hooks/hooks.json`, `hooks/dispatch.mjs`, `lib/run.mjs`
 - Modify: `scripts/eocrm.mjs` (add `link <KEY|none>`)
 - Test: `test/unit/dispatch.test.mjs`, `test/contract/run.test.mjs`
