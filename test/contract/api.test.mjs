@@ -157,10 +157,11 @@ test('a refresh that cannot get the lock retries with tokens another process sto
   assert.deepEqual(server.requests.map((r) => r.path), ['/v1/agent-work/conventions', '/v1/agent-work/conventions']);
 });
 
-test('a refresh that cannot get the lock and finds nothing newer returns the 401', async (t) => {
+test('a refresh that cannot get the lock and finds nothing newer is transient', async (t) => {
   const { server, client, store } = await setup(t, { tokens: { access_token: 'stale', refresh_token: 'fixture-refresh-0', expires_at: 0, client_id: 'fixture-client' } });
   store.update = async () => { throw new LockTimeout('x'); };
-  assert.equal((await client.conventions()).status, 401);
+  assert.deepEqual(await client.conventions(), { status: 503, body: null });
+  assert.equal(store.sets, 0);
   assert.deepEqual(server.requests.map((r) => r.path), ['/v1/agent-work/conventions']);
 });
 
