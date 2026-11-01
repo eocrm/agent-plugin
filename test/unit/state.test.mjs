@@ -182,3 +182,11 @@ test('saveWorktree and saveRun merge patches', () => {
   assert.deepEqual(run.rejected, []);
   assert.equal(run.serverEventsRead, false);
 });
+
+test('withLock gives up after giveUpMs', async () => {
+  const dir = tmp();
+  mkdirSync(join(dir, '.lock'));
+  const t = Date.now();
+  await assert.rejects(withLock(dir, async () => 1, { giveUpMs: 100 }), LockTimeout);
+  assert.ok(Date.now() - t < 2000);
+});

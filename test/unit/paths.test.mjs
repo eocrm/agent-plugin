@@ -31,3 +31,7 @@ test('data dir is 0700 on POSIX, tightened if it already exists', { skip: proces
   dataDir({ argv: ['--data', dir], env: {} });
   assert.equal(statSync(dir).mode & 0o777, 0o700);
 });
+
+test('a data dir that cannot be chmodded is used as it is', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
+  assert.equal(dataDir({ argv: ['--data', '/'], env: {} }), '/');
+});

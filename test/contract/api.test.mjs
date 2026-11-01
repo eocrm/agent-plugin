@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { inspect } from 'node:util';
 import { createHash } from 'node:crypto';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { createClient, NetworkError } from '../../lib/api.mjs';
+import { credentialStore } from '../../lib/credentials.mjs';
+import { LockTimeout } from '../../lib/state.mjs';
 import { LIMITS } from '../../lib/scrub.mjs';
 import { OPERATIONS } from '../../scripts/sync-openapi.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
@@ -23,6 +27,12 @@ function memoryStore(tokens) {
       this.sets += 1;
       saved.set(null, t);
       return 'file';
+    },
+    async update(issuer, fn) {
+      const latest = await this.get(issuer);
+      const next = await fn(latest);
+      if (next && next !== latest) await this.set(issuer, next);
+      return next;
     },
   };
 }
@@ -117,6 +127,36 @@ test('a 401 after another process refreshed retries with its tokens', async (t) 
   assert.equal((await client.conventions()).status, 200);
   assert.deepEqual(server.requests.map((r) => r.path), ['/v1/agent-work/conventions', '/v1/agent-work/conventions']);
   assert.equal(store.sets, 0);
+});
+
+test('two processes refreshing at once spend the refresh token once', async (t) => {
+  const server = await startFixtureServer();
+  t.after(() => server.close());
+  const data = mkdtempSync(join(tmpdir(), 'eocrm-api-'));
+  const ep = endpoints({ region: 'eu', env: server.endpointsEnv });
+  const stale = { access_token: 'stale', refresh_token: server.auth.refresh, expires_at: 0, client_id: server.auth.clientId };
+  writeFileSync(join(data, 'credentials.json'), JSON.stringify({ [ep.issuer]: stale }), { mode: 0o600 });
+  const client = () => createClient({ endpoints: ep, workspace: 'acme', store: credentialStore({ data, platform: 'none' }) });
+  const results = await Promise.all([client().conventions(), client().conventions()]);
+  assert.deepEqual(results.map((r) => r.status), [200, 200]);
+  assert.equal(server.requests.filter((r) => r.path === '/oauth/token').length, 1);
+});
+
+test('a refresh that cannot get the lock retries with tokens another process stored', async (t) => {
+  const { server, client, store } = await setup(t);
+  const valid = await store.get();
+  let reads = 0;
+  store.get = async () => (++reads === 1 ? { ...valid, access_token: 'stale' } : valid);
+  store.update = async () => { throw new LockTimeout('x'); };
+  assert.equal((await client.conventions()).status, 200);
+  assert.deepEqual(server.requests.map((r) => r.path), ['/v1/agent-work/conventions', '/v1/agent-work/conventions']);
+});
+
+test('a refresh that cannot get the lock and finds nothing newer returns the 401', async (t) => {
+  const { server, client, store } = await setup(t, { tokens: { access_token: 'stale', refresh_token: 'fixture-refresh-0', expires_at: 0, client_id: 'fixture-client' } });
+  store.update = async () => { throw new LockTimeout('x'); };
+  assert.equal((await client.conventions()).status, 401);
+  assert.deepEqual(server.requests.map((r) => r.path), ['/v1/agent-work/conventions']);
 });
 
 test('a second 401 is returned without looping', async (t) => {

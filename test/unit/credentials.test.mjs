@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, statSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, statSync, existsSync, readFileSync, writeFileSync, readdirSync, rmSync, mkdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { credentialStore, spawnWithStdin } from '../../lib/credentials.mjs';
@@ -73,32 +73,37 @@ test('linux set calls secret-tool store with the secret on stdin', async () => {
   noSecretInArgs(calls);
 });
 
-test('win32 set runs a DPAPI script over stdin writing credentials.dpapi', async () => {
-  let blob = null;
-  const { run, calls } = fakeRun((cmd, args, stdin) => {
+function fakeDpapi(onProtect = () => {}, onUnprotect = () => {}) {
+  const encode = (s) => Buffer.from(`enc:${s}`).toString('base64');
+  const decode = (s) => Buffer.from(s, 'base64').toString().replace(/^enc:/, '');
+  return fakeRun((cmd, args, stdin) => {
     assert.equal(cmd, 'powershell');
     assert.deepEqual(args, ['-NoProfile', '-NonInteractive', '-Command', '-']);
-    if (stdin.includes('Unprotect(')) return { code: 0, stdout: blob ?? '' };
-    if (stdin.includes('Protect(')) { blob = stdin.match(/Protect\(\[Convert\]::FromBase64String\('([^']+)'\)/)[1]; return { code: 0, stdout: '' }; }
-    throw new Error('unexpected script');
+    const m = stdin.match(/ProtectedData\]::(Protect|Unprotect)\(\[Convert\]::FromBase64String\('([^']+)'\)/);
+    if (!m) throw new Error('unexpected script');
+    if (m[1] === 'Protect') return onProtect() ?? { code: 0, stdout: encode(m[2]) };
+    return onUnprotect() ?? { code: 0, stdout: decode(m[2]) };
   });
+}
+
+test('win32 set protects the map with DPAPI over stdin and writes the blob atomically', async () => {
+  const { run, calls } = fakeDpapi();
   const data = tmp();
   const store = credentialStore({ data, platform: 'win32', run });
   assert.equal(await store.set(ISSUER, TOKENS), 'keychain');
-  const write = calls.find((c) => c.stdin.includes('ProtectedData]::Protect('));
-  assert.ok(write.stdin.includes(Buffer.from(join(data, 'credentials.dpapi')).toString('base64')));
-  assert.ok(write.stdin.includes('CurrentUser'));
+  assert.ok(calls.some((c) => c.stdin.includes('CurrentUser')));
+  const file = join(data, 'credentials.dpapi');
+  const { blob } = JSON.parse(readFileSync(file, 'utf8'));
+  assert.ok(!readFileSync(file, 'utf8').includes(TOKENS.access_token));
+  assert.ok(blob.length > 0);
+  if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600);
+  assert.deepEqual(readdirSync(data).filter((f) => f.endsWith('.tmp')), []);
   assert.deepEqual(await store.get(ISSUER), TOKENS);
   noSecretInArgs(calls);
 });
 
 test('win32 set keeps other issuers in the DPAPI blob', async () => {
-  let blob = null;
-  const { run } = fakeRun((cmd, args, stdin) => {
-    if (stdin.includes('Unprotect(')) return { code: 0, stdout: blob ?? '' };
-    blob = stdin.match(/Protect\(\[Convert\]::FromBase64String\('([^']+)'\)/)[1];
-    return { code: 0, stdout: '' };
-  });
+  const { run } = fakeDpapi();
   const store = credentialStore({ data: tmp(), platform: 'win32', run });
   await store.set(ISSUER, TOKENS);
   await store.set('https://id.ru.eocrm.io', { ...TOKENS, client_id: 'ru' });
@@ -106,6 +111,34 @@ test('win32 set keeps other issuers in the DPAPI blob', async () => {
   await store.del('https://id.ru.eocrm.io');
   assert.equal(await store.get('https://id.ru.eocrm.io'), null);
   assert.deepEqual(await store.get(ISSUER), TOKENS);
+  await store.del(ISSUER);
+  assert.equal(await store.get(ISSUER), null);
+});
+
+test('win32: a blob that does not read back falls back to credentials.json', async () => {
+  const { run } = fakeDpapi(undefined, () => ({ code: 0, stdout: Buffer.from('{}').toString('base64') }));
+  const data = tmp();
+  assert.equal(await credentialStore({ data, platform: 'win32', run }).set(ISSUER, TOKENS), 'file');
+});
+
+test('win32: a tampered blob is never put into a script', async () => {
+  const { run, calls } = fakeDpapi();
+  const data = tmp();
+  writeFileSync(join(data, 'credentials.dpapi'), JSON.stringify({ blob: "AAAA');Remove-Item C:\\x;#" }));
+  assert.equal(await credentialStore({ data, platform: 'win32', run }).get(ISSUER), null);
+  assert.equal(calls.length, 0);
+});
+
+test('win32: a DPAPI file that cannot be written falls back to credentials.json', async () => {
+  const data = tmp();
+  const dpapi = join(data, 'credentials.dpapi');
+  const { run } = fakeDpapi(() => {
+    rmSync(dpapi, { recursive: true, force: true });
+    mkdirSync(join(dpapi, 'x'), { recursive: true });
+  });
+  const store = credentialStore({ data, platform: 'win32', run });
+  assert.equal(await store.set(ISSUER, TOKENS), 'file');
+  assert.deepEqual(JSON.parse(readFileSync(join(data, 'credentials.json'), 'utf8'))[ISSUER], TOKENS);
 });
 
 for (const platform of ['darwin', 'linux', 'win32']) {
@@ -233,7 +266,9 @@ for (const platform of ['darwin', 'linux', 'win32']) {
   test(`${platform}: get passes timeoutMs to the tool`, async () => {
     const seen = [];
     const run = async (cmd, args, stdin, opts) => { seen.push(opts); return { code: 1, stdout: '' }; };
-    const store = credentialStore({ data: tmp(), platform, run });
+    const data = tmp();
+    if (platform === 'win32') writeFileSync(join(data, 'credentials.dpapi'), '{"blob":"AAAA"}');
+    const store = credentialStore({ data, platform, run });
     await store.get(ISSUER, { timeoutMs: 2500 });
     assert.deepEqual(seen, [{ timeoutMs: 2500 }]);
     seen.length = 0;
@@ -247,4 +282,19 @@ test('spawnWithStdin kills a child past timeoutMs', async () => {
   const r = await spawnWithStdin(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], '', { timeoutMs: 200 });
   assert.notEqual(r.code, 0);
   assert.ok(Date.now() - t < 5000);
+});
+
+test('update stores what fn returns and skips an unchanged value', { skip: process.platform === 'win32' }, async () => {
+  const data = tmp();
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(ISSUER, TOKENS);
+  const file = join(data, 'credentials.json');
+  chmodSync(file, 0o644);
+  assert.deepEqual(await store.update(ISSUER, async (latest) => latest), TOKENS);
+  assert.equal(statSync(file).mode & 0o777, 0o644);
+  const fresh = { ...TOKENS, access_token: 'AT-2' };
+  assert.deepEqual(await store.update(ISSUER, async () => fresh), fresh);
+  assert.deepEqual(await store.get(ISSUER), fresh);
+  assert.equal(await store.update(ISSUER, async () => null), null);
+  assert.deepEqual(await store.get(ISSUER), fresh);
 });
