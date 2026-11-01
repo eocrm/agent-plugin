@@ -344,6 +344,25 @@ test('repoSlug strips credentials and reads scp-style origins', () => {
   assert.equal(repoSlug(repo('main')), null);
 });
 
+test('repoSlug never carries userinfo, query or fragment', () => {
+  const cases = [
+    ['https://a@b:tok@host/o/r', 'host/o/r'],
+    ['a@b@host:o/r', 'host/o/r'],
+    ['host/o/r?sig=XYZ', null],
+    ['https://user:ghp_X@github.com/o/r.git', 'o/r'],
+    ['ssh://git@host:22/o/r', 'host/o/r'],
+    ['https://github.com/o/r#t@x', 'o/r'],
+    ['git@github.com:o/r.git', 'o/r'],
+    ['git@github.com:o/r?sig=XYZ', null],
+    ['C:\\repos\\r', null],
+  ];
+  for (const [origin, slug] of cases) {
+    const got = repoSlug('.', origin);
+    assert.equal(got, slug, origin);
+    assert.doesNotMatch(String(got), /tok|ghp_|XYZ|a@b|#|@/, origin);
+  }
+});
+
 test('the dispatcher logs a failure to plugin.log and still prints nothing', () => {
   const data = signedIn();
   const r = hook('SessionStart', JSON.stringify({ session_id: '../evil', cwd: process.cwd() }), { data });
