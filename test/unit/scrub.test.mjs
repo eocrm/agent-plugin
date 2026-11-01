@@ -87,12 +87,17 @@ test('scrub fails closed above 16384 chars', () => {
   assert.equal(scrub(`TOKEN=x ${'a'.repeat(16384)}`), '[redacted: unscannable]');
 });
 
-for (const unit of ['a-', '-', 'eyJ', 'mysql ', 'sk-', ' -u a', '_PASSx', 'zip ', 'redis-cli ', 'Cookie:', '-pass ', 'curl ', 'curl -b ']) {
+for (const unit of ['a-', '-', 'eyJ', 'mysql ', 'sk-', ' -u a', '_PASSx', 'zip ', 'redis-cli ', 'Cookie:', '-pass ', 'curl ', 'curl -b ', '\\', '\\"TOKEN\\": \\"', 'TOKEN: \\\\"a\\\\\\\\', "$'\\x", "$'\\n "]) {
   test(`scrubs a long adversarial field in linear time: ${JSON.stringify(unit)}`, () => {
     const text = fill(unit, 16000);
     assert.ok(ms(() => scrub(text)) < 50);
   });
 }
+
+test('scans a long backslash run once', () => {
+  const text = '\\'.repeat(16000);
+  assert.ok(ms(() => scrub(text)) < 50);
+});
 
 const ordinary = {
   'curl a://b': 'curl ' + 'a://b '.repeat(660),

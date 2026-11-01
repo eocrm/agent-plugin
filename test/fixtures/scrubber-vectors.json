@@ -1167,23 +1167,23 @@
  },
  {
   "input": "cmd $'\\x2d\\x2dpassword' hunter2secret",
-  "expected": "cmd [redacted] [redacted]"
+  "expected": "cmd [redacted]"
  },
  {
   "input": "cmd $'\\055\\055password' hunter2secret",
-  "expected": "cmd [redacted] [redacted]"
+  "expected": "cmd [redacted]"
  },
  {
   "input": "cmd $'\\u002d-password' hunter2secret",
-  "expected": "cmd [redacted] [redacted]"
+  "expected": "cmd [redacted]"
  },
  {
   "input": "cmd -$'\\x2dpassword' hunter2secret",
-  "expected": "cmd [redacted] [redacted]"
+  "expected": "cmd [redacted]"
  },
  {
   "input": "x --password=$'\\x41bc' tail",
-  "expected": "x [redacted] tail"
+  "expected": "x [redacted]"
  },
  {
   "input": "echo $'it\\'s' ok",
@@ -1204,5 +1204,73 @@
  {
   "input": "echo $\"hello world\" ok",
   "expected": "echo $\"hello world\" ok"
+ },
+ {
+  "input": "x \"-v -secret\" abc",
+  "expected": "x [redacted] [redacted]"
+ },
+ {
+  "input": "x \"--to\\\nken\" hunter2",
+  "expected": "x \"--to\\\nken\" [redacted]"
+ },
+ {
+  "input": "x \"-v --token\" hunter2",
+  "expected": "x [redacted] [redacted]"
+ },
+ {
+  "input": "x --token $\"a b\" tail",
+  "expected": "x --token [redacted] tail"
+ },
+ {
+  "input": "mysql $\"-phunter2\" db",
+  "expected": "mysql -p[redacted] db"
+ },
+ {
+  "input": "x $'a\\\\b' --token hunter2",
+  "expected": "x $'a\\\\b' --token [redacted]"
+ },
+ {
+  "input": "x $'--to\\x6ben' hunter2",
+  "expected": "x [redacted]"
+ },
+ {
+  "input": "$'\\x6dysql' -u root -phunter2; ls",
+  "expected": "[redacted]; ls"
+ },
+ {
+  "input": "{\"k\":\"\\\"api_key\\\": \\\"X\\\"\"}",
+  "expected": "{\"k\":\"\\\"api_key\\\": \\\"[redacted]\\\"\"}"
+ },
+ {
+  "input": "{\"k\":\"\\\"api_key\\\": \\\"X Y\\\"\"}",
+  "expected": "{\"k\":\"\\\"api_key\\\": \\\"[redacted]\\\"\"}"
+ },
+ {
+  "input": "{\"k\":\"\\\"password\\\":\\\"a\\\\\\\"X\\\"\"}",
+  "expected": "{\"k\":\"\\\"password\\\":\\\"[redacted]\\\"\"}"
+ },
+ {
+  "input": "{\"a\":\"{\\\\\\\"api_key\\\\\\\":\\\\\\\"X Y\\\\\\\"}\"}",
+  "expected": "{\"a\":\"{\\\\\\\"api_key\\\\\\\":\\\\\\\"[redacted]\\\\\\\"}\"}"
+ },
+ {
+  "input": "curl -H \"Cookie: sid=hunter2\" https://x",
+  "expected": "curl -H \"Cookie: [redacted]\" https://x"
+ },
+ {
+  "input": "x $'--to\\\nken' hunter2",
+  "expected": "x [redacted]"
+ },
+ {
+  "input": "sh -c \"mysqldump -p X\"",
+  "expected": "sh -c \"mysqldump -p X\""
+ },
+ {
+  "input": "curl -u -hunter2",
+  "expected": "curl -u -hunter2"
+ },
+ {
+  "input": "sh -c \"git status\"",
+  "expected": "sh -c \"git status\""
  }
 ]
