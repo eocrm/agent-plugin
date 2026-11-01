@@ -287,7 +287,13 @@
   - If port 53682 is busy, login binds 53683.
   - Verification: `GET conventions` 200 → ok; 404 or 403 → exit 3 with "workspace not found or Agent work is off".
   - Pairing branches: 0 candidates → `standalone`; 1 → `pair` called, then `requested` with `approveUrl`; 2 → `choose`, with no pair call; `422 {code: 'pair_target_unavailable'}` → standalone plus a message naming the code.
-  - `eocrm use beta` writes `workspace: 'beta'` to the current worktree file only.
+  - `eocrm use beta` maps the current **repository** to `beta` (dpws, 2026-11-01: a workspace per GitHub repo without switching):
+    - key = the normalised `origin` remote (`host/owner/repo`, lower-case, no scheme, no `.git`, ssh and https forms equal); no origin → the repo's main worktree root path;
+    - stored in `<data>/repos.json` (plugin data dir, never a file in the repo), so every clone and worktree of that repo resolves the same way;
+    - `eocrm use --here beta` writes the current worktree file only, for a one-off override;
+    - resolution order: worktree file → repos.json entry → the login default.
+  - Test: two worktrees of one repo (same origin, ssh vs https spelling) both resolve `beta` after one `use`; another repo still gets the default; `--here` wins in its worktree only.
+  - A workspace the member has not signed into or paired yet: the first hook run there stays silent and `eocrm status` says `run /eocrm:login <workspace>`; the token is per identity and region, pairing is per workspace.
   - Missing workspace exits 2 with `workspace required`.
   - A missing or <20 Node major prints `eocrm needs Node 20+ on PATH`.
   - No CLI stdout or stderr contains the fixture's token strings.
