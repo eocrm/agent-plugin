@@ -48,6 +48,19 @@ test('remotes normalise to host/owner/repo whatever their spelling', () => {
     'https://user:ghp_secret0123456789@github.com/acme/widgets/',
     'git://GitHub.com/acme/widgets',
   ]) assert.equal(normaliseRemote(url), 'github.com/acme/widgets', url);
+  assert.equal(normaliseRemote('git@host.test:123/x.git'), 'host.test/123/x');
+  assert.equal(normaliseRemote('ssh://git@host.test:2222/123/x'), 'host.test/123/x');
+});
+
+test('a relative-path origin is keyed by the repo, not by the relative spelling', async () => {
+  const data = tmp('data');
+  account(data);
+  const dir = repo('../shared');
+  const wt = worktree(dir);
+  await cli(['use', '--data', data, 'beta'], { cwd: wt });
+  assert.equal(resolveWorkspace({ data, cwd: dir }).workspace, 'beta');
+  assert.equal(resolveWorkspace({ data, cwd: repo('../shared') }).workspace, 'acme');
+  assert.ok(!Object.keys(JSON.parse(readFileSync(join(data, 'repos.json'), 'utf8'))).includes('../shared'));
 });
 
 test('one use maps every clone and worktree of a repo; another repo keeps the default; --here wins only in its worktree', async () => {
@@ -157,7 +170,7 @@ test('the script sets its exit code', () => {
 
 test('login, pair, status and logout never print a token, code, verifier or state', async (t) => {
   const server = await startFixtureServer({ responses: { 'agentRun.pairable': { status: 200, body: { items: [
-    { id: '01JZ0000000000000000000010', label: 'Claude Code A', created_at: '2026-10-30T09:00:00+00:00' },
+    { id: '01JZ0000000000000000000010', label: 'Claude\u001b[31m Code\u0007 A', created_at: '2026-10-30T09:00:00+00:00' },
     { id: '01JZ0000000000000000000002', label: 'Claude Code B', created_at: '2026-10-30T09:00:00+00:00' },
   ] } } } });
   t.after(() => server.close());
@@ -177,17 +190,18 @@ test('login, pair, status and logout never print a token, code, verifier or stat
     await cli(['status', '--data', data], opts),
   ];
   assert.deepEqual(runs.map((r) => r.code), [0, 0, 0, 0, 0]);
+  assert.match(runs[0].out, /^open http:\/\/127\.0\.0\.1:5368[234]\/start to sign in\n/);
   assert.equal(runs[0].out, [
-    'open http://127.0.0.1:53682/start to sign in',
+    runs[0].out.split('\n')[0],
     'signed in to acme (eu)',
     `tokens stored in ${join(data, 'credentials.json')}: no keychain found`,
     'pairing: choose a connection, then run pair <id>',
-    'connection 01JZ0000000000000000000010 Claude Code A',
+    'connection 01JZ0000000000000000000010 Claude [31m Code A',
     'connection 01JZ0000000000000000000002 Claude Code B',
   ].join('\n'));
   assert.equal(runs[1].out, 'pairing requested: approve in Account → Agents within 15 minutes: https://workspace.example.test/account/agents');
   assert.equal(runs[2].out, 'signed in (eu)\nworkspace acme (default)\npairing requested');
-  assert.equal(runs[3].out, 'signed out');
+  assert.equal(runs[3].out, `signed out of ${server.url}`);
   assert.match(runs[4].out, /^signed out: run \/eocrm:login$/m);
   assert.equal(await store.get(endpoints({ region: 'eu', env: server.endpointsEnv }).key), null);
 
@@ -196,6 +210,7 @@ test('login, pair, status and logout never print a token, code, verifier or stat
   const secrets = [authorize.query.state, token.body.code, token.body.code_verifier, 'fixture-access', 'fixture-refresh'];
   const printed = runs.map((r) => r.out + r.err).join('\n');
   for (const s of secrets) assert.ok(!printed.includes(s), s);
+  assert.ok(![...printed].some((c) => c !== '\n' && (c < ' ' || c === '\u007f')), 'no control characters from the server');
 });
 
 function fakeSpawn() {

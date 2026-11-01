@@ -5,8 +5,9 @@ import { dataDir } from '../lib/paths.mjs';
 import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { credentialStore } from '../lib/credentials.mjs';
-import { login, openBrowser, requestPair, recordPairing } from '../lib/login.mjs';
-import { loadAccount, resolveWorkspace, useWorkspace, answerCommitted } from '../lib/workspace.mjs';
+import { login, openBrowser, requestPair, recordPairing, plain } from '../lib/login.mjs';
+import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted } from '../lib/workspace.mjs';
+import { writeJsonAtomic } from '../lib/state.mjs';
 
 const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' } };
 const APPROVE = 'pairing requested: approve in Account → Agents within 15 minutes';
@@ -16,8 +17,9 @@ class Usage extends Error {
 }
 
 function pairingLines(p) {
-  if (p.status === 'requested') return [`${APPROVE}: ${p.approveUrl}`];
-  if (p.status === 'choose') return ['pairing: choose a connection, then run pair <id>', ...p.candidates.map((c) => `connection ${c.id} ${String(c.label ?? '').replace(/\s+/g, ' ')}`)];
+  if (p.status === 'requested') return [p.approveUrl ? `${APPROVE}: ${p.approveUrl}` : APPROVE];
+  if (p.status === 'paired') return ['already paired'];
+  if (p.status === 'choose') return ['pairing: choose a connection, then run pair <id>', ...p.candidates.map((c) => `connection ${plain(c.id)} ${plain(c.label).replace(/\s+/g, ' ')}`)];
   return [p.refused ? `running standalone (${p.refused})` : 'running standalone'];
 }
 
@@ -51,7 +53,7 @@ const commands = {
     const result = await requestPair(createClient({ endpoints: endpoints({ region, env }), workspace, store }), id);
     recordPairing(data, workspace, result.status);
     pairingLines(result).forEach((l) => out(l));
-    return result.status === 'requested' ? 0 : 3;
+    return result.status === 'standalone' ? 3 : 0;
   },
 
   async status({ env, cwd, out, data, store }) {
@@ -69,9 +71,19 @@ const commands = {
   },
 
   async logout({ env, out, data, store }) {
-    const { region } = loadAccount(data);
-    if (region) await store.del(endpoints({ region, env }).key);
-    out('signed out');
+    const account = loadAccount(data);
+    const keys = new Set(Array.isArray(account.keys) ? account.keys : []);
+    if (account.region) keys.add(endpoints({ region: account.region, env }).key);
+    for (const key of keys) {
+      try {
+        await store.del(key);
+        out(`signed out of ${plain(String(key).split(' ')[0])}`);
+      } catch {
+        // a malformed key in account.json names nothing stored
+      }
+    }
+    writeJsonAtomic(accountFile(data), { ...account, keys: [] });
+    if (!keys.size) out('signed out');
   },
 };
 

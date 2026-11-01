@@ -361,3 +361,12 @@ test('fixture validates path and query parameters', async (t) => {
   assert.ok(r.body.errors.cursor);
   assert.equal((await client.listEvents(run.id, 'c'.repeat(200))).status, 200);
 });
+
+test('a refresh answer without expires_in saves an unknown expiry', async (t) => {
+  const { client, store } = await setup(t, {
+    tokens: { access_token: 'stale', refresh_token: 'fixture-refresh-0', expires_at: 0, client_id: 'fixture-client' },
+    responses: { 'oauth.token': () => ({ status: 200, body: { token_type: 'Bearer', access_token: 'fixture-access-0', refresh_token: 'r1' } }) },
+  });
+  assert.equal((await client.conventions()).status, 200);
+  assert.equal((await store.get()).expires_at, null);
+});

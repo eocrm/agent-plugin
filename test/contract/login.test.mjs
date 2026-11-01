@@ -10,6 +10,7 @@ import { login, LoginError } from '../../lib/login.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
+import { main } from '../../scripts/eocrm.mjs';
 
 const browse = (url) => { fetch(url).catch(() => {}); };
 
@@ -54,7 +55,8 @@ test('registers once, signs in with PKCE S256 and stores tokens under the endpoi
   assert.equal(saved.access_token, server.auth.access);
   assert.equal(saved.client_id, 'fixture-client');
   const account = JSON.parse(readFileSync(join(data, 'account.json'), 'utf8'));
-  assert.deepEqual({ ...account, workspaces: undefined }, { region: 'eu', issuer: server.url, clientId: 'fixture-client', workspace: 'acme', workspaces: undefined });
+  assert.deepEqual({ ...account, workspaces: undefined }, { region: 'eu', issuer: server.url, clients: { [server.url]: 'fixture-client' }, keys: [key], workspace: 'acme', workspaces: undefined });
+  assert.equal(saved.expires_at > Date.now() / 1000, true);
   assert.equal(account.workspaces.acme, 'requested');
   await assert.rejects(fetch('http://127.0.0.1:53682/start'), 'the callback server closes after one valid callback');
 });
@@ -136,6 +138,11 @@ test('a busy 53682 makes login bind 53683', async (t) => {
   assert.equal(calls('GET', '/oauth/authorize')[0].query.redirect_uri, 'http://127.0.0.1:53683/callback');
 });
 
+test('a coded 403 names its code', async (t) => {
+  const { run } = await setup(t, { responses: { 'agentWorkConventions.show': { status: 403, body: { code: 'mcp_disabled', message: 'off' } } } });
+  await assert.rejects(run(), (e) => e.exitCode === 3 && e.message === 'workspace not found or Agent work is off (mcp_disabled)');
+});
+
 for (const status of [404, 403]) {
   test(`conventions ${status} fails with "workspace not found or Agent work is off"`, async (t) => {
     const { run } = await setup(t, { responses: { 'agentWorkConventions.show': { status, body: { message: 'x' } } } });
@@ -165,9 +172,21 @@ test('pairing: two candidates ask the member, without pairing', async (t) => {
   assert.equal(calls('POST', '/v1/agent-runs/pair').length, 0);
 });
 
-test('pairing: a coded 422 stands alone and names the code', async (t) => {
-  const { run } = await setup(t, { responses: { 'agentRun.pair': { status: 422, body: { code: 'pair_request_unavailable', message: 'A pairing request is already waiting for approval.' } } } });
-  assert.deepEqual((await run()).pairing, { status: 'standalone', refused: 'pair_request_unavailable' });
+const pairRefusal = (code) => ({ 'agentRun.pair': { status: 422, body: { code, message: 'm' } } });
+
+test('pairing: an unavailable target stands alone and names the code', async (t) => {
+  const { run } = await setup(t, { responses: pairRefusal('pair_target_unavailable') });
+  assert.deepEqual((await run()).pairing, { status: 'standalone', refused: 'pair_target_unavailable' });
+});
+
+test('pairing: an already waiting request reads as requested', async (t) => {
+  const { run } = await setup(t, { responses: pairRefusal('pair_request_unavailable') });
+  assert.deepEqual((await run()).pairing, { status: 'requested', approveUrl: null });
+});
+
+test('pairing: an existing pairing reads as paired', async (t) => {
+  const { run } = await setup(t, { responses: pairRefusal('agent_already_paired') });
+  assert.deepEqual((await run()).pairing, { status: 'paired' });
 });
 
 const workspaces = (items) => ({ 'agentWork.workspaces': { status: 200, body: { items } } });
@@ -180,9 +199,9 @@ test('without a slug the only workspace with Agent work on is picked silently', 
 });
 
 test('without a slug and several workspaces, login lists them and asks', async (t) => {
-  const { data, run } = await setup(t, { responses: workspaces([{ slug: 'acme', name: 'Acme', agent_work: true }, { slug: 'beta', name: 'Beta', agent_work: true }]) });
+  const { data, run } = await setup(t, { responses: workspaces([{ slug: 'acme', name: 'Acme', agent_work: true }, { slug: 'beta', name: 'Be\u001bta', agent_work: true }]) });
   await assert.rejects(run({ workspace: undefined }), (e) => e.exitCode === 2 && e.message === 'workspace required'
-    && e.lines.join('\n') === 'workspace acme Acme\nworkspace beta Beta');
+    && e.lines.join('\n') === 'workspace acme Acme\nworkspace beta Be ta');
   assert.equal(JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).workspace, undefined);
 });
 
@@ -194,4 +213,94 @@ test('without a slug on an eocrm that has no workspace list, login asks for the 
 test('without a slug and no workspace with Agent work on, login fails', async (t) => {
   const { run } = await setup(t, { responses: workspaces([{ slug: 'off', name: 'Off', agent_work: false }]) });
   await assert.rejects(run({ workspace: undefined }), (e) => e.exitCode === 3 && e.message === 'workspace not found or Agent work is off');
+});
+
+const raw = (port, line, host = `127.0.0.1:${port}`) => new Promise((resolve) => {
+  const socket = connect({ host: '127.0.0.1', port });
+  let got = '';
+  socket.on('data', (d) => { got += d; });
+  socket.on('error', () => resolve(got));
+  socket.on('close', () => resolve(got));
+  socket.write(`GET ${line} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
+});
+
+test('malformed callbacks get a 400 and sign-in still completes', async (t) => {
+  const { run } = await setup(t);
+  const answers = [];
+  const result = await run({ openBrowser: async (url) => {
+    const port = new URL(url).port;
+    const wide = await fetch(new URL(`/callback?code=x&state=${'é'.repeat(43)}`, url));
+    answers.push(`${wide.status} ${(await wide.text()).trim()}`);
+    for (const line of ['http://[', 'http://a:99999/', 'http://%zz', `http://127.0.0.1:${port}/start`, '//[']) answers.push((await raw(port, line)).split(' ')[1]);
+    browse(url);
+  } });
+  assert.deepEqual(answers, ['400 This sign-in link is not valid.', '400', '400', '400', '400', '400']);
+  assert.equal(result.workspace, 'acme');
+});
+
+const tokenOnce = (server, first) => {
+  let n = 0;
+  return () => (n++ === 0 || first === 'always'
+    ? { status: 401, body: { error: 'invalid_client', error_description: 'Client authentication failed', message: 'Client authentication failed' } }
+    : { status: 200, body: { token_type: 'Bearer', expires_in: 3600, access_token: server().auth.access, refresh_token: server().auth.refresh } });
+};
+
+test('an invalid_client token answer registers again once', async (t) => {
+  let server;
+  const ctx = await setup(t, { responses: { 'oauth.token': tokenOnce(() => server) } });
+  server = ctx.server;
+  assert.equal((await ctx.run()).workspace, 'acme');
+  assert.equal(ctx.calls('POST', '/oauth/register').length, 2);
+  assert.equal(ctx.calls('GET', '/oauth/authorize').length, 2);
+});
+
+test('an invalid_client after registering again fails clearly', async (t) => {
+  let server;
+  const ctx = await setup(t, { responses: { 'oauth.token': tokenOnce(() => server, 'always') } });
+  server = ctx.server;
+  await assert.rejects(ctx.run(), (e) => e.exitCode === 3 && e.message === 'sign-in failed (invalid_client after registering again)');
+  assert.equal(ctx.calls('POST', '/oauth/register').length, 2);
+});
+
+test('an invalid_client callback from authorize registers again once', async (t) => {
+  let n = 0;
+  const ctx = await setup(t, { responses: { 'oauth.authorize': ({ query }) => {
+    if (n++ > 0) return undefined;
+    const to = new URL(query.redirect_uri);
+    to.search = new URLSearchParams({ error: 'invalid_client', state: query.state }).toString();
+    return { status: 302, location: to.href };
+  } } });
+  assert.equal((await ctx.run()).workspace, 'acme');
+  assert.equal(ctx.calls('POST', '/oauth/register').length, 2);
+});
+
+test('a token answer without expires_in stores an unknown expiry', async (t) => {
+  let server;
+  const ctx = await setup(t, { responses: { 'oauth.token': () => ({ status: 200, body: { token_type: 'Bearer', access_token: server.auth.access, refresh_token: server.auth.refresh } }) } });
+  server = ctx.server;
+  await ctx.run();
+  assert.equal((await ctx.store.get(ctx.key)).expires_at, null);
+});
+
+test('each issuer keeps its own client: eu, ru, eu registers twice in all', async (t) => {
+  const eu = await startFixtureServer();
+  const ru = await startFixtureServer();
+  t.after(() => Promise.all([eu.close(), ru.close()]));
+  const data = mkdtempSync(join(tmpdir(), 'eocrm-login-'));
+  const store = credentialStore({ data, platform: 'none' });
+  const go = (region, server) => login({ data, region, workspace: 'acme', env: server.endpointsEnv, openBrowser: browse, store, timeoutMs: 5000 });
+  await go('eu', eu);
+  await go('ru', ru);
+  await store.del(endpoints({ region: 'eu', env: eu.endpointsEnv }).key);
+  await go('eu', eu);
+  const registers = (s) => s.requests.filter((r) => r.path === '/oauth/register').length;
+  assert.deepEqual([registers(eu), registers(ru)], [1, 1]);
+  const account = JSON.parse(readFileSync(join(data, 'account.json'), 'utf8'));
+  assert.deepEqual(account.clients, { [eu.url]: 'fixture-client', [ru.url]: 'fixture-client' });
+  assert.equal(account.keys.length, 2);
+
+  const out = [];
+  assert.equal(await main({ argv: ['logout', '--data', data], env: eu.endpointsEnv, store, out: (l) => out.push(l), err: () => {} }), 0);
+  assert.deepEqual(out.sort(), [`signed out of ${eu.url}`, `signed out of ${ru.url}`].sort());
+  for (const s of [eu, ru]) assert.equal(await store.get(endpoints({ region: 'eu', env: s.endpointsEnv }).key), null);
 });
