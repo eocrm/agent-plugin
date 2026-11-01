@@ -949,5 +949,165 @@
   "group": "shared-2026-11-01",
   "input": "mysql --password -psecret db",
   "expected": "mysql --password -p[redacted] db"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "-----BEGIN RSA PRIVATE KEY-----\nFAKEfake\nFAKEfa",
+  "expected": "[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=\"abc def",
+  "expected": "TOKEN=\"[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN='abc def",
+  "expected": "TOKEN='[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token=secret",
+  "expected": "x --password --token=[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "redis-cli --pass -a hunter2",
+  "expected": "redis-cli --pass -a [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "curl -b -u a:b",
+  "expected": "curl -b -u [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --no-password -u a:b",
+  "expected": "x --no-password -u [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --pass -phunter2 db",
+  "expected": "mysql --pass -p[redacted] db"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "curl -u -v https://x",
+  "expected": "curl -u -v https://x"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "tool -u -x:y",
+  "expected": "tool -u -x:y"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --password -uroot db",
+  "expected": "mysql --password [redacted] db"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token secret",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token　secret",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token sec ret",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "curl -b sid=1 https://x",
+  "expected": "curl [redacted] https://x"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --verbose on",
+  "expected": "x --verbose on"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -u a:b",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -u plain",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --token -uvalue -v",
+  "expected": "x --token [redacted] -v"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "mysql -phunter2 x db",
+  "expected": "mysql [redacted] db"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "openssl -passin 'pass:abc' -in a",
+  "expected": "openssl [redacted] -in a"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "openssl -passin \"pass:a b\" -in a",
+  "expected": "openssl [redacted] -in a"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --password=se cret y",
+  "expected": "x [redacted] y"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -secret abc",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"mysql --password secret\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"x --token \\\"secret\\\"\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -v --password secret",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x db　--user u:secret tail",
+  "expected": "x [redacted] [redacted] tail"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "curl -u db --api-key -secret",
+  "expected": "curl -u [redacted] [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --password ",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "git commit -m \"fix the --verbose flag\"",
+  "expected": "git commit -m \"fix the --verbose flag\""
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x \"-v --token\"",
+  "expected": "x [redacted]"
  }
 ]

@@ -59,9 +59,26 @@ test('clean never leaves a lone surrogate at the cut', () => {
   assert.ok(inner.isWellFormed());
 });
 
-test('clean backs off a surrogate cut by the scan window', () => {
-  const out = clean('TOKEN=' + 'a'.repeat(392) + ' 😀', 100);
-  assert.equal(out, 'TOKEN=[redacted] ');
+test('clean drops the token cut by the scan window', () => {
+  const head = '-----BEGIN RSA PRIVATE KEY-----\n';
+  const tail = '\n-----END RSA PRIVATE KEY-----';
+  const pem = head + 'MIIJQk'.repeat(400).slice(0, 1989 - head.length - tail.length) + tail;
+  const out = clean(`${pem} ghp_${'A1b2C3d4e'.repeat(4)}`, 500);
+  assert.doesNotMatch(out, /ghp_|MIIJ/);
+  assert.ok(out.endsWith('… [truncated]'));
+  assert.equal(clean(`ok ${'x'.repeat(30)}`, 5), 'ok');
+  assert.doesNotMatch(clean(`ghp_${'A'.repeat(100)}`, 5), /ghp_/);
+});
+
+test('clean below the suffix length stays within the limit', () => {
+  for (const limit of [5, 12]) {
+    for (const text of ['x'.repeat(100), '😀'.repeat(50), `ab${'😀'.repeat(8)}`, `abc${'😀'.repeat(10)}`]) {
+      const out = clean(text, limit);
+      assert.ok(out.length <= limit, `${limit}: ${out}`);
+      assert.ok(out.isWellFormed(), `${limit}: ${JSON.stringify(out)}`);
+    }
+  }
+  assert.equal(clean('abcdefghijklmnop', 12), 'abcdefghijkl');
 });
 
 test('scrub fails closed above 16384 chars', () => {
@@ -98,3 +115,59 @@ for (const unit of ['curl -b hunter2 ', 'mysql -phunter2 ', "curl -b 'hunter2' "
     assert.ok(ms(() => scrub(text)) < 50);
   });
 }
+
+test('a planted secret value never survives scrub (seeded grammar)', () => {
+  let seed = 20261101;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const SECRET = 'Zq9S3cr3tX';
+  const FLAGS = [
+    ['git', '--cookie', 'any'], ['ssh', '--oauth2-bearer', 'any'], ['x', '--proxy-user', 'any'], ['git', '-u', 'userinfo'],
+    ['x', '--user', 'userinfo'], ['openssl', '-pass', 'openssl'], ['openssl', '-passin', 'openssl'], ['curl', '-b', 'any'],
+    ['curl', '-u', 'not-url'], ['curl', '--user', 'not-url'], ['mysql', '--pass', 'any'], ['mysql', '-p', 'attached'],
+    ['sshpass', '-p', 'any'], ['docker login', '-p', 'any'], ['redis-cli', '-a', 'any'], ['redis-cli', '--pass', 'any'],
+    ['zip', '-P', 'any'], ['7z', '-p', 'attached'], ['x', '--token', 'any'], ['x', '--password', 'any'],
+    ['x', '--api-key', 'any'], ['x', '--db-password', 'any'],
+  ];
+  const value = (mode) => {
+    const core = pick([SECRET, `${SECRET}\u00a0tail`, `a${SECRET}`]);
+    const raw = mode === 'userinfo' ? `u:${core}` : mode === 'openssl' ? `pass:${core}` : core;
+    const dash = mode === 'any' || mode === 'attached' ? [`-${raw}`] : [];
+    return pick([raw, raw, `"${raw}"`, `'${raw}'`, ...dash]);
+  };
+  const uspace = () => pick(['\u00a0', '\u3000', '\u2003', '\u00a0\u00a0']);
+  const packed = () => {
+    const [, flag, mode] = pick(FLAGS.filter(([c, , m]) => m !== 'attached' && ['git', 'ssh', 'x', 'openssl'].includes(c)));
+    const filler = Array.from({ length: Math.floor(rand() * 3) }, () => pick(['-v', 'x', '--verbose', 'db', '-u']));
+    const parts = [...filler, flag, value(mode).replace(/^["']|["']$/g, ''), ...(rand() < 0.3 ? ['tail'] : [])];
+    const sep = rand() < 0.5 ? uspace : () => pick([' ', uspace()]);
+    const token = parts.map((p, i) => (i ? sep() : '') + p).join('');
+    return pick([token, `"${token}"`, `'${token}'`, `"${token.replace(SECRET, `\\"${SECRET}\\"`)}"`]);
+  };
+  const line = () => {
+    if (rand() < 0.3) return `${pick(['x', 'sh -c', 'bash -lc', 'curl'])} ${packed()}${pick(['', ' db', ' -v'])}`;
+    if (rand() < 0.2) {
+      const key = pick(['TOKEN', 'API_KEY', 'DB_PASSWORD', 'GH_TOKEN', 'export SECRET']);
+      return `${key}${pick(['=', ' = ', ': ', '\u00a0=\u00a0'])}${pick([SECRET, `"${SECRET}"`, `'${SECRET}'`, `"a\\"${SECRET}"`, `"${SECRET}`])}`;
+    }
+    const [cmd, flag, mode] = pick(FLAGS);
+    const forms = [];
+    if (mode !== 'attached') forms.push(`${flag}${pick([' ', '\t', '  '])}${value(mode)}`, `${flag}${pick(['\u00a0', '\u3000', '\u2003'])}${value(mode)}`);
+    if (flag.startsWith('--')) forms.push(`${flag}=${value(mode)}`);
+    if (flag.length === 2) forms.push(`${flag}${value(mode)}`);
+    const before = pick(['', '-v ', '--verbose ', 'https://h/p ', '--password ', '-u root ', '--token-ttl 5 ', '-b x ']);
+    const after = pick(['', ' db', ' -v', ' https://x', ' && echo ok', '; ls', '\nnext']);
+    return `${cmd} ${before}${pick(forms)}${after}`;
+  };
+  const leaks = [];
+  for (let i = 0; i < 20000; i++) {
+    const text = line();
+    if (scrub(text).includes(SECRET)) leaks.push(text);
+  }
+  assert.deepEqual(leaks.slice(0, 5), [], `${leaks.length} leaks`);
+});
