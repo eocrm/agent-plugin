@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, utimesSync, symlinkSync, realpathSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, utimesSync, symlinkSync, realpathSync, readFileSync, writeFileSync, existsSync, readdirSync, chmodSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { withLock, readJson, writeJsonAtomic, worktreeOf, loadWorktree, saveWorktree, loadRun, saveRun, LockTimeout } from '../../lib/state.mjs';
+import { withLock, breakStale, readJson, writeJsonAtomic, worktreeOf, loadWorktree, saveWorktree, loadRun, saveRun, LockTimeout } from '../../lib/state.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'eocrm-state-'));
 
@@ -48,10 +48,102 @@ test('readJson falls back on missing or corrupt file', () => {
   assert.deepEqual(readJson(join(dir, 'b.json'), []), []);
 });
 
+test('readJson falls back on JSON that is not a plain object', () => {
+  const dir = tmp();
+  for (const body of ['null', '"s"', '[1]', '5', 'true']) {
+    writeFileSync(join(dir, 'c.json'), body);
+    assert.deepEqual(readJson(join(dir, 'c.json'), { z: 1 }), { z: 1 }, body);
+  }
+});
+
+test('loadRun survives a corrupt or wrong-shape run file', () => {
+  const data = tmp();
+  mkdirSync(join(data, 'runs'));
+  for (const body of ['{bad', 'null', '[]']) {
+    writeFileSync(join(data, 'runs', 's1.json'), body);
+    assert.deepEqual(loadRun(data, 's1').acked, {}, body);
+  }
+});
+
+test('session ids that could leave the runs dir are refused', () => {
+  const data = tmp();
+  for (const id of ['../x', 'a/b', 'a\\b', '..', '', 'a.b', null]) {
+    assert.throws(() => loadRun(data, id), /invalid session id/, String(id));
+    assert.throws(() => saveRun(data, id, {}), /invalid session id/, String(id));
+  }
+  assert.equal(loadRun(data, '0b5f-UUID_like').sessionId, '0b5f-UUID_like');
+});
+
 test('writeJsonAtomic leaves no temp files', () => {
   const dir = tmp();
   writeJsonAtomic(join(dir, 'sub', 'a.json'), { a: 1 });
-  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'sub', 'a.json'), 'utf8')), { a: 1 });
+  writeJsonAtomic(join(dir, 'sub', 'a.json'), { a: 2 });
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'sub', 'a.json'), 'utf8')), { a: 2 });
+  assert.deepEqual(readdirSync(join(dir, 'sub')), ['a.json']);
+});
+
+test('writeJsonAtomic removes its temp file when the rename fails', () => {
+  const dir = tmp();
+  mkdirSync(join(dir, 'a.json', 'x'), { recursive: true });
+  assert.throws(() => writeJsonAtomic(join(dir, 'a.json'), { a: 1 }));
+  assert.deepEqual(readdirSync(dir), ['a.json']);
+});
+
+test('writeJsonAtomic creates the file with the given mode', { skip: process.platform === 'win32' }, () => {
+  const dir = tmp();
+  writeJsonAtomic(join(dir, 'p.json'), { a: 1 }, { mode: 0o600 });
+  assert.equal(statSync(join(dir, 'p.json')).mode & 0o777, 0o600);
+  writeJsonAtomic(join(dir, 'q.json'), { a: 1 });
+  assert.equal(statSync(join(dir, 'q.json')).mode & 0o777, 0o666 & ~process.umask());
+});
+
+test('breakStale puts back a lock that changed owner after it was judged stale', () => {
+  const lock = join(tmp(), '.lock');
+  mkdirSync(lock);
+  writeFileSync(join(lock, 'owner'), 'B');
+  const old = new Date(Date.now() - 31000);
+  utimesSync(lock, old, old);
+  assert.equal(breakStale(lock, 'A'), false);
+  assert.equal(readFileSync(join(lock, 'owner'), 'utf8'), 'B');
+});
+
+test('breakStale puts back a lock that turned out fresh', () => {
+  const lock = join(tmp(), '.lock');
+  mkdirSync(lock);
+  writeFileSync(join(lock, 'owner'), 'A');
+  assert.equal(breakStale(lock, 'A'), false);
+  assert.equal(readFileSync(join(lock, 'owner'), 'utf8'), 'A');
+});
+
+test('breakStale removes a stale lock it judged correctly', () => {
+  const dir = tmp();
+  const lock = join(dir, '.lock');
+  mkdirSync(lock);
+  writeFileSync(join(lock, 'owner'), 'A');
+  const old = new Date(Date.now() - 31000);
+  utimesSync(lock, old, old);
+  assert.equal(breakStale(lock, 'A'), true);
+  assert.deepEqual(readdirSync(dir), []);
+});
+
+test('release leaves a lock that another holder now owns', async () => {
+  const dir = tmp();
+  await withLock(dir, async () => writeFileSync(join(dir, '.lock', 'owner'), 'other'));
+  assert.equal(readFileSync(join(dir, '.lock', 'owner'), 'utf8'), 'other');
+});
+
+const unwritable = process.platform === 'win32' || process.getuid?.() === 0;
+
+test('a release that cannot remove the lock does not mask fn', { skip: unwritable }, async () => {
+  const [a, b] = [tmp(), tmp()];
+  try {
+    assert.equal(await withLock(a, async () => { chmodSync(a, 0o500); return 'ok'; }), 'ok');
+    await assert.rejects(withLock(b, async () => { chmodSync(b, 0o500); throw new Error('mine'); }), /mine/);
+    assert.ok(existsSync(join(a, '.lock')));
+  } finally {
+    chmodSync(a, 0o700);
+    chmodSync(b, 0o700);
+  }
 });
 
 test('worktreeOf gives one key for two spellings of a path', () => {
