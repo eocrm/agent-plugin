@@ -15,6 +15,13 @@ const esc = (s) => s.replace(/~/g, '~0').replace(/\//g, '~1');
 const JSON_SCHEMA = `content/${esc('application/json')}/schema`;
 // eocrm 0.19.5 answers 409 run_ended on PATCH and heartbeat but does not document it.
 const UNDOCUMENTED = { 409: 'components/schemas/CodedRefusal' };
+// Pending eocrm 0.19.6 (not in openapi.json yet): region-host route, shape of AgentWorkspaceListData.
+const PENDING = {
+  'agentWork.workspaces': ajv.compile({
+    type: 'object', required: ['items'], additionalProperties: false,
+    properties: { items: { type: 'array', items: { type: 'object', required: ['slug', 'name', 'agent_work'], additionalProperties: false, properties: { slug: { type: 'string' }, name: { type: 'string' }, agent_work: { type: 'boolean' } } } } },
+  }),
+};
 
 const OPS = Object.entries(snapshot.paths)
   .flatMap(([path, methods]) => Object.entries(methods).map(([method, op]) => ({
@@ -143,6 +150,7 @@ export async function startFixtureServer({ responses = {} } = {}) {
       const next = from + 100 < run.events.length ? String(from + 100) : null;
       return { status: 200, body: { items: run.events.slice(from, from + 100), next_cursor: next } };
     },
+    'agentWork.workspaces': () => ({ status: 200, body: { items: [{ slug: 'acme', name: 'Acme', agent_work: true }] } }),
     'agentWorkConventions.show': () => ({ status: 200, body: recorded('agentWorkConventions.show') }),
     'agentRun.pairable': () => ({ status: 200, body: recorded('agentRun.pairable') }),
     'agentRun.pair': ({ body }) => recorded('agentRun.pairable').items.some((c) => c.id === body.connection_id)
@@ -153,6 +161,7 @@ export async function startFixtureServer({ responses = {} } = {}) {
   function route(method, pathname) {
     const m = /^\/oauth\/(register|authorize|token)$/.exec(pathname);
     if (m) return { name: `oauth.${m[1]}`, workspace: null, path: pathname };
+    if (method === 'GET' && pathname === '/api/v1/agent-work/workspaces') return { name: 'agentWork.workspaces', pending: true, workspace: null, path: '/v1/agent-work/workspaces' };
     const w = /^\/([^/]+)\/api(\/.*)$/.exec(pathname);
     if (!w) return null;
     for (const entry of OPS) {
@@ -180,8 +189,8 @@ export async function startFixtureServer({ responses = {} } = {}) {
       return { status: 404, body: { message: 'Not Found' } };
     }
     const ctx = { body, query, params: r.params ?? [], headers: req.headers };
+    if ((r.entry || r.pending) && req.headers.authorization !== `Bearer ${auth.access}`) return { status: 401, body: { message: 'Unauthenticated.' } };
     if (r.entry) {
-      if (req.headers.authorization !== `Bearer ${auth.access}`) return { status: 401, body: { message: 'Unauthenticated.' } };
       const names = [...r.entry.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
       const errors = {};
       (r.entry.op.parameters ?? []).forEach((param, i) => {
@@ -198,7 +207,8 @@ export async function startFixtureServer({ responses = {} } = {}) {
     }
     const override = responses[r.name];
     const result = (typeof override === 'function' ? override(ctx) : override) ?? (oauth[r.name] ?? api[r.name])(ctx);
-    const bad = responseError(r.entry, result.status, result.body);
+    const pending = r.pending && result.status === 200 && !PENDING[r.name](result.body) ? ajv.errorsText(PENDING[r.name].errors) : null;
+    const bad = pending ?? responseError(r.entry, result.status, result.body);
     return bad ? { status: 500, body: { message: `fixture response violates contract: ${bad}` } } : result;
   }
 
