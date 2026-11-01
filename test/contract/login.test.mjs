@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createServer, request } from 'node:http';
 import { connect } from 'node:net';
-import { login, LoginError } from '../../lib/login.mjs';
+import { login, LoginError, PORTS } from '../../lib/login.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
@@ -14,25 +14,34 @@ import { main } from '../../scripts/eocrm.mjs';
 
 const browse = (url) => { fetch(url).catch(() => {}); };
 
+async function freePorts(n) {
+  const servers = await Promise.all(Array.from({ length: n }, () => new Promise((r) => { const s = createServer(); s.listen(0, '127.0.0.1', () => r(s)); })));
+  const ports = servers.map((s) => s.address().port);
+  await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
+  return ports;
+}
+
 async function setup(t, { responses } = {}) {
   const server = await startFixtureServer({ responses });
   t.after(() => server.close());
   const data = mkdtempSync(join(tmpdir(), 'eocrm-login-'));
   const store = credentialStore({ data, platform: 'none' });
   const key = endpoints({ region: 'eu', env: server.endpointsEnv }).key;
-  const run = (opts = {}) => login({ data, region: 'eu', workspace: 'acme', env: server.endpointsEnv, openBrowser: browse, store, timeoutMs: 5000, ...opts });
+  const ports = await freePorts(3);
+  const run = (opts = {}) => login({ data, region: 'eu', workspace: 'acme', env: server.endpointsEnv, openBrowser: browse, store, timeoutMs: 30000, ports, ...opts });
   const calls = (method, path) => server.requests.filter((r) => r.method === method && r.path === path);
-  return { server, data, store, key, run, calls };
+  return { server, data, store, key, run, calls, ports };
 }
 
 test('registers once, signs in with PKCE S256 and stores tokens under the endpoints key', async (t) => {
-  const { server, data, store, key, run, calls } = await setup(t);
+  const { server, data, store, key, run, calls, ports } = await setup(t);
+  assert.deepEqual(PORTS, [53682, 53683, 53684]);
   const result = await run();
 
   const [register] = calls('POST', '/oauth/register');
   assert.deepEqual(register.body, {
     client_name: 'Claude Code (eocrm plugin)',
-    redirect_uris: [53682, 53683, 53684].map((p) => `http://127.0.0.1:${p}/callback`),
+    redirect_uris: ports.map((p) => `http://127.0.0.1:${p}/callback`),
   });
   const [authorize] = calls('GET', '/oauth/authorize');
   const [token] = calls('POST', '/oauth/token');
@@ -40,7 +49,7 @@ test('registers once, signs in with PKCE S256 and stores tokens under the endpoi
   assert.equal(authorize.query.code_challenge_method, 'S256');
   assert.equal(authorize.query.response_type, 'code');
   assert.equal(authorize.query.client_id, 'fixture-client');
-  assert.equal(authorize.query.redirect_uri, 'http://127.0.0.1:53682/callback');
+  assert.equal(authorize.query.redirect_uri, `http://127.0.0.1:${ports[0]}/callback`);
   assert.equal(authorize.query.code_challenge.length, 43);
   assert.equal(authorize.query.code_challenge, createHash('sha256').update(token.body.code_verifier).digest('base64url'));
   assert.ok(authorize.query.state.length >= 32);
@@ -58,7 +67,7 @@ test('registers once, signs in with PKCE S256 and stores tokens under the endpoi
   assert.deepEqual({ ...account, workspaces: undefined }, { region: 'eu', issuer: server.url, clients: { [server.url]: 'fixture-client' }, keys: [key], workspace: 'acme', workspaces: undefined });
   assert.equal(saved.expires_at > Date.now() / 1000, true);
   assert.equal(account.workspaces.acme, 'requested');
-  await assert.rejects(fetch('http://127.0.0.1:53682/start'), 'the callback server closes after one valid callback');
+  await assert.rejects(fetch(`http://127.0.0.1:${ports[0]}/start`), 'the callback server closes after one valid callback');
 });
 
 const refusedOn = (host, port) => new Promise((resolve) => {
@@ -129,13 +138,13 @@ test('a cancelled consent fails sign-in', async (t) => {
   await assert.rejects(run({ openBrowser: cancel }), (e) => e.exitCode === 3 && /cancelled/.test(e.message));
 });
 
-test('a busy 53682 makes login bind 53683', async (t) => {
+test('a busy first port makes login bind the second', async (t) => {
+  const { run, calls, ports } = await setup(t);
   const blocker = createServer();
-  await new Promise((r) => blocker.listen(53682, '127.0.0.1', r));
+  await new Promise((r) => blocker.listen(ports[0], '127.0.0.1', r));
   t.after(() => new Promise((r) => blocker.close(r)));
-  const { run, calls } = await setup(t);
   await run();
-  assert.equal(calls('GET', '/oauth/authorize')[0].query.redirect_uri, 'http://127.0.0.1:53683/callback');
+  assert.equal(calls('GET', '/oauth/authorize')[0].query.redirect_uri, `http://127.0.0.1:${ports[1]}/callback`);
 });
 
 test('a coded 403 names its code', async (t) => {
@@ -288,7 +297,8 @@ test('each issuer keeps its own client: eu, ru, eu registers twice in all', asyn
   t.after(() => Promise.all([eu.close(), ru.close()]));
   const data = mkdtempSync(join(tmpdir(), 'eocrm-login-'));
   const store = credentialStore({ data, platform: 'none' });
-  const go = (region, server) => login({ data, region, workspace: 'acme', env: server.endpointsEnv, openBrowser: browse, store, timeoutMs: 5000 });
+  const ports = await freePorts(3);
+  const go = (region, server) => login({ data, region, workspace: 'acme', env: server.endpointsEnv, openBrowser: browse, store, timeoutMs: 30000, ports });
   await go('eu', eu);
   await go('ru', ru);
   await store.del(endpoints({ region: 'eu', env: eu.endpointsEnv }).key);
