@@ -309,3 +309,15 @@ test('update stores what fn returns and skips an unchanged value', { skip: proce
   assert.equal(await store.update(ISSUER, async () => null), null);
   assert.deepEqual(await store.get(ISSUER), fresh);
 });
+
+test('del does not throw when the credentials file cannot be removed', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  const data = tmp();
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(ISSUER, TOKENS);
+  chmodSync(data, 0o500);
+  try {
+    await store.del(ISSUER);
+  } finally {
+    chmodSync(data, 0o700);
+  }
+});

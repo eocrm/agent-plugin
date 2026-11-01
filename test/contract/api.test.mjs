@@ -134,6 +134,25 @@ test('a 401 after another process refreshed retries with its tokens', async (t) 
   assert.equal(store.sets, 0);
 });
 
+test('a sign-out during the first 401 is not undone by the refresh', async (t) => {
+  const server = await startFixtureServer();
+  t.after(() => server.close());
+  const data = mkdtempSync(join(tmpdir(), 'eocrm-api-'));
+  const ep = endpoints({ region: 'eu', env: server.endpointsEnv });
+  const stale = { access_token: 'stale', refresh_token: server.auth.refresh, expires_at: 0, client_id: server.auth.clientId };
+  writeFileSync(join(data, 'credentials.json'), JSON.stringify({ [ep.key]: stale }), { mode: 0o600 });
+  const store = credentialStore({ data, platform: 'none' });
+  const fetch = async (url, init) => {
+    const res = await globalThis.fetch(url, init);
+    if (res.status === 401) await store.del(ep.key);
+    return res;
+  };
+  const client = createClient({ endpoints: ep, workspace: 'acme', store, fetch });
+  assert.equal((await client.conventions()).status, 401);
+  assert.equal(await store.get(ep.key), null);
+  assert.equal(server.requests.filter((r) => r.path === '/oauth/token').length, 0);
+});
+
 test('two processes refreshing at once spend the refresh token once', async (t) => {
   const server = await startFixtureServer();
   t.after(() => server.close());
