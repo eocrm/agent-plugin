@@ -139,7 +139,7 @@ test('a planted secret value never survives scrub (seeded grammar)', () => {
     const core = pick([SECRET, `${SECRET}\u00a0tail`, `a${SECRET}`]);
     const raw = mode === 'userinfo' ? `u:${core}` : mode === 'openssl' ? `pass:${core}` : core;
     const dash = mode === 'any' || mode === 'attached' ? [`-${raw}`] : [];
-    return pick([raw, raw, `"${raw}"`, `'${raw}'`, ...dash]);
+    return pick([raw, raw, `"${raw}"`, `'${raw}'`, `$"${raw}"`, ...dash]);
   };
   const uspace = () => pick(['\u00a0', '\u3000', '\u2003', '\u00a0\u00a0']);
   const packed = () => {
@@ -159,6 +159,7 @@ test('a planted secret value never survives scrub (seeded grammar)', () => {
     const [cmd, flag, mode] = pick(FLAGS);
     const forms = [];
     if (mode !== 'attached') forms.push(`${flag}${pick([' ', '\t', '  '])}${value(mode)}`, `${flag}${pick(['\u00a0', '\u3000', '\u2003'])}${value(mode)}`);
+    if (mode !== 'attached') forms.push(`$"${flag}" ${value(mode)}`);
     if (flag.startsWith('--')) forms.push(`${flag}=${value(mode)}`);
     if (flag.length === 2) forms.push(`${flag}${value(mode)}`);
     const before = pick(['', '-v ', '--verbose ', 'https://h/p ', '--password ', '-u root ', '--token-ttl 5 ', '-b x ']);

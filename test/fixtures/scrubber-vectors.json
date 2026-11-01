@@ -1192,5 +1192,17 @@
  {
   "input": "echo $'a\\\\b' ok",
   "expected": "echo $'a\\\\b' ok"
+ },
+ {
+  "input": "x $\"--password\" secret",
+  "expected": "x $\"--password\" [redacted]"
+ },
+ {
+  "input": "x --token $\"secret\"",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "input": "echo $\"hello world\" ok",
+  "expected": "echo $\"hello world\" ok"
  }
 ]
