@@ -1,0 +1,16 @@
+{
+  "id": "01JZ0000000000000000000000",
+  "task_key": null,
+  "agent": { "id": "01JZ0000000000000000000001", "label": "Claude Code", "kind": "claude_code" },
+  "member_name": "Example Member",
+  "state": "running",
+  "tracking_stale": false,
+  "step": null,
+  "branch": null,
+  "repo": null,
+  "started_at": "2026-11-01T10:00:00+00:00",
+  "last_heartbeat_at": "2026-11-01T10:00:00+00:00",
+  "ended_at": null,
+  "duration_seconds": 0,
+  "usage": { "input_tokens": 0, "output_tokens": 0, "cost_usd": null, "wall_ms": 0 }
+}

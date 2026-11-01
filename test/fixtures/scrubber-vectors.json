@@ -1,0 +1,1208 @@
+[
+ {
+  "input": "before eok_FAKEfake0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before ghp_FAKEfakeFAKEfakeFAKEfake00 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before github_pat_FAKE_fake_FAKE_fake_0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before sk-proj-FAKEfakeFAKEfakeFAKE00 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before sk-ant-FAKEfakeFAKEfakeFAKE00 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before sk_test_FAKEfake0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before AKIAFAKEFAKEFAKEFAKE after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before xoxb-FAKE-fake-0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before xoxe-1-FAKE-fake-0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before xapp-1-FAKE-fake-0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before glpat-FAKEfakeFAKEfake0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before npm_FAKEfakeFAKEfakeFAKEfakeFAKEfake0000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before AIzaFAKEfakeFAKEfakeFAKEfakeFAKEfake000 after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before eyJfakefakefake.eyJfakefakefake.fakefakefakefake after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "before -----BEGIN RSA PRIVATE KEY-----\nFAKEfake\n-----END RSA PRIVATE KEY----- after",
+  "expected": "before [redacted] after"
+ },
+ {
+  "input": "make test API_KEY=abc123",
+  "expected": "make test API_KEY=[redacted]"
+ },
+ {
+  "input": "DB_PASSWORD: hunter2 next",
+  "expected": "DB_PASSWORD: [redacted] next"
+ },
+ {
+  "input": "Authorization: Bearer FAKEfakeFAKE.fake",
+  "expected": "Authorization: Bearer [redacted]"
+ },
+ {
+  "input": "curl -H \"basic FAKEfakeFAKE\"",
+  "expected": "curl -H \"basic [redacted]\""
+ },
+ {
+  "input": "https://u:p@host/x",
+  "expected": "https://[redacted]@host/x"
+ },
+ {
+  "input": "{\"api_key\": \"abc123\", \"n\": 1}",
+  "expected": "{\"api_key\": \"[redacted]\", \"n\": 1}"
+ },
+ {
+  "input": "{'secret': 'abc 123'}",
+  "expected": "{'secret': '[redacted]'}"
+ },
+ {
+  "input": "X-Api-Key: abc123",
+  "expected": "X-Api-Key: [redacted]"
+ },
+ {
+  "input": "mysql --password abc123 db",
+  "expected": "mysql --password [redacted] db"
+ },
+ {
+  "input": "cli --token \"abc 123\" x",
+  "expected": "cli --token \"[redacted]\" x"
+ },
+ {
+  "input": "cli --api-key abc123",
+  "expected": "cli --api-key [redacted]"
+ },
+ {
+  "input": "curl -u me:hunter2 https://x",
+  "expected": "curl -u [redacted] https://x"
+ },
+ {
+  "input": "curl --user me:hunter2 https://x",
+  "expected": "curl --user [redacted] https://x"
+ },
+ {
+  "input": "mysql -u root -phunter2 db",
+  "expected": "mysql -u root -p[redacted] db"
+ },
+ {
+  "input": "sshpass -p hunter2 ssh host",
+  "expected": "sshpass -p [redacted] ssh host"
+ },
+ {
+  "input": "docker login -u me -p hunter2 ghcr.io",
+  "expected": "docker login -u me -p [redacted] ghcr.io"
+ },
+ {
+  "input": "docker login -u me --password hunter2 ghcr.io",
+  "expected": "docker login -u me --password [redacted] ghcr.io"
+ },
+ {
+  "input": "DB_PASS=hunter2 make up",
+  "expected": "DB_PASS=[redacted] make up"
+ },
+ {
+  "input": "SMTP_PASS: hunter2",
+  "expected": "SMTP_PASS: [redacted]"
+ },
+ {
+  "input": "//registry.npmjs.org/:_authToken=abc123",
+  "expected": "//registry.npmjs.org/:_authToken=[redacted]"
+ },
+ {
+  "input": "mysql --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x -phunter2 db",
+  "expected": "mysql --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x --opt=x -p[redacted] db"
+ },
+ {
+  "input": "https://x/cb?t=eyJfakefakefake.eyJfakefakefake.fakefakefakefake&a=1",
+  "expected": "https://x/cb?t=[redacted]&a=1"
+ },
+ {
+  "input": "https://x/cb?token=eyJfakefakefake.eyJfakefakefake.fakefakefakefake",
+  "expected": "https://x/cb?token=[redacted]"
+ },
+ {
+  "input": "next%3DeyJfakefakefake.eyJfakefakefake.fakefakefakefake",
+  "expected": "next%3D[redacted]"
+ },
+ {
+  "input": "MYSQL_PWD=hunter2 mysql db",
+  "expected": "MYSQL_PWD=[redacted] mysql db"
+ },
+ {
+  "input": "DB_PASSPHRASE=hunter2",
+  "expected": "DB_PASSPHRASE=[redacted]"
+ },
+ {
+  "input": "SSH_PASSPHRASE: hunter2",
+  "expected": "SSH_PASSPHRASE: [redacted]"
+ },
+ {
+  "input": "MySQL -u root -phunter2 db",
+  "expected": "MySQL -u root -p[redacted] db"
+ },
+ {
+  "input": "podman login -u me -p hunter2 ghcr.io",
+  "expected": "podman login -u me -p [redacted] ghcr.io"
+ },
+ {
+  "input": "redis-cli -h x -a hunter2 ping",
+  "expected": "redis-cli -h x -a [redacted] ping"
+ },
+ {
+  "input": "openssl enc -aes256 -pass pass:hunter2 -in a",
+  "expected": "openssl enc -aes256 -pass pass:[redacted] -in a"
+ },
+ {
+  "input": "zip -r -P hunter2 out.zip dir",
+  "expected": "zip -r -P [redacted] out.zip dir"
+ },
+ {
+  "input": "curl -u :hunter2 https://x",
+  "expected": "curl -u [redacted] https://x"
+ },
+ {
+  "input": "-u admin:hunter2 https://x",
+  "expected": "-u [redacted] https://x"
+ },
+ {
+  "input": "curl -H \"Cookie: session=abc123; theme=dark\" https://x",
+  "expected": "curl -H \"Cookie: [redacted]\" https://x"
+ },
+ {
+  "input": "REDIS_URL=redis://:hunter2@cache:6379",
+  "expected": "REDIS_URL=redis://[redacted]@cache:6379"
+ },
+ {
+  "input": "redis-cli -u redis://:hunter2@cache ping",
+  "expected": "redis-cli -u redis://[redacted]@cache ping"
+ },
+ {
+  "input": "redis-cli --pass hunter2 ping",
+  "expected": "redis-cli --pass [redacted] ping"
+ },
+ {
+  "input": "curl -b \"sid=hunter2\" https://x",
+  "expected": "curl -b \"[redacted]\" https://x"
+ },
+ {
+  "input": "curl --cookie sid=hunter2 https://x",
+  "expected": "curl --cookie [redacted] https://x"
+ },
+ {
+  "input": "Cookie: sid=\"hunter2\"",
+  "expected": "Cookie: [redacted]"
+ },
+ {
+  "input": "openssl x -passin 'pass:hunter2' -in a",
+  "expected": "openssl x -passin 'pass:[redacted]' -in a"
+ },
+ {
+  "input": "openssl x -passout \"pass:hunter2\" -in a",
+  "expected": "openssl x -passout \"pass:[redacted]\" -in a"
+ },
+ {
+  "input": "Cookie: sid=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa next",
+  "expected": "Cookie: [redacted]"
+ },
+ {
+  "input": "curl \"https://x/?a=1&b=2\" -b sid=hunter2",
+  "expected": "curl \"https://x/?a=1&b=2\" -b [redacted]"
+ },
+ {
+  "input": "curl https://x/?a=1&b=2 -b sid=hunter2",
+  "expected": "curl https://x/?a=1&b=2 -b [redacted]"
+ },
+ {
+  "input": "CURL -b hunter2 https://x",
+  "expected": "CURL -b [redacted] https://x"
+ },
+ {
+  "input": "wget --cookie sid=hunter2 https://x",
+  "expected": "wget --cookie [redacted] https://x"
+ },
+ {
+  "input": "curl -b \"sid=hunter2\" -b \"o=hunter3\" https://x",
+  "expected": "curl -b \"[redacted]\" -b \"[redacted]\" https://x"
+ },
+ {
+  "input": "curl -b'sid=hunter2' https://x",
+  "expected": "curl -b'[redacted]' https://x"
+ },
+ {
+  "input": "curl -bsid=hunter2 https://x",
+  "expected": "curl -b[redacted] https://x"
+ },
+ {
+  "input": "openssl x -pass \"pass:S3 CRET\" -in a",
+  "expected": "openssl x -pass \"pass:[redacted]\" -in a"
+ },
+ {
+  "input": "openssl x -passin 'pass:a b' -in a",
+  "expected": "openssl x -passin 'pass:[redacted]' -in a"
+ },
+ {
+  "input": "openssl x -passout \"pass:a b\" -in a",
+  "expected": "openssl x -passout \"pass:[redacted]\" -in a"
+ },
+ {
+  "input": "openssl x -pass pass:a b",
+  "expected": "openssl x -pass pass:[redacted] b"
+ },
+ {
+  "input": "mysql --pass hunter2 db",
+  "expected": "mysql --pass [redacted] db"
+ },
+ {
+  "input": "Authorization: token abcdef123456",
+  "expected": "Authorization: token [redacted]"
+ },
+ {
+  "input": "curl  -b  sid=hunter2 https://x",
+  "expected": "curl  -b  [redacted] https://x"
+ },
+ {
+  "input": "curl\t-b\tsid=hunter2 https://x",
+  "expected": "curl\t-b\t[redacted] https://x"
+ },
+ {
+  "input": "curl -b \"sid=hunter2 https://x",
+  "expected": "curl -b \"[redacted]"
+ },
+ {
+  "input": "echo \"it's\" && curl -b sid=hunter2",
+  "expected": "echo \"it's\" && curl -b [redacted]"
+ },
+ {
+  "input": "curl -b \"a=\\\"hunter2\\\"\" https://x",
+  "expected": "curl -b \"[redacted]\" https://x"
+ },
+ {
+  "input": "curl -H \"Cookie: sid=\\\"hunter2\\\"; o=1\" https://x",
+  "expected": "curl -H \"Cookie: [redacted]\" https://x"
+ },
+ {
+  "input": "Cookie: a=1; b=\"unterminated hunter2",
+  "expected": "Cookie: [redacted]"
+ },
+ {
+  "input": "curl -b sid=hunter2\ngit checkout -b x",
+  "expected": "curl -b [redacted]\ngit checkout -b x"
+ },
+ {
+  "input": "curl https://x/a;git checkout -b fix",
+  "expected": "curl https://x/a;git checkout -b fix"
+ },
+ {
+  "input": "curl -sf https://x/h&& git checkout -b fix",
+  "expected": "curl -sf https://x/h&& git checkout -b fix"
+ },
+ {
+  "input": "curl https://x -b sid=hunter2 | tar -b 20 -xf -",
+  "expected": "curl https://x -b [redacted] | tar -b 20 -xf -"
+ },
+ {
+  "input": "git checkout -b feat && curl -b sid=hunter2 https://x",
+  "expected": "git checkout -b feat && curl -b [redacted] https://x"
+ },
+ {
+  "input": "/usr/bin/curl -b sid=hunter2 https://x",
+  "expected": "/usr/bin/curl -b [redacted] https://x"
+ },
+ {
+  "input": "curl --cookie=\"sid=hunter2\" https://x",
+  "expected": "curl --cookie=\"[redacted]\" https://x"
+ },
+ {
+  "input": "curl --oauth2-bearer hunter2 https://x",
+  "expected": "curl --oauth2-bearer [redacted] https://x"
+ },
+ {
+  "input": "curl --proxy-user me:hunter2 https://x",
+  "expected": "curl --proxy-user [redacted] https://x"
+ },
+ {
+  "input": "curl -u 'me:hunter 2' https://x",
+  "expected": "curl -u '[redacted]' https://x"
+ },
+ {
+  "input": "wget --http-password hunter2 https://x",
+  "expected": "wget --http-password [redacted] https://x"
+ },
+ {
+  "input": "mariadb --pass hunter2 db",
+  "expected": "mariadb --pass [redacted] db"
+ },
+ {
+  "input": "mariadb-dump --pass hunter2 db",
+  "expected": "mariadb-dump --pass [redacted] db"
+ },
+ {
+  "input": "mysql --pass=hunter2 db",
+  "expected": "mysql --pass=[redacted] db"
+ },
+ {
+  "input": "mysql -p=hunter2 db",
+  "expected": "mysql -p=[redacted] db"
+ },
+ {
+  "input": "mysql -u root -p'hunter2' db",
+  "expected": "mysql -u root -p'[redacted]' db"
+ },
+ {
+  "input": "sudo mysql -phunter2 db",
+  "expected": "sudo mysql -p[redacted] db"
+ },
+ {
+  "input": "docker compose exec db mysql -uroot -phunter2 app",
+  "expected": "docker compose exec db mysql -uroot -p[redacted] app"
+ },
+ {
+  "input": "nerdctl login -p hunter2 r",
+  "expected": "nerdctl login -p [redacted] r"
+ },
+ {
+  "input": "redis-cli -a 'hunter 2' ping",
+  "expected": "redis-cli -a '[redacted]' ping"
+ },
+ {
+  "input": "7z a -phunter2 a.7z f",
+  "expected": "7z a -p[redacted] a.7z f"
+ },
+ {
+  "input": "ZIP -r out.zip . -P hunter2",
+  "expected": "ZIP -r out.zip . -P [redacted]"
+ },
+ {
+  "input": "openssl enc -d -pass pass:\"hunter 2\" -in f",
+  "expected": "openssl enc -d -pass pass:[redacted] -in f"
+ },
+ {
+  "input": "x --client-secret=hunter2",
+  "expected": "x --client-secret=[redacted]"
+ },
+ {
+  "input": "gpg --passphrase hunter2 -d f",
+  "expected": "gpg --passphrase [redacted] -d f"
+ },
+ {
+  "input": "gh auth login --token hunter2",
+  "expected": "gh auth login --token [redacted]"
+ },
+ {
+  "input": "app --db-password hunter2 run",
+  "expected": "app --db-password [redacted] run"
+ },
+ {
+  "input": "app --github-token=hunter2 run",
+  "expected": "app --github-token=[redacted] run"
+ },
+ {
+  "input": "app --secret-key 'hunter 2' run",
+  "expected": "app --secret-key '[redacted]' run"
+ },
+ {
+  "input": "mysql -u curl -phunter2 db",
+  "expected": "mysql -u [redacted] -p[redacted] db"
+ },
+ {
+  "input": "sudo -u root mysql -phunter2 db",
+  "expected": "sudo -u root mysql -p[redacted] db"
+ },
+ {
+  "input": "env -i FOO=1 mysql -phunter2 db",
+  "expected": "env -i FOO=1 mysql -p[redacted] db"
+ },
+ {
+  "input": "xargs -I % mysql -phunter2 %",
+  "expected": "xargs -I % mysql -p[redacted] %"
+ },
+ {
+  "input": "nohup time doas -u me mysql -phunter2",
+  "expected": "nohup time doas -u me mysql -p[redacted]"
+ },
+ {
+  "input": "docker exec -it -e A=1 -u me db mysql -phunter2",
+  "expected": "docker exec -it -e A=1 -u me db mysql -p[redacted]"
+ },
+ {
+  "input": "docker compose -f x.yml exec -T db mysql -phunter2",
+  "expected": "docker compose -f x.yml exec -T db mysql -p[redacted]"
+ },
+ {
+  "input": "kubectl exec -it pod -n ns -- mysql -phunter2",
+  "expected": "kubectl exec -it pod -n ns -- mysql -p[redacted]"
+ },
+ {
+  "input": "curl https://x \\\n  -b sid=hunter2",
+  "expected": "curl https://x \\\n  -b [redacted]"
+ },
+ {
+  "input": "curl https://x \\\r\n  -b sid=hunter2",
+  "expected": "curl https://x \\\r\n  -b [redacted]"
+ },
+ {
+  "input": "http --cookie sid=hunter2 x",
+  "expected": "http --cookie [redacted] x"
+ },
+ {
+  "input": "x --oauth2-bearer hunter2",
+  "expected": "x --oauth2-bearer [redacted]"
+ },
+ {
+  "input": "x --proxy-user me:hunter2",
+  "expected": "x --proxy-user [redacted]"
+ },
+ {
+  "input": "x -passin pass:hunter2",
+  "expected": "x -passin pass:[redacted]"
+ },
+ {
+  "input": "echo $(curl -b sid=hunter2 https://x)",
+  "expected": "echo $(curl -b [redacted] https://x)"
+ },
+ {
+  "input": "a=pre$(mysql -phunter2 db)",
+  "expected": "a=pre$(mysql -p[redacted] db)"
+ },
+ {
+  "input": "echo `curl -b sid=hunter2 https://x`",
+  "expected": "echo `curl -b [redacted] https://x`"
+ },
+ {
+  "input": "(mysql -phunter2 db)",
+  "expected": "(mysql -p[redacted] db)"
+ },
+ {
+  "input": "{ mysql -phunter2 db; }",
+  "expected": "{ mysql -p[redacted] db; }"
+ },
+ {
+  "input": "! mysql -phunter2 db",
+  "expected": "! mysql -p[redacted] db"
+ },
+ {
+  "input": "curl https://x/Foo_(bar) -b sid=hunter2",
+  "expected": "curl https://x/Foo_(bar) -b [redacted]"
+ },
+ {
+  "input": "curl -b ${COOKIE}x https://x",
+  "expected": "curl -b [redacted] https://x"
+ },
+ {
+  "input": "timeout 5 mysql -phunter2 db",
+  "expected": "timeout 5 mysql -p[redacted] db"
+ },
+ {
+  "input": "nice curl -b sid=hunter2 https://x",
+  "expected": "nice curl -b [redacted] https://x"
+ },
+ {
+  "input": "ssh host mysql -phunter2 db",
+  "expected": "ssh host mysql -p[redacted] db"
+ },
+ {
+  "input": "docker run --rm img mysql -phunter2 db",
+  "expected": "docker run --rm img mysql -p[redacted] db"
+ },
+ {
+  "input": "echo $(curl -b \"a)hunter2\")",
+  "expected": "echo $(curl -b \"[redacted]\")"
+ },
+ {
+  "input": "echo $(curl -b a)b -b hunter2)",
+  "expected": "echo $(curl -b [redacted])b -b [redacted]"
+ },
+ {
+  "input": "-b sid=hunter2 curl https://x",
+  "expected": "-b [redacted] curl https://x"
+ },
+ {
+  "input": "echo curl -b mybranch",
+  "expected": "echo curl -b [redacted]"
+ },
+ {
+  "input": "sshpass -p hunter2 mysql -phunter3 db",
+  "expected": "sshpass -p [redacted] mysql -p[redacted] db"
+ },
+ {
+  "input": "mysql.exe -phunter2 db",
+  "expected": "mysql.exe -p[redacted] db"
+ },
+ {
+  "input": "redis-cli.exe -a hunter2 ping",
+  "expected": "redis-cli.exe -a [redacted] ping"
+ },
+ {
+  "input": "curl.exe -b sid=hunter2 https://x",
+  "expected": "curl.exe -b [redacted] https://x"
+ },
+ {
+  "input": "C:\\tools\\curl.exe -b sid=hunter2 x",
+  "expected": "C:\\tools\\curl.exe -b [redacted] x"
+ },
+ {
+  "input": "\"C:\\Program Files\\MySQL\\mysql.exe\" -phunter2 db",
+  "expected": "\"C:\\Program Files\\MySQL\\mysql.exe\" -p[redacted] db"
+ },
+ {
+  "input": "mysql -phunter3 sshpass -p hunter2",
+  "expected": "mysql -p[redacted] sshpass -p [redacted]"
+ },
+ {
+  "input": "{mysql -phunter2 db}",
+  "expected": "{mysql -p[redacted] db}"
+ },
+ {
+  "input": "curl -b \"sid=hunter2\ngit checkout -b x",
+  "expected": "curl -b \"[redacted]\ngit checkout -b x"
+ },
+ {
+  "input": "curl -b sid=(hunter2) https://x",
+  "expected": "curl -b [redacted] https://x"
+ },
+ {
+  "input": "Fix the login redirect",
+  "expected": "Fix the login redirect"
+ },
+ {
+  "input": "e83c5163316f89bfbde7d9ab23ca2e25604af290",
+  "expected": "e83c5163316f89bfbde7d9ab23ca2e25604af290"
+ },
+ {
+  "input": "ENG-12",
+  "expected": "ENG-12"
+ },
+ {
+  "input": "the token expires soon",
+  "expected": "the token expires soon"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "cli --token-ttl --verbose",
+  "expected": "cli --token-ttl [redacted]"
+ },
+ {
+  "input": "feature/risk-assessment-for-the-quarter",
+  "expected": "feature/risk-assessment-for-the-quarter"
+ },
+ {
+  "input": "tests/network_test_connection_pool.py",
+  "expected": "tests/network_test_connection_pool.py"
+ },
+ {
+  "input": "https://github.com/eocrm/eocrm/pull/12",
+  "expected": "https://github.com/eocrm/eocrm/pull/12"
+ },
+ {
+  "input": "risk-assessment",
+  "expected": "risk-assessment"
+ },
+ {
+  "input": "compass: north, bypass: yes",
+  "expected": "compass: north, bypass: yes"
+ },
+ {
+  "input": "Passed: 12",
+  "expected": "Passed: 12"
+ },
+ {
+  "input": "mysql -P 3306 db",
+  "expected": "mysql -P 3306 db"
+ },
+ {
+  "input": "curl -u https://example.com",
+  "expected": "curl -u https://example.com"
+ },
+ {
+  "input": "zip -r out.zip dir",
+  "expected": "zip -r out.zip dir"
+ },
+ {
+  "input": "tool --passive on",
+  "expected": "tool --passive on"
+ },
+ {
+  "input": "curl -b",
+  "expected": "curl -b"
+ },
+ {
+  "input": "git checkout -b EO-25-x",
+  "expected": "git checkout -b EO-25-x"
+ },
+ {
+  "input": "git switch -c x",
+  "expected": "git switch -c x"
+ },
+ {
+  "input": "x264 --pass 1 in.y4m",
+  "expected": "x264 --pass 1 in.y4m"
+ },
+ {
+  "input": "rsync --pass x a b",
+  "expected": "rsync --pass x a b"
+ },
+ {
+  "input": "tar -b 20 -cf a.tar dir",
+  "expected": "tar -b 20 -cf a.tar dir"
+ },
+ {
+  "input": "redis-cli -h host ping",
+  "expected": "redis-cli -h host ping"
+ },
+ {
+  "input": "mysqldump -u root -p dbname",
+  "expected": "mysqldump -u root -p dbname"
+ },
+ {
+  "input": "mysql -h db -P 3306 -u root -p",
+  "expected": "mysql -h db -P 3306 -u root -p"
+ },
+ {
+  "input": "7z a -p a.7z f",
+  "expected": "7z a -p a.7z f"
+ },
+ {
+  "input": "openssl x -passin env:VAR -passout file:/p",
+  "expected": "openssl x -passin env:VAR -passout file:/p"
+ },
+ {
+  "input": "psql --password",
+  "expected": "psql --password"
+ },
+ {
+  "input": "psql --pass hunter2",
+  "expected": "psql --pass hunter2"
+ },
+ {
+  "input": "myscript --pass --verbose",
+  "expected": "myscript --pass --verbose"
+ },
+ {
+  "input": "git switch -c x && git checkout -b y",
+  "expected": "git switch -c x && git checkout -b y"
+ },
+ {
+  "input": "curl https://x --cookie-jar jar.txt",
+  "expected": "curl https://x --cookie-jar jar.txt"
+ },
+ {
+  "input": "Checked with curl https://x/health\ngit checkout -b feature-x\ngit push",
+  "expected": "Checked with curl https://x/health\ngit checkout -b feature-x\ngit push"
+ },
+ {
+  "input": "Installed curl\nThen ran tar -b 20 -cf a.tar dir",
+  "expected": "Installed curl\nThen ran tar -b 20 -cf a.tar dir"
+ },
+ {
+  "input": "grep -b pattern file.txt; ls -b /tmp; diff -b a b",
+  "expected": "grep -b pattern file.txt; ls -b /tmp; diff -b a b"
+ },
+ {
+  "input": "docker run -b foo; git log -b",
+  "expected": "docker run -b foo; git log -b"
+ },
+ {
+  "input": "ffmpeg -pass 2 -i in.mp4 out.mp4",
+  "expected": "ffmpeg -pass 2 -i in.mp4 out.mp4"
+ },
+ {
+  "input": "gpg --pass-file x",
+  "expected": "gpg --pass-file x"
+ },
+ {
+  "input": "see https://example.com/a:b@c and ssh://git@host:22/repo",
+  "expected": "see https://example.com/a:b@c and ssh://git@host:22/repo"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "curl -b -v https://x",
+  "expected": "curl -b [redacted] https://x"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --pass --verbose db",
+  "expected": "mysql --pass [redacted] db"
+ },
+ {
+  "input": "wget -b https://x",
+  "expected": "wget -b https://x"
+ },
+ {
+  "input": "git checkout -b y `curl https://x`",
+  "expected": "git checkout -b y `curl https://x`"
+ },
+ {
+  "input": "git checkout -b y (curl https://x)",
+  "expected": "git checkout -b y (curl https://x)"
+ },
+ {
+  "input": "git checkout -b y { curl https://x; }",
+  "expected": "git checkout -b y { curl https://x; }"
+ },
+ {
+  "input": "git checkout -b y ! curl https://x",
+  "expected": "git checkout -b y ! curl https://x"
+ },
+ {
+  "input": "curl https://x; git checkout -b y",
+  "expected": "curl https://x; git checkout -b y"
+ },
+ {
+  "input": "curl https://x\ngit checkout -b y",
+  "expected": "curl https://x\ngit checkout -b y"
+ },
+ {
+  "input": "echo $(curl https://x) | git checkout -b y",
+  "expected": "echo $(curl https://x) | git checkout -b y"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "app --token-ttl --verbose",
+  "expected": "app --token-ttl [redacted]"
+ },
+ {
+  "input": "echo $(git checkout -b x)",
+  "expected": "echo $(git checkout -b x)"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "before -----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\nBKcwggSjAgEAAoIBAQC7",
+  "expected": "before [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n",
+  "expected": "[redacted]\n"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=\"ab\\\"cd\"",
+  "expected": "TOKEN=\"[redacted]\""
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=\"abc",
+  "expected": "TOKEN=\"[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN='abc\nnext",
+  "expected": "TOKEN='[redacted]\nnext"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --password -secret db",
+  "expected": "mysql --password [redacted] db"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --token -secret",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=abc def",
+  "expected": "TOKEN=[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "curl -u -s https://x",
+  "expected": "curl -u -s https://x"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "app -u -a:b c",
+  "expected": "app -u -a:b c"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x eyJabcdefghi.abcdefghij.abcdefghij y",
+  "expected": "x eyJabcdefghi.abcdefghij.abcdefghij y"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x eyJabcdefghij.abcdefghij.abcdefghij y",
+  "expected": "x [redacted] y"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij. abcdefghij.abcdefghij",
+  "expected": "eyJabcdefghij. abcdefghij.abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij,abcdefghij.abcdefghij",
+  "expected": "eyJabcdefghij,abcdefghij.abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij.abcdefghi.abcdefghij",
+  "expected": "eyJabcdefghij.abcdefghi.abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij.abcdefghij.abcdefghi",
+  "expected": "eyJabcdefghij.abcdefghij.abcdefghi"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "eyJabcdefghij.eyJabcdefghij.abcdefghij.abcdefghij",
+  "expected": "[redacted].abcdefghij"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "abcdefghijklm.abcdefghij.abcdefghij eyJ",
+  "expected": "abcdefghijklm.abcdefghij.abcdefghij eyJ"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "abc-eyJabcdefghij.abcdefghij.abcdefghij",
+  "expected": "abc-[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token secret",
+  "expected": "x --password --token [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password -u a:b",
+  "expected": "x --password -u [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Bearer abcdefgh12345",
+  "expected": "Bearer [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Bearer abcdefgh12345",
+  "expected": "Bearer [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "TOKEN = abc",
+  "expected": "TOKEN = [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "TOKEN = abc",
+  "expected": "TOKEN = [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Authorization: token abcdefgh1234",
+  "expected": "Authorization: token [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "Cookie : sid=1",
+  "expected": "Cookie : [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --token -uvalue",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token",
+  "expected": "x --password --token"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token=abc",
+  "expected": "x --password --token=[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --password -psecret db",
+  "expected": "mysql --password -p[redacted] db"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "-----BEGIN RSA PRIVATE KEY-----\nFAKEfake\nFAKEfa",
+  "expected": "[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN=\"abc def",
+  "expected": "TOKEN=\"[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "TOKEN='abc def",
+  "expected": "TOKEN='[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --password --token=secret",
+  "expected": "x --password --token=[redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "redis-cli --pass -a hunter2",
+  "expected": "redis-cli --pass -a [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "curl -b -u a:b",
+  "expected": "curl -b -u [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --no-password -u a:b",
+  "expected": "x --no-password -u [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --pass -phunter2 db",
+  "expected": "mysql --pass -p[redacted] db"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "curl -u -v https://x",
+  "expected": "curl -u -v https://x"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "tool -u -x:y",
+  "expected": "tool -u -x:y"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "mysql --password -uroot db",
+  "expected": "mysql --password [redacted] db"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token secret",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token　secret",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token sec ret",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "curl -b sid=1 https://x",
+  "expected": "curl [redacted] https://x"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --verbose on",
+  "expected": "x --verbose on"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -u a:b",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -u plain",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "shared-2026-11-01",
+  "input": "x --token -uvalue -v",
+  "expected": "x --token [redacted] -v"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "mysql -phunter2 x db",
+  "expected": "mysql [redacted] db"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "openssl -passin 'pass:abc' -in a",
+  "expected": "openssl [redacted] -in a"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "openssl -passin \"pass:a b\" -in a",
+  "expected": "openssl [redacted] -in a"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --password=se cret y",
+  "expected": "x [redacted] y"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -secret abc",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"mysql --password secret\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"x --token \\\"secret\\\"\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x -v --password secret",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x db　--user u:secret tail",
+  "expected": "x [redacted] [redacted] tail"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "curl -u db --api-key -secret",
+  "expected": "curl -u [redacted] [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --password ",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "git commit -m \"fix the --verbose flag\"",
+  "expected": "git commit -m \"fix the --verbose flag\""
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x \"-v --token\"",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"redis-cli -a hunter2\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "bash -lc \"mysql -phunter2 db\"",
+  "expected": "bash -lc [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "\"git --cookie='sid'\"",
+  "expected": "[redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"zip -P hunter2 a.zip\"",
+  "expected": "sh -c [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --tokenhunter2",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token​hunter2",
+  "expected": "x [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "\"x --token \\\n hunter2\"",
+  "expected": "[redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x --token $'a\\' hunter2'",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "x $'--token' hunter2",
+  "expected": "x $'--token' [redacted]"
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"git status --short\"",
+  "expected": "sh -c \"git status --short\""
+ },
+ {
+  "group": "js-only-2026-11-01",
+  "input": "sh -c \"mysql -p db\"",
+  "expected": "sh -c \"mysql -p db\""
+ },
+ {
+  "input": "cmd $'\\x2d\\x2dpassword' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "cmd $'\\055\\055password' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "cmd $'\\u002d-password' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "cmd -$'\\x2dpassword' hunter2secret",
+  "expected": "cmd [redacted] [redacted]"
+ },
+ {
+  "input": "x --password=$'\\x41bc' tail",
+  "expected": "x [redacted] tail"
+ },
+ {
+  "input": "echo $'it\\'s' ok",
+  "expected": "echo $'it\\'s' ok"
+ },
+ {
+  "input": "echo $'a\\\\b' ok",
+  "expected": "echo $'a\\\\b' ok"
+ },
+ {
+  "input": "x $\"--password\" secret",
+  "expected": "x $\"--password\" [redacted]"
+ },
+ {
+  "input": "x --token $\"secret\"",
+  "expected": "x --token [redacted]"
+ },
+ {
+  "input": "echo $\"hello world\" ok",
+  "expected": "echo $\"hello world\" ok"
+ }
+]
