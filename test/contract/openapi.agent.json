@@ -1,0 +1,1484 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "eocrm",
+    "version": "0.19.5"
+  },
+  "paths": {
+    "/v1/agent-runs": {
+      "post": {
+        "operationId": "agentRun.store",
+        "description": "Idempotent on `client_run_id`: a retry returns the same run with 200. Needs a connected AI assistant (scope `agent:runs`).",
+        "summary": "Start a run",
+        "tags": [
+          "AgentRun"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAgentRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The run already existed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunData"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The run was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundHttpException"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/agent-runs/{id}": {
+      "patch": {
+        "operationId": "agentRun.update",
+        "description": "Move it to another task or unfile it (members and agents), report a step or end it (agents only).",
+        "summary": "Update a run",
+        "tags": [
+          "AgentRun"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`AgentRunData`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/ModelNotFoundException"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/agent-runs/{id}/heartbeat": {
+      "post": {
+        "operationId": "agentRun.heartbeat",
+        "summary": "Heartbeat. Agents only; keeps the run from reading as stalled",
+        "tags": [
+          "AgentRun"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/ModelNotFoundException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/agent-runs/{id}/events": {
+      "post": {
+        "operationId": "agentRun.events.store",
+        "description": "Agents only. Idempotent on each event `id`; categories the workspace does not record are accepted and dropped.",
+        "summary": "Record events",
+        "tags": [
+          "AgentRun"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordAgentRunEventsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What happened to the batch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordedEventsData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/ModelNotFoundException"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "agentRun.events.index",
+        "description": "Oldest first, 100 per page. Pass `next_cursor` back as `cursor` for the next page.",
+        "summary": "List a run's events",
+        "tags": [
+          "AgentRun"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`AgentRunEventListData`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunEventListData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundHttpException"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/agent-work/conventions": {
+      "get": {
+        "operationId": "agentWorkConventions.show",
+        "summary": "The workspace's conventions for agents. Null or [] means ask the member; status roles are hints, stage flags decide done and canceled",
+        "tags": [
+          "Conventions"
+        ],
+        "responses": {
+          "200": {
+            "description": "`ResolvedConventionsData`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvedConventionsData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundHttpException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/agent-runs/pairable": {
+      "get": {
+        "operationId": "agentRun.pairable",
+        "description": "The caller's other Claude Code connections that are turned on. Agents only.",
+        "summary": "List pairable connections",
+        "tags": [
+          "AgentPairing"
+        ],
+        "responses": {
+          "200": {
+            "description": "`PairableConnectionListData`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairableConnectionListData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundHttpException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/agent-runs/pair": {
+      "post": {
+        "operationId": "agentRun.pair",
+        "description": "Nothing changes until the member approves at `approve_url` within 15 minutes; the calling connection then acts as the chosen one and both tokens keep working. Agents only.",
+        "summary": "Ask to pair with a connection",
+        "tags": [
+          "AgentPairing"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairAgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The request waits for the member.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairRequestData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundHttpException"
+          },
+          "422": {
+            "description": "`pair_target_unavailable`, `agent_already_paired`, `pair_request_unavailable` (a request is already waiting), or the body failed validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodedOrValidationRefusal"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "StartAgentRunRequest": {
+        "type": "object",
+        "properties": {
+          "client_run_id": {
+            "type": "string",
+            "description": "The agent's own id for this run; a retry with the same id returns the same run.",
+            "maxLength": 64
+          },
+          "task": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Task key (EO-21) or id; when omitted the server looks for a key in `branch`, then in the `worktree` folder name.",
+            "maxLength": 64
+          },
+          "branch": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "worktree": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "repo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "client_run_id"
+        ],
+        "title": "StartAgentRunRequest"
+      },
+      "AgentRunData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "task_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRefData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "member_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "tracking_stale": {
+            "type": "boolean"
+          },
+          "step": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "last_heartbeat_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_seconds": {
+            "type": "integer"
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "input_tokens": {
+                "type": "integer"
+              },
+              "output_tokens": {
+                "type": "integer"
+              },
+              "cost_usd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "wall_ms": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "input_tokens",
+              "output_tokens",
+              "cost_usd",
+              "wall_ms"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "task_key",
+          "agent",
+          "member_name",
+          "state",
+          "tracking_stale",
+          "step",
+          "branch",
+          "repo",
+          "started_at",
+          "last_heartbeat_at",
+          "ended_at",
+          "duration_seconds",
+          "usage"
+        ],
+        "title": "AgentRunData"
+      },
+      "UpdateAgentRunRequest": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Task key or id; null unfiles the run. Members may send only this.",
+            "maxLength": 64
+          },
+          "step": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "finished",
+              "failed",
+              "abandoned"
+            ]
+          }
+        },
+        "title": "UpdateAgentRunRequest"
+      },
+      "RecordAgentRunEventsRequest": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "description": "At most 100. Fields depend on `type`: step {phase, label, plan_key}, commit {sha, repo, subject},\ntest_run {command, result_line, exit_code}, review_finding {severity, summary, outcome},\nruling {what, why, cost_if_wrong}, pull_request {action, url, repo, number},\nusage {model, input_tokens, output_tokens, cost_usd, wall_ms}, plan {source, path, items: [{key, text}], at most 200}. Overlong text is truncated, secrets redacted, other keys dropped.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The agent's own id for this event; a replay is counted as a duplicate.",
+                  "maxLength": 64
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "step",
+                    "commit",
+                    "test_run",
+                    "review_finding",
+                    "ruling",
+                    "pull_request",
+                    "usage",
+                    "plan"
+                  ]
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 800
+                },
+                "phase": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "started",
+                    "finished",
+                    null
+                  ]
+                },
+                "plan_key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[A-Za-z0-9._:-]{1,100}$"
+                },
+                "repo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 800
+                },
+                "subject": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 800
+                },
+                "sha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[0-9a-f]{7,40}$"
+                },
+                "command": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 2000
+                },
+                "result_line": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 2000
+                },
+                "exit_code": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "summary": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 4000
+                },
+                "severity": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "critical",
+                    "important",
+                    "minor",
+                    "theoretical",
+                    null
+                  ]
+                },
+                "outcome": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "open",
+                    "fixed",
+                    "accepted",
+                    "disputed",
+                    "dropped",
+                    null
+                  ]
+                },
+                "what": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 2000
+                },
+                "why": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 4000
+                },
+                "cost_if_wrong": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 2000
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uri",
+                  "maxLength": 2000
+                },
+                "action": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "opened",
+                    "merged",
+                    null
+                  ]
+                },
+                "number": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 400
+                },
+                "input_tokens": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "output_tokens": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "wall_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "cost_usd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^\\d{1,12}(\\.\\d{1,4})?$"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 2000
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "superpowers",
+                    "markdown",
+                    "todo",
+                    null
+                  ]
+                },
+                "items": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^[A-Za-z0-9._:-]{1,100}$"
+                      },
+                      "text": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 2000
+                      }
+                    }
+                  },
+                  "maxItems": 200
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "RecordAgentRunEventsRequest"
+      },
+      "RecordedEventsData": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "integer"
+          },
+          "duplicates": {
+            "type": "integer"
+          },
+          "dropped": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accepted",
+          "duplicates",
+          "dropped"
+        ],
+        "title": "RecordedEventsData"
+      },
+      "AgentRunEventListData": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRunEventData"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AgentRunEventListData"
+      },
+      "ResolvedConventionsData": {
+        "type": "object",
+        "properties": {
+          "epic_type": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "name"
+            ]
+          },
+          "subtask_type": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "name"
+            ]
+          },
+          "bug_type": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "name"
+            ]
+          },
+          "human_space": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "workflow_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "name",
+              "workflow_id"
+            ]
+          },
+          "status_roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "workflow_id": {
+                  "type": "string"
+                },
+                "workflow_name": {
+                  "type": "string"
+                },
+                "started": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                },
+                "in_review": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                },
+                "done": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                },
+                "canceled": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                },
+                "paused": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                }
+              },
+              "required": [
+                "workflow_id",
+                "workflow_name",
+                "started",
+                "in_review",
+                "done",
+                "canceled",
+                "paused"
+              ]
+            }
+          },
+          "priorities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "rank": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "key",
+                "name",
+                "rank"
+              ]
+            }
+          },
+          "epic_per_slice": {
+            "type": "boolean"
+          },
+          "subtask_per_pr": {
+            "type": "boolean"
+          },
+          "plan_import": {
+            "type": "boolean"
+          },
+          "keep_project_current": {
+            "type": "boolean"
+          },
+          "workflows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "statuses": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "statuses"
+              ]
+            }
+          }
+        },
+        "required": [
+          "epic_type",
+          "subtask_type",
+          "bug_type",
+          "human_space",
+          "status_roles",
+          "priorities",
+          "epic_per_slice",
+          "subtask_per_pr",
+          "plan_import",
+          "keep_project_current",
+          "workflows"
+        ],
+        "title": "ResolvedConventionsData"
+      },
+      "PairableConnectionListData": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairableConnectionData"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PairableConnectionListData"
+      },
+      "PairAgentRequest": {
+        "type": "object",
+        "properties": {
+          "connection_id": {
+            "type": "string",
+            "description": "One of the ids `pairable` lists."
+          }
+        },
+        "required": [
+          "connection_id"
+        ],
+        "title": "PairAgentRequest"
+      },
+      "PairRequestData": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "pending"
+          },
+          "approve_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "approve_url"
+        ],
+        "title": "PairRequestData"
+      },
+      "CodedOrValidationRefusal": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/CodedRefusal"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "message",
+              "errors"
+            ]
+          }
+        ],
+        "title": "CodedOrValidationRefusal"
+      },
+      "AgentRefData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind"
+        ],
+        "title": "AgentRefData"
+      },
+      "AgentRunEventData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "AgentRunEventData"
+      },
+      "PairableConnectionData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "created_at"
+        ],
+        "title": "PairableConnectionData"
+      },
+      "CodedRefusal": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "code"
+        ],
+        "title": "CodedRefusal"
+      }
+    },
+    "responses": {
+      "AuthenticationException": {
+        "description": "Unauthenticated",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Error overview."
+                }
+              },
+              "required": [
+                "message"
+              ]
+            }
+          }
+        }
+      },
+      "AuthorizationException": {
+        "description": "An authorization gate on this route refused the request. Which gates run varies by route: one resolving a tenant refuses a tenant that is not active; one additionally requiring membership refuses a caller holding no grant in it; a control-plane route refuses a caller holding no operator grant for this region; a saved-views route refuses a caller with no authorized scope for the request host — no grant in the tenant it resolves to, or no control-plane grant where it resolves to none; a route requiring a permission refuses a caller whose roles do not include it; and every one of them refuses an impersonation session reaching a tenant other than the one it was authorized for. An operation carrying none of those gates is still refused by the pin: an impersonation session that resolves no tenant may reach the impersonated member's own self-service surface and nothing else; and a route closed to impersonation refuses every impersonation session. A route accepting API keys refuses a key request with `module_disabled` while the workspace has API keys turned off.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Error overview."
+                }
+              },
+              "required": [
+                "message"
+              ]
+            }
+          }
+        }
+      },
+      "NotFoundHttpException": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Error overview."
+                }
+              },
+              "required": [
+                "message"
+              ]
+            }
+          }
+        }
+      },
+      "ValidationException": {
+        "description": "Validation error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Errors overview."
+                },
+                "errors": {
+                  "type": "object",
+                  "description": "A detailed description of each field that failed validation.",
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "message",
+                "errors"
+              ]
+            }
+          }
+        }
+      },
+      "ModelNotFoundException": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Error overview."
+                }
+              },
+              "required": [
+                "message"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

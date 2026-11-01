@@ -1,0 +1,13 @@
+{
+  "epic_type": null,
+  "subtask_type": null,
+  "bug_type": null,
+  "human_space": null,
+  "status_roles": [],
+  "priorities": [],
+  "epic_per_slice": false,
+  "subtask_per_pr": false,
+  "plan_import": false,
+  "keep_project_current": false,
+  "workflows": []
+}

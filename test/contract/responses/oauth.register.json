@@ -1,0 +1,10 @@
+{
+  "client_id": "fixture-client",
+  "client_name": "Claude Code (eocrm plugin)",
+  "client_id_issued_at": 1793527200,
+  "redirect_uris": [],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "scope": "mcp:use agent:runs"
+}
