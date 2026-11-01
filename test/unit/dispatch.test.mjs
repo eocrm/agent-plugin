@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { handle, linkContext, ensureRun, LINK_ASK } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
-import { loadRun, saveRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
+import { git as stateGit, loadRun, saveRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
 import { repoSlug } from '../../lib/git.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { committedLine } from '../../lib/workspace.mjs';
@@ -64,7 +64,7 @@ test('hooks.json declares exactly the planned hooks', () => {
     return [event, matcher ?? null, h.async ?? false, h.timeout ?? null];
   });
   assert.deepEqual(rows, [
-    ['SessionStart', 'startup|resume|clear|compact', false, 10],
+    ['SessionStart', 'startup|resume|clear|compact|fork', false, 10],
     ['UserPromptSubmit', null, true, null],
     ['PreToolUse', 'Agent|Task', true, null],
     ['PostToolUse', 'Bash|Write|Edit|MultiEdit|TodoWrite|TaskCreate|TaskUpdate|Agent|Task', true, null],
@@ -194,14 +194,17 @@ test('a new session finishes an older still-running run of the same worktree', a
   const dir = repo('feat/AB-12-x');
   const ctx = ctxFor(data);
   const [old, other, fresh] = [sid(), sid(), sid()];
-  await handle('SessionStart', input(old, dir), ctx);
-  await handle('SessionStart', input(other, repo('feat/AB-13-y')), ctx);
-  await handle('SessionStart', input(fresh, dir), ctx);
+  const startup = { source: 'startup' };
+  await handle('SessionStart', input(old, dir, startup), ctx);
+  await handle('SessionStart', input(other, repo('feat/AB-13-y'), startup), ctx);
+  await handle('SessionStart', input(fresh, dir, { source: 'resume' }), ctx);
+  assert.ok(!kinds(data, old).includes('finish'));
+  await handle('SessionStart', input(fresh, dir, startup), ctx);
   assert.ok(kinds(data, old).includes('finish'));
   assert.ok(!kinds(data, other).includes('finish'));
   assert.ok(!kinds(data, fresh).includes('finish'));
   writeOutbox(data, []);
-  await handle('SessionStart', input(sid(), dir), ctx);
+  await handle('SessionStart', input(sid(), dir, { source: 'clear' }), ctx);
   assert.deepEqual([kinds(data, old), kinds(data, fresh)], [[], ['finish']]);
 });
 
@@ -275,7 +278,7 @@ test('a hook with no run yet starts one lazily, without printing', async () => {
   assert.deepEqual(kinds(data, s), ['start']);
 });
 
-test('two models in sequence in the transcript give exactly two usage events', async () => {
+test('model switches A, B, A in the transcript give exactly three usage events', async () => {
   const data = signedIn();
   const dir = repo('feat/AB-12-x');
   const ctx = ctxFor(data);
@@ -294,9 +297,13 @@ test('two models in sequence in the transcript give exactly two usage events', a
   await fire('PostToolUse');
   appendFileSync(transcript, assistant('<synthetic>') + assistant('model-z', { isSidechain: true }));
   await fire('Stop');
-  assert.deepEqual(sent.map((e) => e.model), ['model-a', 'model-b']);
-  for (const e of sent) assert.match(e.id, /^model-[A-Za-z0-9_-]{22}-0$/);
-  assert.notEqual(sent[0].id, sent[1].id);
+  appendFileSync(transcript, assistant('model-a'));
+  await fire('PostToolUse');
+  await fire('Stop');
+  assert.deepEqual(sent.map((e) => e.model), ['model-a', 'model-b', 'model-a']);
+  assert.deepEqual(sent.map((e) => e.id.split('-').slice(-2).join('-')), ['0-0', '0-1', '0-2']);
+  for (const e of sent) assert.match(e.id, /^model-[A-Za-z0-9_-]{22}-0-\d+$/);
+  assert.equal(new Set(sent.map((e) => e.id)).size, 3);
 });
 
 test('the model is read from the tail of a large transcript', async () => {
@@ -307,18 +314,19 @@ test('the model is read from the tail of a large transcript', async () => {
   assert.deepEqual(usage(data).map((e) => e.model), ['model-new']);
 });
 
-test('the hook input model wins over the transcript; no transcript sends nothing', async () => {
+test('the transcript model wins over the hook input; input only fills a gap; neither sends nothing', async () => {
   const data = signedIn();
   const dir = repo('feat/AB-12-x');
   const ctx = ctxFor(data);
-  const [a, b] = [sid(), sid()];
+  const [a, b, c] = [sid(), sid(), sid()];
   await handle('SessionStart', input(a, dir), ctx);
   await handle('PostToolUse', input(a, dir), ctx);
   assert.deepEqual(usage(data), []);
   const transcript = join(tmp('t'), 't.jsonl');
-  writeFileSync(transcript, assistant('model-a'));
-  await handle('SessionStart', input(b, dir, { transcript_path: transcript, model: 'model-in' }), ctx);
-  assert.deepEqual(usage(data).map((e) => e.model), ['model-in']);
+  writeFileSync(transcript, assistant('model-dated'));
+  await handle('SessionStart', input(b, dir, { transcript_path: transcript, model: 'model-alias' }), ctx);
+  await handle('SessionStart', input(c, dir, { model: 'model-alias' }), ctx);
+  assert.deepEqual(usage(data).map((e) => e.model), ['model-dated', 'model-alias']);
 });
 
 test('a model id is scrubbed and capped at 100', async () => {
@@ -398,4 +406,132 @@ test('input without a cwd is refused rather than tracked against the process cwd
     process.chdir(back);
   }
   assert.deepEqual(readOutbox(data), []);
+});
+
+test('two live sessions in one worktree do not finish each other on prompts', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-12-x');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await handle('SessionStart', input(a, dir, { source: 'startup' }), ctx);
+  await handle('SessionStart', input(b, dir, { source: 'startup' }), ctx);
+  assert.equal(loadRun(data, a).ended, true);
+  for (let i = 0; i < 3; i++) {
+    await handle('UserPromptSubmit', input(a, dir), ctx);
+    await handle('UserPromptSubmit', input(b, dir), ctx);
+  }
+  assert.deepEqual([a, b].map((x) => [loadRun(data, x).ended, loadRun(data, x).generation]), [[false, 0], [false, 0]]);
+  assert.deepEqual([kinds(data, a).filter((k) => k !== 'heartbeat'), kinds(data, b).filter((k) => k !== 'heartbeat')], [['start'], ['start']]);
+});
+
+test('the committed-workspace ask shows even without a default workspace', async () => {
+  const data = tmp('data');
+  const dir = repo('main', 'git@github.com:o/r.git');
+  mkdirSync(join(dir, '.claude'));
+  writeFileSync(join(dir, '.claude', 'eocrm.json'), JSON.stringify({ workspace: 'other', region: 'eu' }));
+  const r = await handle('SessionStart', input(sid(), dir), ctxFor(data));
+  assert.equal(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, committedLine({ workspace: 'other', region: 'eu' }));
+  assert.deepEqual(readOutbox(data), []);
+});
+
+test('SessionStart gives up on a held lock within its budget', () => {
+  const data = signedIn();
+  mkdirSync(join(data, '.lock'));
+  const r = hook('SessionStart', JSON.stringify(input(sid(), repo('main'))), { data });
+  assert.deepEqual([r.status, r.stdout], [0, '']);
+  assert.ok(r.ms < 3000, `${r.ms} ms`);
+});
+
+const posix = process.platform === 'win32' ? { skip: 'POSIX shell fake git' } : {};
+
+test('SessionStart stays inside its 10 s timeout when git hangs', posix, () => {
+  const bin = tmp('slowgit');
+  writeFileSync(join(bin, 'git'), '#!/bin/sh\nexec sleep 3\n', { mode: 0o755 });
+  const data = signedIn();
+  const r = hook('SessionStart', JSON.stringify(input(sid(), repo('main'))), { data, env: { PATH: `${bin}:/bin:/usr/bin` } });
+  assert.equal(r.status, 0);
+  assert.ok(r.ms < 10000, `${r.ms} ms`);
+});
+
+test('SessionStart asks git for origin once', posix, () => {
+  const real = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+  const bin = tmp('loggit');
+  const log = join(bin, 'calls.log');
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\necho "$*" >> '${log}'\nexec '${real}' "$@"\n`, { mode: 0o755 });
+  const data = signedIn();
+  const r = hook('SessionStart', JSON.stringify(input(sid(), repo('feat/AB-1-x', 'git@github.com:o/r.git'))), { data, env: { PATH: `${bin}:/bin:/usr/bin` } });
+  assert.equal(r.status, 0);
+  const calls = readFileSync(log, 'utf8').trim().split('\n');
+  assert.equal(calls.filter((c) => c === 'remote get-url origin').length, 1, calls.join('; '));
+});
+
+test('git runs with windowsHide', () => {
+  let opts;
+  stateGit('.', ['status'], (cmd, args, o) => { opts = o; return ''; });
+  assert.equal(opts.windowsHide, true);
+});
+
+test('a finish spilled while the lock was held is cleared on resume', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-12-x');
+  const ctx = ctxFor(data);
+  const s = sid();
+  await handle('SessionStart', input(s, dir), ctx);
+  saveRun(data, s, { runId: 'r1', ended: true });
+  writeOutbox(data, []);
+  writeFileSync(join(data, 'outbox.1.abcdef.jsonl'), `${JSON.stringify({ kind: 'finish', sessionId: s, seq: 'x' })}\n`);
+  await handle('SessionStart', input(s, dir, { source: 'resume' }), ctx);
+  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).ended], [0, false]);
+  assert.deepEqual(kinds(data, s), []);
+  assert.deepEqual(readdirSync(data).filter((f) => f.startsWith('outbox.1.')), []);
+});
+
+test('SessionEnd under a held lock spills its finish for the next hook', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-12-x');
+  const ctx = ctxFor(data);
+  const s = sid();
+  await handle('SessionStart', input(s, dir), ctx);
+  mkdirSync(join(data, '.lock'));
+  await handle('SessionEnd', input(s, dir), ctx);
+  const spilled = readdirSync(data).filter((f) => /^outbox\.\d+\.[0-9a-f]+\.jsonl$/.test(f));
+  assert.equal(spilled.length, 1);
+  assert.match(readFileSync(join(data, spilled[0]), 'utf8'), /"kind":"finish"/);
+});
+
+test('SessionStart prunes settled runs idle over 7 days and reads at most 50', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-12-x');
+  const ctx = ctxFor(data, Date.now());
+  const key = worktreeOf(dir).key;
+  const runs = join(data, 'runs');
+  const age = (s, days) => { const t = new Date(Date.now() - days * 86400000); utimesSync(join(runs, `${s}.json`), t, t); };
+  saveRun(data, 'old-ended', { worktreeKey: key, startedAt: 1, ended: true });
+  saveRun(data, 'old-busy', { worktreeKey: key, startedAt: 1, ended: true });
+  saveRun(data, 'old-live', { worktreeKey: 'elsewhere', startedAt: 1 });
+  saveRun(data, 'buried', { worktreeKey: key, startedAt: 1 });
+  writeOutbox(data, [{ kind: 'heartbeat', sessionId: 'old-busy', seq: 'y' }]);
+  for (const s of ['old-ended', 'old-busy', 'old-live']) age(s, 8);
+  age('buried', 6);
+  for (let i = 0; i < 50; i++) saveRun(data, `newer-${i}`, { worktreeKey: 'other', startedAt: 1 });
+  await handle('SessionStart', input(sid(), dir, { source: 'startup' }), ctx);
+  const left = readdirSync(runs);
+  assert.ok(!left.includes('old-ended.json'));
+  assert.ok(left.includes('old-busy.json'));
+  assert.deepEqual([loadRun(data, 'old-live').ended, kinds(data, 'old-live')], [true, ['finish']]);
+  assert.deepEqual([loadRun(data, 'buried').ended, kinds(data, 'buried')], [undefined, []]);
+});
+
+test('resuming a session idle over 7 days rolls instead of losing its run', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-12-x');
+  const ctx = ctxFor(data, Date.now());
+  const s = sid();
+  await handle('SessionStart', input(s, dir), ctx);
+  saveRun(data, s, { runId: 'r1', ended: true });
+  writeOutbox(data, []);
+  const t = new Date(Date.now() - 8 * 86400000);
+  utimesSync(join(data, 'runs', `${s}.json`), t, t);
+  await handle('SessionStart', input(s, dir, { source: 'resume' }), ctx);
+  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).clientRunId], [1, `${s}.1`]);
 });

@@ -1,6 +1,9 @@
 import { dataDir } from '../lib/paths.mjs';
 import { handle, logError, runClient } from '../lib/run.mjs';
 import { flush } from '../lib/flush.mjs';
+import { gitTimeout } from '../lib/state.mjs';
+
+const HOOK_GIT_MS = 1000;
 
 async function readStdin() {
   const chunks = [];
@@ -18,6 +21,7 @@ async function main() {
       await flush({ data, clientFor: runClient(ctx) });
       return;
     }
+    gitTimeout.ms = HOOK_GIT_MS;
     const { stdout } = await handle(argv[0], JSON.parse(await readStdin()), ctx);
     if (stdout) process.stdout.write(stdout);
   } catch (e) {
