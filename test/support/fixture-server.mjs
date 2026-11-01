@@ -31,6 +31,7 @@ const OPS = Object.entries(snapshot.paths)
   .sort((a, b) => a.path.includes('{') - b.path.includes('{'));
 
 function responseError(entry, status, body) {
+  if (status >= 500) return null;
   let pointer;
   if (entry) {
     let res = entry.op.responses[status];
