@@ -34,7 +34,7 @@
 1. **Workspace choice.** An `agent:runs` token cannot list workspaces: `/v1/my/tenants` sits in the `api` group, and `RejectMcpTokens` refuses MCP tokens there. `tenants_list` is MCP-only.
    - `/eocrm:login <workspace>` therefore takes the slug, and the command asks the member for it when it is missing.
    - The slug is checked against `TenantSlug::PATTERN` and verified with `GET /v1/agent-work/conventions`.
-   - Follow-up for eocrm (not this repo): expose the consent-time default workspace to `agent.token` routes.
+   - eocrm follow-up (dpws approved 2026-11-01): a read-only list of the member's workspaces in the region for `agent:runs` tokens, so login can auto-pick a single workspace.
 2. **Command names.** Plugin commands are namespaced, so the spec's `/eocrm login` and `/eocrm use` ship as `/eocrm:login` and `/eocrm:use`.
 3. **Stop fires at every turn end, not at session end.**
    - The run is finished on `SessionEnd`.
@@ -292,6 +292,9 @@
     - stored in `<data>/repos.json` (plugin data dir, never a file in the repo), so every clone and worktree of that repo resolves the same way;
     - `eocrm use --here beta` writes the current worktree file only, for a one-off override;
     - resolution order: worktree file → repos.json entry → the login default.
+  - **Committed repo workspace (dpws, 2026-11-01):** `.claude/eocrm.json` `{"workspace": "<slug>", "region": "eu"|"ru"}` in the repo root. Only a slug (the slug pattern) and a region from the fixed list; any other key (URL, issuer, api, endpoints) is ignored. The first time a repo's committed workspace differs from the member's login default, `/eocrm:login`/the SessionStart hook asks once (SessionStart: one short line, no block) and records the answer in `repos.json`; until confirmed, hooks use the default and stay silent about the repo file. A declined repo stays on the default.
+  - **Single workspace (dpws, 2026-11-01):** `/eocrm:login` without a slug lists the member's workspaces in the region (eocrm endpoint for agent:runs tokens, see eocrm follow-up) and picks the only one silently; with several, it asks. If the endpoint is missing (older eocrm), it asks for the slug as before.
+  - Resolution order: worktree override (`--here`) → member's repos.json mapping → confirmed committed `.claude/eocrm.json` → the only workspace → login default.
   - Test: two worktrees of one repo (same origin, ssh vs https spelling) both resolve `beta` after one `use`; another repo still gets the default; `--here` wins in its worktree only.
   - A workspace the member has not signed into or paired yet: the first hook run there stays silent and `eocrm status` says `run /eocrm:login <workspace>`; the token is per identity and region, pairing is per workspace.
   - Missing workspace exits 2 with `workspace required`.
