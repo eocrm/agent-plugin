@@ -1,0 +1,19 @@
+{
+  "name": "eocrm-claude-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "test": "node --test test/unit/*.test.mjs",
+    "test:contract": "node --test test/contract/*.test.mjs",
+    "test:budget": "node --test test/budget/*.test.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0"
+  }
+}

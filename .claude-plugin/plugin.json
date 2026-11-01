@@ -1,0 +1,7 @@
+{
+  "name": "eocrm",
+  "version": "0.1.0",
+  "description": "Reports Claude Code agent work (runs, commits, tests, PRs, plan steps) to eocrm.",
+  "author": { "name": "eocrm" },
+  "repository": "https://github.com/eocrm/claude-plugin"
+}
