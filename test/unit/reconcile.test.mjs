@@ -287,7 +287,7 @@ test('a resumed, ended session starts a run that gets none of the earlier run\'s
 });
 
 test('a reconcile whose git budget ran out keeps the active plan path', async () => {
-  const { data, sid, ctx } = setup();
+  const { data, sid, ctx } = setup({ ledger: null });
   saveRun(data, sid, { planPath: PLAN });
   await reconcile({ ...ctx, git: { exec: () => { throw new Error('eocrm: hook budget spent'); } } }, loadRun(data, sid));
   assert.equal(loadRun(data, sid).planPath, PLAN);
