@@ -1,6 +1,7 @@
 {
   "name": "eocrm-claude-plugin",
   "version": "0.1.0",
+  "license": "UNLICENSED",
   "private": true,
   "type": "module",
   "engines": {
