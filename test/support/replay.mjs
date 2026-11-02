@@ -95,7 +95,7 @@ export async function replay(sessionFile, { server, data }) {
   const from = server.requests.length;
   const lines = readFileSync(sessionFile, 'utf8').split('\n').filter(Boolean);
   for (const raw of lines) {
-    const line = JSON.parse(raw.replaceAll('${REPO}', repo));
+    const line = JSON.parse(raw.replaceAll('${REPO}', JSON.stringify(repo).slice(1, -1)));
     at += 1000;
     for (const [path, text] of Object.entries(line.fs ?? {})) {
       mkdirSync(dirname(join(repo, path)), { recursive: true });
