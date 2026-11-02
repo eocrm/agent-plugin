@@ -383,7 +383,16 @@ test('SessionEnd returns within 1 s even while another hook holds the lock', () 
   const dir = repo('main');
   const s = sid();
   hook('SessionStart', JSON.stringify(input(s, dir)), { data });
-  mkdirSync(join(data, '.lock'));
+  // SessionStart's background flush may still hold the lock; wait for it, then hold it ourselves.
+  for (const until = Date.now() + 5000; ;) {
+    try {
+      mkdirSync(join(data, '.lock'));
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST' || Date.now() > until) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    }
+  }
   const r = hook('SessionEnd', JSON.stringify(input(s, dir)), { data });
   assert.deepEqual([r.status, r.stdout], [0, '']);
   assert.ok(r.ms < 1000, `${r.ms} ms`);
