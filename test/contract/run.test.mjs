@@ -32,17 +32,17 @@ async function setup(t, responses) {
   return { server, data, dir, transcript, ctx, calls, go };
 }
 
-test('start, events, finish: exactly POST runs, POST events, PATCH finished', async (t) => {
+test('start, events, finish: exactly GET conventions, POST runs, POST events, PATCH finished', async (t) => {
   const { server, dir, transcript, ctx, calls, go } = await setup(t);
   const input = { session_id: 'sess-c1', cwd: dir, transcript_path: transcript };
   assert.deepEqual(await handle('SessionStart', { ...input, source: 'startup' }, ctx), {});
   await handle('SessionEnd', { ...input, reason: 'other' }, ctx);
   const result = await go();
   assert.deepEqual(result, { sent: 3, rejected: [], retryable: false, signedOut: false });
-  assert.deepEqual(calls(), ['POST /v1/agent-runs', 'POST /v1/agent-runs/:id/events', 'PATCH /v1/agent-runs/:id']);
-  assert.deepEqual(server.requests[0].body, { branch: 'feat/AB-12-x', worktree: basename(dir), repo: 'o/r', client_run_id: 'sess-c1' });
-  assert.deepEqual(server.requests[1].body.events.map((e) => [e.type, e.model]), [['usage', 'model-a']]);
-  assert.deepEqual(server.requests[2].body, { state: 'finished' });
+  assert.deepEqual(calls(), ['GET /v1/agent-work/conventions', 'POST /v1/agent-runs', 'POST /v1/agent-runs/:id/events', 'PATCH /v1/agent-runs/:id']);
+  assert.deepEqual(server.requests[1].body, { branch: 'feat/AB-12-x', worktree: basename(dir), repo: 'o/r', client_run_id: 'sess-c1' });
+  assert.deepEqual(server.requests[2].body.events.map((e) => [e.type, e.model]), [['usage', 'model-a']]);
+  assert.deepEqual(server.requests[3].body, { state: 'finished' });
 });
 
 test('a resume after the finish was acked starts generation 1', async (t) => {
@@ -53,9 +53,9 @@ test('a resume after the finish was acked starts generation 1', async (t) => {
   await go();
   await handle('SessionStart', { ...input, source: 'resume' }, ctx);
   await go();
-  assert.deepEqual(calls().slice(3), ['POST /v1/agent-runs', 'POST /v1/agent-runs/:id/events']);
-  assert.equal(server.requests[3].body.client_run_id, 'sess-c2.1');
-  assert.notEqual(server.requests[4].path, server.requests[1].path);
+  assert.deepEqual(calls().slice(4), ['GET /v1/agent-work/conventions', 'POST /v1/agent-runs', 'POST /v1/agent-runs/:id/events']);
+  assert.equal(server.requests[5].body.client_run_id, 'sess-c2.1');
+  assert.notEqual(server.requests[6].path, server.requests[2].path);
 });
 
 test('link KEY after start sends PATCH {task}', async (t) => {

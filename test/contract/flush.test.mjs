@@ -170,12 +170,13 @@ test('one broken session does not hold back the others', async (t) => {
 
 test('a 404 on events rolls to generation 1 and keeps the events', async (t) => {
   const { server, data, go } = await setup(t);
-  saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
+  saveRun(data, SID, { runId: '01JZGONE0000000000000000000', acked: { 'commit:old': true }, serverEventsRead: true });
   await enqueue(data, ev(0));
   assert.deepEqual(await go(), { sent: 1, rejected: [], retryable: false, signedOut: false });
   assert.deepEqual(server.requests.filter((r) => r.path === '/v1/agent-runs').map((r) => r.body.client_run_id), [`${SID}.1`]);
   const run = loadRun(data, SID);
   assert.deepEqual([run.generation, run.clientRunId], [1, `${SID}.1`]);
+  assert.deepEqual([run.acked, run.serverEventsRead], [{ 'commit:0': true }, false], 'the old run\'s acks and server read do not carry over');
   assert.equal(server.requests.at(-1).body.events[0].id, 'commit:0');
 });
 
