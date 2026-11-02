@@ -87,7 +87,7 @@ test('a 422 on events.1.url rejects only entry 1', async (t) => {
   assert.deepEqual(loadRun(data, SID).rejected.map((r) => r.eventId), ['pull_request:x']);
 });
 
-test('a rejected plan takes its ticks with it, up to the next plan', async (t) => {
+test('a rejected plan drops its ticks unrecorded, up to the next plan', async (t) => {
   const { server, data, go } = await setup(t, {
     'agentRun.events.store': ({ body }) => body.events[0].id === 'plan:b'
       ? { status: 422, body: { message: 'Bad.', errors: { 'events.0.items': ['bad items'] } } }
@@ -97,7 +97,8 @@ test('a rejected plan takes its ticks with it, up to the next plan', async (t) =
   const tick = (id) => ({ kind: 'event', sessionId: SID, event: { id, type: 'step', phase: 'finished', plan_key: 'k' } });
   for (const e of [planEv('plan:a'), tick('step:a1'), planEv('plan:b'), tick('step:b1'), ev(1), tick('step:b2'), planEv('plan:c'), tick('step:c1')]) await enqueue(data, e);
   const result = await go();
-  assert.deepEqual(result.rejected.map((r) => [r.eventId, r.status]), [['plan:b', 422], ['step:b1', 422], ['step:b2', 422]]);
+  assert.deepEqual(result.rejected.map((r) => [r.eventId, r.status]), [['plan:b', 422]]);
+  assert.deepEqual(loadRun(data, SID).rejected.map((r) => r.eventId), ['plan:b']);
   const batches = server.requests.filter((r) => r.path.endsWith('/events')).map((r) => r.body.events.map((e) => e.id));
   assert.deepEqual(batches, [['plan:a', 'step:a1'], ['plan:b', 'step:b1', 'commit:1', 'step:b2'], ['commit:1'], ['plan:c', 'step:c1']]);
   assert.deepEqual(readOutbox(data), []);

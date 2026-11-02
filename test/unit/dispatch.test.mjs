@@ -562,3 +562,18 @@ test('a pruned run leaves a generation tombstone, so its resume starts the next 
   await handle('SessionStart', input(s, dir, { source: 'resume' }), ctx);
   assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).clientRunId], [3, `${s}.3`]);
 });
+
+test('SessionStart keeps an 8 s overall deadline when the lock is held after ensureRun', async () => {
+  const data = signedIn();
+  const dir = repo('feat/AB-1-x', 'git@github.com:o/r.git');
+  const ctx = ctxFor(data);
+  // A slow start, then a flush that holds the lock: tick's wait must shrink to what is left.
+  ctx.spawnFlush = () => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 7500);
+    mkdirSync(join(data, '.lock'));
+  };
+  const started = Date.now();
+  assert.deepEqual(await handle('SessionStart', input(sid(), dir, { source: 'startup' }), ctx), {});
+  const took = Date.now() - started;
+  assert.ok(took < 8500, `took ${took} ms`);
+});

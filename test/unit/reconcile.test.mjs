@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { reconcile, desiredEvents, currentStep, loadConventions } from '../../lib/reconcile.mjs';
+import { flush } from '../../lib/flush.mjs';
+import { stopGate } from '../../lib/gate.mjs';
 import { cleanEvent } from '../../lib/api.mjs';
 import { handle } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
@@ -98,6 +100,29 @@ test('an event the server rejected is not re-sent', async () => {
   await go();
   assert.ok(!kinds(evts()).includes('tick:task-1'));
   assert.ok(kinds(evts()).includes('tick:task-2'));
+});
+
+test('a rejected plan holds its ticks until the plan is fixed, and the gate counts only the plan', async () => {
+  const { dir, data, sid, ctx, go, evts } = setup();
+  const client = ctx.clientFor();
+  client.updateRun = async () => ({ status: 200, body: {} });
+  client.recordEvents = async (id, events) => (events[0].type === 'plan' && !JSON.stringify(events[0].items).includes('fixed')
+    ? { status: 422, body: { message: 'Bad.', errors: { 'events.0.items': ['bad'] } } }
+    : { status: 200, body: { accepted: events.length, duplicates: 0, dropped: 0 } });
+  const send = () => flush({ data, sessionId: sid, deadlineMs: 5000, clientFor: ctx.clientFor });
+  await go();
+  await send();
+  assert.deepEqual(loadRun(data, sid).rejected.map((r) => r.type), ['plan']);
+  await go();
+  assert.deepEqual(kinds(evts()), []);
+  writeFileSync(join(dir, PLAN), PLAN_TEXT.replace('One', 'One fixed'));
+  git(dir, 'commit', '-qam', 'fix plan');
+  await go();
+  assert.deepEqual(kinds(evts()), ['plan', 'tick:task-1', 'tick:task-2', 'commit']);
+  await send();
+  ctx.store = { get: async () => null };
+  const out = await stopGate(ctx, { session_id: sid, cwd: dir });
+  assert.match(JSON.parse(out.stdout).reason, /^eocrm refused 1 tracking update\(s\): plan /);
 });
 
 test('a dropped outbox: the next reconcile re-derives the plan, ticks and commits, even reported ones', async () => {
