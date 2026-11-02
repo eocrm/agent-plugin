@@ -150,6 +150,11 @@ test('a heartbeat-due Stop spawns no flush, and the gate waits for a running flu
 test('the flush deadline leaves time to block before the gate gives up', { timeout: 40000 }, async (t) => {
   const { push, stop, ctx, data, sid } = await setup(t);
   ctx.clientFor = slowEvents(ctx, 2500);
+  // A slow reconcile leaves flush less than its full 20 s.
+  ctx.reconcile = async () => {
+    await sleep(8000);
+    return { enqueued: 0 };
+  };
   await push(badPr(1));
   append(data, ...Array.from({ length: 1500 }, (_, i) => ({ kind: 'event', sessionId: sid, event: { occurred_at: AT, ...commit(i) } })));
   const started = Date.now();

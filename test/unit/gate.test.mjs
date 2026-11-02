@@ -66,7 +66,7 @@ test('the reason is at most 1000 characters and keeps its last sentence', async 
 });
 
 test('the label is scrubbed before its quotes go', async () => {
-  const { stop } = setup([rej(1, { label: 'cli --token "abc 123" x' })]);
+  const { stop } = setup([rej(1, { label: 'x secret="abc 123" y' })]);
   const r = reason(await stop());
   assert.ok(!r.includes('abc') && !r.includes('123'), r);
   assert.ok(r.includes('[redacted]'));
