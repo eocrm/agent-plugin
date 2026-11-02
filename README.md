@@ -9,11 +9,13 @@ Reports Claude Code agent work (runs, plan steps, commits, test runs, PRs, revie
 /plugin install eocrm@eocrm
 ```
 
+Then turn on updates: `/plugin` → Marketplaces → `eocrm` → Enable auto-update. Claude Code leaves it off for third-party catalogues, and you only receive a release when its `version` changes.
+
 Prerequisites: Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
 
 ## Use
 
-- `/eocrm:login` signs in through the browser (region picker) and stores tokens in the OS keychain, or a 0600 file when no keychain is usable.
+- `/eocrm:login` signs in through the browser (sign-in starts in the EU and eocrm resolves your home region; `--region ru` signs in to an RU workspace) and stores tokens in the OS keychain, or a 0600 file when no keychain is usable.
 - `/eocrm:use` maps the current repo to a workspace. The mapping is stored per repo, and `.claude/eocrm.json` (workspace slug and region only) can be committed to share it; each user confirms it once. With a single workspace the plugin picks it automatically.
 - Four skills: `pick-type`, `link-run`, `record-judgement`, `file-human-work`.
 

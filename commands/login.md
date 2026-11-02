@@ -1,10 +1,10 @@
 ---
 description: Sign in to eocrm and pair with your Claude Code connection
-argument-hint: "[--region eu|ru] [workspace]"
+argument-hint: "[workspace]"
 ---
-Ask for the region (eu or ru) if $ARGUMENTS lacks one, then run:
+Run:
 
-`node "${CLAUDE_PLUGIN_ROOT}/scripts/eocrm.mjs" login --data "${CLAUDE_PLUGIN_DATA}" --region <region> [<workspace>]`
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/eocrm.mjs" login --data "${CLAUDE_PLUGIN_DATA}" [<workspace>]`
 
 - `node` missing or `needs Node 20+`: tell the member eocrm needs Node 20+ on PATH.
 - `workspace required`: show the `workspace` lines, ask for the slug, run again with it.

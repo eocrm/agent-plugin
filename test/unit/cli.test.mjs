@@ -151,11 +151,70 @@ test('status names the sign-in a workspace still needs', async () => {
 test('usage errors exit 2', async () => {
   const data = tmp('data');
   assert.deepEqual(await cli(['use', '--data', data]), { code: 2, out: '', err: 'eocrm: workspace required' });
-  assert.deepEqual(await cli(['login', '--data', data, 'acme']), { code: 2, out: '', err: 'eocrm: region required' });
   assert.deepEqual(await cli(['login', '--data', data, '--region', 'us', 'acme']), { code: 2, out: '', err: 'eocrm: unknown region "us"' });
   assert.deepEqual(await cli(['use', '--data', data, 'Bad_Slug']), { code: 2, out: '', err: 'eocrm: invalid workspace slug' });
   assert.equal((await cli(['frobnicate', '--data', data])).code, 2);
   assert.equal((await cli(['status', '--nope'])).code, 2);
+});
+
+test('login without --region signs in through the EU endpoints', async (t) => {
+  const server = await startFixtureServer();
+  t.after(() => server.close());
+  const data = tmp('data');
+  const spawn = (cmd, args) => {
+    fetch(args.at(-1)).catch(() => {});
+    return Object.assign(new EventEmitter(), { unref() {} });
+  };
+  const store = credentialStore({ data, platform: 'none' });
+  const { code, out } = await cli(['login', '--data', data, 'acme'], { env: server.endpointsEnv, store, openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) });
+  assert.equal(code, 0);
+  assert.match(out, /^signed in to acme \(eu\)$/m);
+  assert.equal(JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).region, 'eu');
+});
+
+async function statusOf(t, local, responses = {}) {
+  const server = await startFixtureServer({ responses });
+  t.after(() => server.close());
+  const data = tmp('data');
+  account(data, { workspaces: { acme: local } });
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(endpoints({ region: 'eu', env: server.endpointsEnv }).key, { access_token: server.auth.access, refresh_token: server.auth.refresh, client_id: server.auth.clientId });
+  const run = await cli(['status', '--data', data], { env: server.endpointsEnv, store });
+  const pairs = server.requests.filter((r) => r.path.endsWith('/pairable') || r.path.endsWith('/pair'));
+  return { ...run, pairs, saved: JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).workspaces.acme };
+}
+const alreadyPaired = { 'agentRun.pair': { status: 422, body: { code: 'agent_already_paired', message: 'm' } } };
+
+test('status on a requested pairing that was approved reads already paired and records it', async (t) => {
+  const r = await statusOf(t, 'requested', alreadyPaired);
+  assert.match(r.out, /^already paired$/m);
+  assert.equal(r.saved, 'paired');
+});
+
+test('status on a still-pending pairing prints the request line', async (t) => {
+  const r = await statusOf(t, 'requested', { 'agentRun.pair': { status: 422, body: { code: 'pair_request_unavailable', message: 'm' } } });
+  assert.match(r.out, /^pairing requested: approve in Account → Agents within 15 minutes/m);
+  assert.equal(r.saved, 'requested');
+});
+
+test('status on a requested pairing survives a 500 and an unreachable server', async (t) => {
+  const down = await statusOf(t, 'requested', { 'agentRun.pairable': { status: 500, body: { message: 'x' } } });
+  assert.equal(down.code, 0);
+  assert.match(down.out, /^pairing requested$/m);
+  assert.equal(down.saved, 'requested');
+  const data = tmp('data');
+  account(data, { workspaces: { acme: 'requested' } });
+  const r = await cli(['status', '--data', data], { env: { EOCRM_ENDPOINTS: JSON.stringify({ issuer: 'http://127.0.0.1:1', api: 'http://127.0.0.1:1/{workspace}/api' }) }, store: credentialStore({ data, platform: 'none' }) });
+  assert.equal(r.code, 0);
+  assert.match(r.out, /^pairing requested$/m);
+});
+
+test('status makes no pairing request for paired or standalone', async (t) => {
+  for (const local of ['paired', 'standalone']) {
+    const r = await statusOf(t, local);
+    assert.match(r.out, new RegExp(`^pairing ${local}$`, 'm'));
+    assert.deepEqual(r.pairs, [], local);
+  }
 });
 
 test('an old Node is refused with one line', async () => {
