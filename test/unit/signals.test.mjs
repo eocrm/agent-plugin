@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { handle } from '../../lib/run.mjs';
@@ -100,4 +100,12 @@ test('hook message text is never queued', async () => {
   await fire('Resume', { tool_name: 'Bash' });
   await fire('UserPromptSubmit', { prompt: 'go' });
   assert.ok(!JSON.stringify(readOutbox(data)).includes('secret-path'));
+});
+
+test('it restarts the offset for a new transcript file', async () => {
+  const { data, fire, events } = setup({ turns: 1 });
+  const mk = (id) => { const p = join(data, `${id}.jsonl`); writeFileSync(p, `${JSON.stringify({ type: 'assistant', message: { id, model: 'a', usage: { input_tokens: 1, output_tokens: 1 } } })}\n`); return p; };
+  await fire('Stop', { transcript_path: mk('m1') });
+  await fire('Stop', { transcript_path: mk('m2') });
+  assert.deepEqual(events().filter((e) => e.type === 'usage').map((e) => e.input_tokens), [1, 1]);
 });
