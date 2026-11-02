@@ -31,6 +31,7 @@ test('LIMITS', () => {
   assert.equal(LIMITS.rulingWhy, 1000);
 });
 
+// Wall-clock bounds are catastrophe ceilings only; CI runners run several times slower than dev.
 const ms = (fn) => {
   const runs = [];
   for (let i = 0; i < 5; i++) {
@@ -103,8 +104,16 @@ test('scrub fails closed above 16384 chars', () => {
 const units = JSON.parse(readFileSync(new URL('../fixtures/scrubber-linear-units.json', import.meta.url), 'utf8'));
 for (const unit of units) {
   test(`scrubs a long adversarial field in linear time: ${JSON.stringify(unit)}`, () => {
-    const text = fill(unit, 16000);
-    assert.ok(ms(() => scrub(text)) < 50);
+    const best = [Infinity, Infinity];
+    for (let run = 0; run < 5; run++) {
+      [fill(unit, 4000), fill(unit, 16000)].forEach((text, i) => {
+        const t = process.hrtime.bigint();
+        scrub(text);
+        best[i] = Math.min(best[i], Number(process.hrtime.bigint() - t) / 1e6);
+      });
+    }
+    // 4× the input: linear ≈ 4× the time, quadratic ≈ 16×.
+    assert.ok(best[1] < Math.max(10 * best[0], 20), `${best[1]}ms vs ${best[0]}ms`);
   });
 }
 
@@ -118,7 +127,7 @@ for (const unit of ['token', 'a_TOKEN_b', 'TOKENX']) {
 
 test('scans a long backslash run once', () => {
   const text = '\\'.repeat(16000);
-  assert.ok(ms(() => scrub(text)) < 50);
+  assert.ok(ms(() => scrub(text)) < 250);
 });
 
 const ordinary = {
@@ -132,7 +141,7 @@ const ordinary = {
 for (const [name, text] of Object.entries(ordinary)) {
   test(`keeps long ordinary command lines intact and fast: ${name}`, () => {
     assert.equal(scrub(text), text);
-    assert.ok(ms(() => scrub(text)) < 50);
+    assert.ok(ms(() => scrub(text)) < 250);
   });
 }
 
@@ -140,7 +149,7 @@ for (const unit of ['curl -b hunter2 ', 'mysql -phunter2 ', "curl -b 'hunter2' "
   test(`redacts long command lines in linear time: ${JSON.stringify(unit)}`, () => {
     const text = fill(unit, 4000);
     assert.doesNotMatch(scrub(text), /hunter2/);
-    assert.ok(ms(() => scrub(text)) < 50);
+    assert.ok(ms(() => scrub(text)) < 250);
   });
 }
 
