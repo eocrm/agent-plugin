@@ -107,7 +107,7 @@ const commands = {
       if (!SEVERITIES.includes(v.severity)) throw new Usage(`--severity must be ${SEVERITIES.join('|')}`);
       if (v.outcome !== undefined && !OUTCOMES.includes(v.outcome)) throw new Usage(`--outcome must be ${OUTCOMES.join('|')}`);
       fields = { severity: v.severity, summary: need(v.summary, 'summary'), ...(v.outcome ? { outcome: v.outcome } : {}) };
-      key = `${fields.severity}\0${fields.summary}`;
+      key = `${fields.severity}\0${fields.summary}\0${fields.outcome ?? ""}`;
     } else throw new Usage('usage: eocrm record ruling|finding');
     const run = liveRun(data, cwd);
     await enqueue(data, { kind: 'event', sessionId: run.sessionId, event: { id: eventId(type, key), type, occurred_at: new Date().toISOString(), ...fields } });

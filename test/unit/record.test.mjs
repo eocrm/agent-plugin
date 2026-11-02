@@ -40,7 +40,7 @@ test('record ruling enqueues a scrubbed ruling with a deterministic id', async (
   assert.equal(events(other.data)[0].id, e.id);
 });
 
-test('record finding validates severity and outcome; a later outcome replaces the finding', async () => {
+test('record finding validates severity and outcome; a new outcome is a new event', async () => {
   const s = setup();
   const bad = await cli(['record', 'finding', '--severity', 'huge', '--summary', 's'], s);
   assert.equal(bad.code, 2);
@@ -49,9 +49,11 @@ test('record finding validates severity and outcome; a later outcome replaces th
   assert.equal(events(s.data).length, 0);
   await cli(['record', 'finding', '--severity', 'minor', '--summary', 's'], s);
   await cli(['record', 'finding', '--severity', 'minor', '--summary', 's', '--outcome', 'fixed'], s);
-  const [e, ...rest] = events(s.data);
-  assert.equal(rest.length, 0);
-  assert.deepEqual([e.type, e.severity, e.outcome], ['review_finding', 'minor', 'fixed']);
+  await cli(['record', 'finding', '--severity', 'minor', '--summary', 's', '--outcome', 'fixed'], s);
+  const [a, b, ...rest] = events(s.data);
+  assert.equal(rest.length, 0, 'same outcome is idempotent');
+  assert.notEqual(a.id, b.id, 'a new outcome is a new event');
+  assert.deepEqual([b.type, b.severity, b.outcome], ['review_finding', 'minor', 'fixed']);
 });
 
 test('record requires its arguments and a live run', async () => {
