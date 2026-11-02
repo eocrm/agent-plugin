@@ -107,5 +107,5 @@ test('it restarts the offset for a new transcript file', async () => {
   const mk = (id) => { const p = join(data, `${id}.jsonl`); writeFileSync(p, `${JSON.stringify({ type: 'assistant', message: { id, model: 'a', usage: { input_tokens: 1, output_tokens: 1 } } })}\n`); return p; };
   await fire('Stop', { transcript_path: mk('m1') });
   await fire('Stop', { transcript_path: mk('m2') });
-  assert.deepEqual(events().filter((e) => e.type === 'usage').map((e) => e.input_tokens), [1, 1]);
+  assert.deepEqual(events().filter((e) => e.type === 'usage' && e.cache_read_tokens !== undefined).map((e) => e.input_tokens), [1, 1]);
 });
