@@ -110,6 +110,16 @@ test('a dropped outbox: the next reconcile re-derives the plan, ticks and commit
   assert.deepEqual(evts().map((e) => e.id), first.map((e) => e.id));
 });
 
+test('a commit the detector reported after the run started is re-derived once dropped', async () => {
+  const { data, dir, go, evts } = setup({ planImport: false, ledger: null });
+  await go();
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'later');
+  saveWorktree(data, worktreeOf(dir).key, { reportedCommits: [git(dir, 'rev-parse', 'HEAD~1'), git(dir, 'rev-parse', 'HEAD')] });
+  writeOutbox(data, []);
+  await go();
+  assert.deepEqual(evts().map((e) => e.subject), ['plan', 'later']);
+});
+
 test('reported commits from before the run are not re-sent', async () => {
   const { data, dir, go, evts } = setup();
   saveWorktree(data, worktreeOf(dir).key, { reportedCommits: [git(dir, 'rev-parse', 'HEAD')] });
