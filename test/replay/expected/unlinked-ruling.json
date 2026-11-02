@@ -1,0 +1,63 @@
+[
+  {
+    "method": "GET",
+    "path": "/v1/agent-work/conventions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs",
+    "body": {
+      "branch": "scratch",
+      "worktree": "<repo>",
+      "repo": "o/r",
+      "client_run_id": "unlinked-ruling"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "model-AFkSvubuRUPOxEBLWgK5vL-0-0",
+          "type": "usage",
+          "occurred_at": "<time>",
+          "model": "claude-opus-5-5"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agent-runs/:id/events"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/agent-runs/:id",
+    "body": {
+      "task": "AB-7"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "ruling:YjFq9ayXveu7kJKWEQOk_3",
+          "type": "ruling",
+          "occurred_at": "<time>",
+          "what": "Keep the README short",
+          "why": "Details live in docs/"
+        }
+      ]
+    }
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/agent-runs/:id",
+    "body": {
+      "state": "finished"
+    }
+  }
+]

@@ -1,0 +1,10 @@
+{"hook": "SessionStart", "input": {"source": "startup", "model": "claude-opus-5-5"}, "git": [["checkout", "-q", "-b", "scratch"]]}
+{"hook": "UserPromptSubmit", "input": {"prompt": "Tidy the README."}}
+{"hook": "Stop", "input": {"stop_hook_active": false}}
+{"hook": "UserPromptSubmit", "input": {"prompt": "It is AB-7."}}
+{"hook": "PreToolUse", "input": {"tool_name": "Skill", "tool_input": {"skill": "eocrm:link-run"}, "tool_use_id": "toolu_s1"}}
+{"hook": "PostToolUse", "input": {"tool_name": "Bash", "tool_input": {"command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/eocrm.mjs\" link AB-7 --data \"${CLAUDE_PLUGIN_DATA}\""}, "tool_response": {"stdout": "", "stderr": "", "interrupted": false}, "tool_use_id": "toolu_l1"}}
+{"hook": "PreToolUse", "input": {"tool_name": "Skill", "tool_input": {"skill": "eocrm:record-judgement"}, "tool_use_id": "toolu_s2"}}
+{"hook": "PostToolUse", "input": {"tool_name": "Bash", "tool_input": {"command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/eocrm.mjs\" record ruling --what \"Keep the README short\" --why \"Details live in docs/\" --data \"${CLAUDE_PLUGIN_DATA}\""}, "tool_response": {"stdout": "", "stderr": "", "interrupted": false}, "tool_use_id": "toolu_r1"}}
+{"hook": "Stop", "input": {"stop_hook_active": false}}
+{"hook": "SessionEnd", "input": {"reason": "other"}}

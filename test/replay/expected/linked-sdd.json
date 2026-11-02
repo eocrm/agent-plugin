@@ -1,0 +1,261 @@
+[
+  {
+    "method": "GET",
+    "path": "/v1/agent-work/conventions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs",
+    "body": {
+      "branch": "feat/AB-12-widget",
+      "worktree": "<repo>",
+      "repo": "o/r",
+      "client_run_id": "linked-sdd"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "model-AFkSvubuRUPOxEBLWgK5vL-0-0",
+          "type": "usage",
+          "occurred_at": "<time>",
+          "model": "claude-opus-5-5"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "plan:L9xKibqTGNz6GSf6ZU5bLn",
+          "type": "plan",
+          "occurred_at": "<time>",
+          "source": "superpowers",
+          "path": "docs/superpowers/plans/widget.md",
+          "items": [
+            {
+              "key": "task-1",
+              "text": "1. Add widget"
+            },
+            {
+              "key": "task-2",
+              "text": "2. Wire widget"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/agent-runs/:id",
+    "body": {
+      "step": "1. Add widget"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "step:LH9Q-t-7c6GnbQ6Cw34pnE",
+          "type": "step",
+          "occurred_at": "<time>",
+          "phase": "started",
+          "label": "Implement Task 1"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "commit:kYzuILtDVYjFDjYQsmQKRr",
+          "type": "commit",
+          "occurred_at": "<time>",
+          "sha": "ecb29c72e21fc0fc39646f31e6ba266c1db63275",
+          "subject": "feat: add widget",
+          "repo": "o/r"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "step:GdLFMGso1m6Wte7cNIiyx8",
+          "type": "step",
+          "occurred_at": "<time>",
+          "phase": "finished",
+          "label": "Implement Task 1"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agent-runs/:id/events"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "step:ajxijGEdClL5ubH0svCUcp",
+          "type": "step",
+          "occurred_at": "<time>",
+          "phase": "finished",
+          "label": "1. Add widget",
+          "plan_key": "task-1"
+        }
+      ]
+    }
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/agent-runs/:id",
+    "body": {
+      "step": "2. Wire widget"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "step:9xVt7HbCDebHewkHQVrotj",
+          "type": "step",
+          "occurred_at": "<time>",
+          "phase": "started",
+          "label": "Implement Task 2"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "commit:n0DhatD8PBer4egRwlUUqW",
+          "type": "commit",
+          "occurred_at": "<time>",
+          "sha": "1f244ed69e207487cf75714a1a7e79a08b725335",
+          "subject": "feat: wire widget",
+          "repo": "o/r"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "step:lPEQYkB6o8eOg0RUy0KTDF",
+          "type": "step",
+          "occurred_at": "<time>",
+          "phase": "finished",
+          "label": "Implement Task 2"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "step:BNgPG-4jGXqYtLppZGqebM",
+          "type": "step",
+          "occurred_at": "<time>",
+          "phase": "finished",
+          "label": "2. Wire widget",
+          "plan_key": "task-2"
+        },
+        {
+          "id": "step:XQS_c-rZ6G7wyO3r3i-H0_",
+          "type": "step",
+          "occurred_at": "<time>",
+          "phase": "finished",
+          "label": "Task 2 review round 1: rename helper"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "test_run:LJPUYf_T7u9Indack3Kmyj",
+          "type": "test_run",
+          "occurred_at": "<time>",
+          "command": "make test",
+          "result_line": "Tests:  42 passed (97 assertions)",
+          "exit_code": 0
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "pull_request:tG6YJWZwUJR5RvCOSLPNzZ",
+          "type": "pull_request",
+          "occurred_at": "<time>",
+          "action": "opened",
+          "url": "https://github.com/o/r/pull/7",
+          "number": 7,
+          "repo": "o/r"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "pull_request:jy6xb4YlbRL5O7B-qf4BEX",
+          "type": "pull_request",
+          "occurred_at": "<time>",
+          "action": "merged",
+          "url": "https://github.com/o/r/pull/7",
+          "number": 7,
+          "repo": "o/r"
+        }
+      ]
+    }
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/agent-runs/:id",
+    "body": {
+      "state": "finished"
+    }
+  }
+]
