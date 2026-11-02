@@ -40,4 +40,4 @@ Before a release run `claude plugin validate --strict .` locally (no model call)
 - Secrets: `EOCRM_SMOKE_REGION`, `EOCRM_SMOKE_CLIENT_ID`, `EOCRM_SMOKE_REFRESH_TOKEN`, `SMOKE_SECRETS_PAT` (secrets write; stores the rotated refresh token).
 - Variables: `EOCRM_SMOKE_WORKSPACE`, `EOCRM_SMOKE_TASK`.
 - Runs never overlap (one `concurrency` group): each spends the stored refresh token once.
-- Re-seed when the store step fails (expired PAT, revoked token family): renew `SMOKE_SECRETS_PAT` if expired, sign the smoke agent in again to get a fresh refresh token, then `gh secret set EOCRM_SMOKE_REFRESH_TOKEN --repo <owner>/<repo>` and paste it.
+- Seed (and re-seed when the store step fails): sign the smoke member in with a separate `--data` dir so your own sign-in is untouched (`node scripts/eocrm.mjs login --data <dir> --region eu test`), then `node scripts/eocrm.mjs smoke-seed --data <dir> --repo <owner>/<repo>`. It writes the region, client id, refresh token and workspace through `gh` (stdin, never printed) and signs that data dir out, so the token family belongs to CI. Set `EOCRM_SMOKE_TASK` and `SMOKE_SECRETS_PAT` by hand.

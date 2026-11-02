@@ -266,3 +266,84 @@ test('logout keeps keys whose delete failed and says so', async () => {
   const kept = JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).keys;
   assert.deepEqual(kept.filter((k) => k.startsWith('https://')), ['https://c.example https://d.example']);
 });
+
+async function seedSetup({ workspace = true, ghCodes = [] } = {}) {
+  const data = tmp('data');
+  account(data, workspace ? {} : { workspace: undefined, workspaces: {} });
+  const store = credentialStore({ data, platform: 'none' });
+  const key = endpoints({ region: 'eu', env: {} }).key;
+  await store.set(key, { refresh_token: 'RT-secret', client_id: 'CID-secret', access_token: 'at' });
+  const calls = [];
+  const gh = async (args, stdin) => {
+    calls.push([args, stdin]);
+    return { code: ghCodes[calls.length - 1] ?? 0 };
+  };
+  return { data, store, key, calls, gh, cwd: tmp('cwd') };
+}
+
+const seed = (s, extra = [], opts = {}) => cli(['smoke-seed', '--data', s.data, '--repo', 'o/r', ...extra], { cwd: s.cwd, store: s.store, gh: s.gh, ...opts });
+
+test('smoke-seed writes the credentials over stdin, then signs out locally', async () => {
+  const s = await seedSetup();
+  const r = await seed(s);
+  assert.equal(r.code, 0, r.err);
+  const repoArgs = ['--repo', 'o/r'];
+  assert.deepEqual(s.calls, [
+    [['secret', 'set', 'EOCRM_SMOKE_REGION', ...repoArgs], 'eu'],
+    [['secret', 'set', 'EOCRM_SMOKE_CLIENT_ID', ...repoArgs], 'CID-secret'],
+    [['secret', 'set', 'EOCRM_SMOKE_REFRESH_TOKEN', ...repoArgs], 'RT-secret'],
+    [['variable', 'set', 'EOCRM_SMOKE_WORKSPACE', ...repoArgs], 'acme'],
+  ]);
+  assert.match(r.out, /set EOCRM_SMOKE_REGION\nset EOCRM_SMOKE_CLIENT_ID\nset EOCRM_SMOKE_REFRESH_TOKEN\nset EOCRM_SMOKE_WORKSPACE\n/);
+  assert.match(r.out, /signed out locally: the refresh token now belongs to CI$/);
+  for (const secret of ['RT-secret', 'CID-secret']) {
+    assert.ok(!s.calls.some(([args]) => args.some((a) => a.includes(secret))));
+    assert.ok(!r.out.includes(secret) && !r.err.includes(secret));
+  }
+  assert.equal(await s.store.get(s.key), null);
+});
+
+test('smoke-seed skips the workspace variable when none resolves', async () => {
+  const s = await seedSetup({ workspace: false });
+  const r = await seed(s);
+  assert.equal(r.code, 0, r.err);
+  assert.deepEqual(s.calls.map(([a]) => a[2]), ['EOCRM_SMOKE_REGION', 'EOCRM_SMOKE_CLIENT_ID', 'EOCRM_SMOKE_REFRESH_TOKEN']);
+});
+
+test('smoke-seed stops at the first failed write and keeps the tokens', async () => {
+  const s = await seedSetup({ ghCodes: [0, 4] });
+  const r = await seed(s);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /gh secret set EOCRM_SMOKE_CLIENT_ID failed \(exit 4\); local sign-in kept/);
+  assert.equal(s.calls.length, 2);
+  assert.equal((await s.store.get(s.key)).refresh_token, 'RT-secret');
+});
+
+test('smoke-seed reports a missing or timed-out gh', async () => {
+  const s = await seedSetup({ ghCodes: [-1] });
+  const r = await seed(s);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /gh not found or timed out; local sign-in kept/);
+});
+
+test('smoke-seed refuses to sign out when the refresh token rotated meanwhile', async () => {
+  const s = await seedSetup();
+  const store = { get: (k) => s.store.get(k), del: (k, o) => s.store.del(k, { when: (t) => o.when({ ...t, refresh_token: 'other' }) }) };
+  const r = await seed(s, [], { store });
+  assert.equal(r.code, 1);
+  assert.match(r.err, /refresh token rotated while seeding; run smoke-seed again/);
+  assert.ok(!r.out.includes('signed out locally'));
+});
+
+test('smoke-seed rejects a bad --repo or no sign-in with exit 2', async () => {
+  const s = await seedSetup();
+  for (const repo of ['a', 'a/b/c', 'a/b;rm']) {
+    const r = await cli(['smoke-seed', '--data', s.data, '--repo', repo], { cwd: s.cwd, store: s.store, gh: s.gh });
+    assert.equal(r.code, 2, repo);
+  }
+  const empty = tmp('data');
+  const r = await cli(['smoke-seed', '--data', empty, '--repo', 'o/r'], { cwd: s.cwd, gh: s.gh });
+  assert.equal(r.code, 2);
+  assert.match(r.err, /sign in first/);
+  assert.equal(s.calls.length, 0);
+});

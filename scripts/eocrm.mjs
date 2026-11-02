@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { dataDir } from '../lib/paths.mjs';
 import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
-import { credentialStore } from '../lib/credentials.mjs';
+import { credentialStore, spawnWithStdin } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, plain } from '../lib/login.mjs';
 import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine } from '../lib/workspace.mjs';
 import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
@@ -13,7 +13,7 @@ import { enqueue } from '../lib/outbox.mjs';
 import { eventId } from '../lib/ids.mjs';
 import { worktreeOf, writeJsonAtomic, withLock, loadRun, saveRun } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' } };
+const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, repo: { type: 'string' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
@@ -151,6 +151,42 @@ const commands = {
     if (failed.length) out('sign-out incomplete, run /eocrm:logout again');
     else if (!keys.size) out('signed out');
   },
+
+  async 'smoke-seed'(ctx) {
+    const { values, env, cwd, out, data, store, gh } = ctx;
+    const repo = values.repo;
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? '')) throw new Usage('--repo <owner>/<repo> required');
+    const account = loadAccount(data);
+    const signIn = () => new Usage('sign in first: /eocrm:login');
+    if (!account.region) throw signIn();
+    const key = endpoints({ region: account.region, env }).key;
+    const tokens = await store.get(key);
+    if (!tokens?.refresh_token || !tokens.client_id) throw signIn();
+    const { workspace } = resolveWorkspace({ data, cwd });
+    const writes = [
+      ['secret', 'EOCRM_SMOKE_REGION', account.region],
+      ['secret', 'EOCRM_SMOKE_CLIENT_ID', tokens.client_id],
+      ['secret', 'EOCRM_SMOKE_REFRESH_TOKEN', tokens.refresh_token],
+      ...(workspace ? [['variable', 'EOCRM_SMOKE_WORKSPACE', workspace]] : []),
+    ];
+    for (const [kind, name, value] of writes) {
+      const { code } = await gh([kind, 'set', name, '--repo', repo], value);
+      if (code !== 0) {
+        const e = new Error(code === -1 ? 'gh not found or timed out; local sign-in kept' : `gh ${kind} set ${name} failed (exit ${code}); local sign-in kept`);
+        e.exitCode = 1;
+        throw e;
+      }
+      out(`set ${name}`);
+    }
+    const gone = await store.del(key, { when: (t) => t?.refresh_token === tokens.refresh_token });
+    if (gone === false) {
+      const e = new Error('refresh token rotated while seeding; run smoke-seed again');
+      e.exitCode = 1;
+      throw e;
+    }
+    await commands.logout(ctx);
+    out('signed out locally: the refresh token now belongs to CI');
+  },
 };
 
 export async function main({
@@ -163,6 +199,7 @@ export async function main({
   store,
   openBrowser: open = openBrowser,
   spawnFlush,
+  gh = (args, stdin) => spawnWithStdin('gh', args, stdin, { timeoutMs: 30000 }),
 } = {}) {
   if (!(Number(String(version).split('.')[0]) >= 20)) {
     err('eocrm needs Node 20+ on PATH');
@@ -172,14 +209,14 @@ export async function main({
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
-    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout --data <dir>');
+    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout|smoke-seed --data <dir>');
     let data;
     try {
       data = dataDir({ argv, env, data: values.data });
     } catch (e) {
       throw new Usage(e.message);
     }
-    const code = await command({ values, positionals: rest, env, cwd, out, data, store: store ?? credentialStore({ data }), open, spawnFlush });
+    const code = await command({ values, positionals: rest, env, cwd, out, data, store: store ?? credentialStore({ data }), open, spawnFlush, gh });
     return code ?? 0;
   } catch (e) {
     for (const line of e.lines ?? []) out(line);
