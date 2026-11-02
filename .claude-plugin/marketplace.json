@@ -1,12 +1,19 @@
 {
   "name": "eocrm",
-  "owner": { "name": "eocrm" },
+  "owner": {
+    "name": "eocrm"
+  },
   "description": "Claude Code plugins from eocrm.",
   "plugins": [
     {
       "name": "eocrm",
       "source": "./",
       "description": "Reports Claude Code agent work (runs, commits, tests, PRs, plan steps) to eocrm."
+    },
+    {
+      "name": "eocrm-mcp",
+      "source": "./mcp",
+      "description": "eocrm tools only (MCP server): tasks, contacts, deals, appointments and records. No tracking hooks."
     }
   ]
 }

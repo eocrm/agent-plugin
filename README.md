@@ -1,17 +1,23 @@
-# eocrm Claude Code plugin
+# eocrm Claude Code plugins
 
-Reports Claude Code agent work (runs, plan steps, commits, test runs, PRs, review findings) to your eocrm workspace.
+Two plugins in one catalogue:
+
+- **`eocrm-mcp`**: eocrm tools only. Claude can read and change tasks, contacts, deals, appointments and records in your workspaces through the eocrm MCP server. No hooks and no tracking.
+- **`eocrm`**: agent work. It reports Claude Code runs, plan steps, commits, test runs, PRs and review findings to your eocrm workspace. It installs `eocrm-mcp` too.
 
 ## Install
 
 ```
 /plugin marketplace add eocrm/claude-plugin
-/plugin install eocrm@eocrm
+/plugin install eocrm-mcp@eocrm     # tools only
+/plugin install eocrm@eocrm         # agent work (includes the tools)
 ```
+
+For the tools, run `/mcp`, select `plugin:eocrm-mcp:eocrm` and sign in through the browser. For agent work, also run `/eocrm:login`. If you added the eocrm MCP server by hand before, remove it (`claude mcp remove eocrm`) so the tools aren't listed twice.
 
 Then turn on updates: `/plugin` → Marketplaces → `eocrm` → Enable auto-update. Claude Code leaves it off for third-party catalogues, and you only receive a release when its `version` changes.
 
-Prerequisites: Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
+Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
 
 ## Use
 
