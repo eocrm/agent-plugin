@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, realpathSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stopGate } from '../../lib/gate.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
+import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
 
 const TAIL = '. Fix what it names or tell the member; tracking continues.';
 const rej = (i, extra = {}) => ({ eventId: `commit:${i}`, type: 'commit', label: `c${i}`, status: 422, message: `bad ${i}`, ...extra });
@@ -81,4 +82,22 @@ test('a block it cannot record is not repeated while stop_hook_active is set', {
   } finally {
     chmodSync(join(data, 'runs'), 0o755);
   }
+});
+
+test('gate ignores rejected signal events', async () => {
+  const data = realpathSync.native(mkdtempSync(join(tmpdir(), 'eocrm-gate-')));
+  saveRun(data, 's', { runId: 'r1' });
+  const at = '2026-11-02T10:00:00Z';
+  writeOutbox(data, [
+    { kind: 'event', sessionId: 's', seq: 'a', event: { id: 'waiting:1', type: 'waiting', occurred_at: at, kind: 'permission' } },
+    { kind: 'event', sessionId: 's', seq: 'b', event: { id: 'resumed:1', type: 'resumed', occurred_at: at } },
+    { kind: 'event', sessionId: 's', seq: 'c', event: { id: 'turn:1', type: 'turn', occurred_at: at, phase: 'ended' } },
+  ]);
+  const errors = { 'events.0.type': ['The selected type is invalid.'], 'events.1.type': ['The selected type is invalid.'], 'events.2.type': ['The selected type is invalid.'] };
+  const clientFor = () => ({ recordEvents: async () => ({ status: 422, body: { message: 'The given data was invalid.', errors } }) });
+  const ctx = { data, env: {}, now: Date.now, clientFor };
+  assert.deepEqual(await stopGate(ctx, { session_id: 's', cwd: data }), {});
+  assert.deepEqual(readOutbox(data), []);
+  assert.deepEqual(loadRun(data, 's').rejected, []);
+  assert.match(readFileSync(join(data, 'plugin.log'), 'utf8'), /dropped 3 refused signal event\(s\) \(HTTP 422\)/);
 });

@@ -43,6 +43,7 @@ function ctxFor(data, at = 1_000_000) {
 }
 
 const kinds = (data, session) => readOutbox(data).filter((e) => e.sessionId === session).map((e) => e.kind);
+const queued = (data, session) => readOutbox(data).filter((e) => e.sessionId === session).map((e) => e.event?.type ?? e.kind);
 const usage = (data) => readOutbox(data).filter((e) => e.event?.type === 'usage').map((e) => e.event);
 
 function hook(event, stdin, { data, env = {}, cwd = process.cwd(), extraArgs = [] } = {}) {
@@ -56,21 +57,21 @@ function hook(event, stdin, { data, env = {}, cwd = process.cwd(), extraArgs = [
 
 test('hooks.json declares exactly the planned hooks', () => {
   const { hooks } = JSON.parse(readFileSync(new URL('../../hooks/hooks.json', import.meta.url), 'utf8'));
-  const rows = Object.entries(hooks).map(([event, groups]) => {
-    assert.equal(groups.length, 1, event);
-    const [{ matcher, hooks: [h, ...more] }] = groups;
+  const rows = Object.entries(hooks).flatMap(([event, groups]) => groups.map(({ matcher, hooks: [h, ...more] }) => {
     assert.equal(more.length, 0, event);
-    assert.deepEqual([h.type, h.command, h.args], ['command', 'node', ['${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs', event]], event);
-    return [event, matcher ?? null, h.async ?? false, h.timeout ?? null];
-  });
+    assert.deepEqual([h.type, h.command, h.args.slice(0, 1)], ['command', 'node', ['${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs']], event);
+    return [event, h.args[1], matcher ?? null, h.async ?? false, h.timeout ?? null];
+  }));
   assert.deepEqual(rows, [
-    ['SessionStart', 'startup|resume|clear|compact|fork', false, 10],
-    ['UserPromptSubmit', null, true, null],
-    ['PreToolUse', 'Agent|Task', true, null],
-    ['PostToolUse', 'Bash|Write|Edit|MultiEdit|TodoWrite|TaskCreate|TaskUpdate|Agent|Task', true, null],
-    ['PostToolUseFailure', 'Bash', true, null],
-    ['Stop', null, false, 30],
-    ['SessionEnd', null, false, null],
+    ['SessionStart', 'SessionStart', 'startup|resume|clear|compact|fork', false, 10],
+    ['UserPromptSubmit', 'UserPromptSubmit', null, true, null],
+    ['PreToolUse', 'PreToolUse', 'Agent|Task', true, null],
+    ['PostToolUse', 'PostToolUse', 'Bash|Write|Edit|MultiEdit|TodoWrite|TaskCreate|TaskUpdate|Agent|Task', true, null],
+    ['PostToolUse', 'Resume', '*', true, null],
+    ['PostToolUseFailure', 'PostToolUseFailure', 'Bash', true, null],
+    ['Notification', 'Notification', 'permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input', true, null],
+    ['Stop', 'Stop', null, false, 30],
+    ['SessionEnd', 'SessionEnd', null, false, null],
   ]);
 });
 
@@ -235,7 +236,7 @@ test('resume after an acked finish rolls to generation n+1 before queuing anythi
   await handle('UserPromptSubmit', input(s, dir), ctx);
   const run = loadRun(data, s);
   assert.deepEqual([run.generation, run.clientRunId, run.runId, run.ended, run.acked], [1, `${s}.1`, null, false, {}]);
-  assert.deepEqual(kinds(data, s), ['start']);
+  assert.deepEqual(queued(data, s), ['start', 'turn']);
 });
 
 test('a tool hook on an ended run neither reopens nor rolls it', async () => {
@@ -275,7 +276,7 @@ test('a hook with no run yet starts one lazily, without printing', async () => {
   const dir = repo('main');
   const s = sid();
   assert.deepEqual(await handle('Stop', input(s, dir), ctxFor(data)), {});
-  assert.deepEqual(kinds(data, s), ['start']);
+  assert.deepEqual(queued(data, s), ['start', 'turn']);
 });
 
 test('model switches A, B, A in the transcript give exactly three usage events', async () => {
@@ -430,7 +431,8 @@ test('two live sessions in one worktree do not finish each other on prompts', as
     await handle('UserPromptSubmit', input(b, dir), ctx);
   }
   assert.deepEqual([a, b].map((x) => [loadRun(data, x).ended, loadRun(data, x).generation]), [[false, 0], [false, 0]]);
-  assert.deepEqual([kinds(data, a).filter((k) => k !== 'heartbeat'), kinds(data, b).filter((k) => k !== 'heartbeat')], [['start'], ['start']]);
+  const own = (x) => queued(data, x).filter((k) => k !== 'heartbeat' && k !== 'turn');
+  assert.deepEqual([own(a), own(b)], [['start'], ['start']]);
 });
 
 test('the committed-workspace ask shows even without a default workspace', async () => {

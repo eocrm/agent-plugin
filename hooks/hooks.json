@@ -62,6 +62,20 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs",
+              "Resume"
+            ],
+            "async": true
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [
@@ -74,6 +88,22 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs",
               "PostToolUseFailure"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs",
+              "Notification"
             ],
             "async": true
           }

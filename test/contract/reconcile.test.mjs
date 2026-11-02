@@ -35,7 +35,7 @@ test('a run whose events already hold the plan and tick 1: reconcile at resume s
   const ctx = { data, env: server.endpointsEnv, now: Date.now, store: { get: async () => tokens, update: async () => null }, spawnFlush: () => {} };
   const go = () => flush({ data, deadlineMs: 5000, clientFor: runClient(ctx) });
   const input = { session_id: 'sess-r1', cwd: dir };
-  const posted = () => server.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/events')).map((r) => r.body.events.map((e) => e.plan_key ?? e.type));
+  const posted = () => server.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/events')).map((r) => r.body.events.filter((e) => e.type !== 'turn').map((e) => e.plan_key ?? e.type)).filter((b) => b.length);
 
   await handle('SessionStart', { ...input, source: 'startup' }, ctx);
   await go();
