@@ -42,3 +42,8 @@ test('--data=<dir> and a parsed value are honoured', () => {
   const parsed = tmp();
   assert.equal(dataDir({ argv: [], env: {}, data: parsed }), parsed);
 });
+
+test('PLUGIN_DATA is the fallback when no --data and no CLAUDE_PLUGIN_DATA', () => {
+  const dir = tmp();
+  assert.equal(dataDir({ argv: [], env: { PLUGIN_DATA: dir } }), dir);
+});
