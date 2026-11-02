@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { reconcile, desiredEvents, currentStep, loadConventions } from '../../lib/reconcile.mjs';
+import { cleanEvent } from '../../lib/api.mjs';
 import { handle } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
 import { loadRun, saveRun, loadWorktree, saveWorktree, worktreeOf } from '../../lib/state.mjs';
@@ -208,6 +209,103 @@ test('desiredEvents is the full set, before the diff', () => {
   const { ctx, data, sid } = setup();
   const types = desiredEvents(ctx, { ...loadRun(data, sid), conventions: { plan_import: true } }).map((e) => e.type);
   assert.deepEqual(types, ['plan', 'step', 'step', 'step', 'commit']);
+});
+
+test('a plan switch A→B→A re-sends A under a fresh id, with its new ticks after it', async () => {
+  const { data, sid, dir, go, evts } = setup();
+  const ledger = join(dir, '.superpowers/sdd/p/progress.md');
+  const B = 'docs/superpowers/plans/b.md';
+  writeFileSync(join(dir, B), '### Task 1: Bee\n- [ ] x\n');
+  const ackAll = () => {
+    const run = loadRun(data, sid);
+    saveRun(data, sid, { acked: { ...run.acked, ...Object.fromEntries(evts().map((e) => [e.id, true])) } });
+    writeOutbox(data, []);
+  };
+  await go();
+  const firstA = evts().find((e) => e.type === 'plan').id;
+  ackAll();
+  writeFileSync(ledger, `# SDD ledger — plan: ${B}\n`);
+  await go();
+  assert.deepEqual(evts().filter((e) => e.type === 'plan').map((e) => e.path), [B]);
+  ackAll();
+  writeFileSync(ledger, `# SDD ledger — plan: ${PLAN}\nTask 1: complete\nTask 2: complete\nTask 3: complete\n`);
+  await go();
+  const again = evts().filter((e) => e.type === 'plan' || e.plan_key);
+  assert.deepEqual(again.map((e) => e.plan_key ?? e.path), [PLAN, 'task-3']);
+  assert.notEqual(again[0].id, firstA);
+  ackAll();
+  await go();
+  assert.deepEqual(evts(), []);
+});
+
+test('at resume a plan is matched only against the server\'s latest plan', async () => {
+  const items = [{ key: 'task-1', text: '1. One' }, { key: 'task-2', text: '2. Two' }, { key: 'task-3', text: '3. Three' }];
+  const server = [
+    { id: 'a', type: 'plan', occurred_at: 'x', payload: { source: 'superpowers', path: PLAN, items } },
+    { id: 'b', type: 'plan', occurred_at: 'x', payload: { source: 'markdown', path: 'b.md', items: [{ key: 'k', text: 't' }] } },
+  ];
+  const { go, evts } = setup({ server });
+  await go();
+  assert.equal(kinds(evts())[0], 'plan');
+});
+
+test('after the server\'s latest plan is superseded by one we send, switching back re-sends it', async () => {
+  const items = [{ key: 'task-1', text: '1. One' }, { key: 'task-2', text: '2. Two' }, { key: 'task-3', text: '3. Three' }];
+  const { data, sid, dir, go, evts } = setup({ server: [{ id: 'a', type: 'plan', occurred_at: 'x', payload: { source: 'superpowers', path: PLAN, items } }] });
+  const ledger = join(dir, '.superpowers/sdd/p/progress.md');
+  const B = 'docs/superpowers/plans/b.md';
+  writeFileSync(join(dir, B), '### Task 1: Bee\n- [ ] x\n');
+  const ackAll = () => {
+    const run = loadRun(data, sid);
+    saveRun(data, sid, { acked: { ...run.acked, ...Object.fromEntries(evts().map((e) => [e.id, true])) } });
+    writeOutbox(data, []);
+  };
+  await go();
+  assert.ok(!kinds(evts()).includes('plan'));
+  ackAll();
+  writeFileSync(ledger, `# SDD ledger — plan: ${B}\n`);
+  await go();
+  ackAll();
+  writeFileSync(ledger, `# SDD ledger — plan: ${PLAN}\n`);
+  await go();
+  assert.deepEqual(evts().filter((e) => e.type === 'plan').map((e) => e.path), [PLAN]);
+});
+
+test('a resumed, ended session starts a run that gets none of the earlier run\'s commits', async () => {
+  const { dir, data, sid, ctx } = setup({ planImport: false, ledger: null });
+  writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  const hctx = { ...ctx, env: {}, spawnFlush: () => {} };
+  const s = `${sid}-h`;
+  const fire = (event, extra) => handle(event, { session_id: s, cwd: dir, hook_event_name: event, ...extra }, hctx);
+  await fire('SessionStart', { source: 'startup' });
+  assert.equal(readOutbox(data).filter((e) => e.sessionId === s && e.event?.type === 'commit').length, 1);
+  await fire('SessionEnd');
+  writeOutbox(data, []);
+  await fire('SessionStart', { source: 'resume' });
+  assert.equal(loadRun(data, s).generation, 1);
+  assert.deepEqual(readOutbox(data).filter((e) => e.sessionId === s && e.event?.type === 'commit'), []);
+});
+
+test('a reconcile whose git budget ran out keeps the active plan path', async () => {
+  const { data, sid, ctx } = setup();
+  saveRun(data, sid, { planPath: PLAN });
+  await reconcile({ ...ctx, git: { exec: () => { throw new Error('eocrm: hook budget spent'); } } }, loadRun(data, sid));
+  assert.equal(loadRun(data, sid).planPath, PLAN);
+});
+
+test('conventions are given up at the deadline, and not asked with under 1s left', async () => {
+  let asked = 0;
+  const client = { conventions: () => { asked += 1; return new Promise(() => {}); } };
+  const t0 = Date.now();
+  assert.equal(await loadConventions({}, {}, client, Date.now() + 1100), null);
+  assert.ok(Date.now() - t0 < 2000);
+  assert.equal(await loadConventions({}, {}, client, Date.now() + 500), null);
+  assert.equal(asked, 1);
+});
+
+test('a plan path is trimmed and capped like the server does', () => {
+  assert.equal(cleanEvent({ type: 'plan', path: ' a.md ' }).path, 'a.md');
+  assert.ok(cleanEvent({ type: 'plan', path: 'x'.repeat(600) }).path.length <= 500);
 });
 
 // Hook wiring: reconcile at run start, at Stop, after plan/ledger/todo changes, else every 5 minutes.
