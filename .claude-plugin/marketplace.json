@@ -1,0 +1,12 @@
+{
+  "name": "eocrm",
+  "owner": { "name": "eocrm" },
+  "description": "Claude Code plugins from eocrm.",
+  "plugins": [
+    {
+      "name": "eocrm",
+      "source": "./",
+      "description": "Reports Claude Code agent work (runs, commits, tests, PRs, plan steps) to eocrm."
+    }
+  ]
+}
