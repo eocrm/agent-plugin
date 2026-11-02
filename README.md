@@ -41,3 +41,7 @@ Users get a release only when `version` in `.claude-plugin/plugin.json` changes:
 - Variables: `EOCRM_SMOKE_WORKSPACE`, `EOCRM_SMOKE_TASK`.
 - Runs never overlap (one `concurrency` group): each spends the stored refresh token once.
 - Seed (and re-seed when the store step fails): sign the smoke member in with a separate `--data` dir so your own sign-in is untouched (`node scripts/eocrm.mjs login --data <dir> --region eu test`), then `node scripts/eocrm.mjs smoke-seed --data <dir> --repo <owner>/<repo>`. It writes the region, client id, refresh token and workspace through `gh` (stdin, never printed) and signs that data dir out, so the token family belongs to CI. Set `EOCRM_SMOKE_TASK` and `SMOKE_SECRETS_PAT` by hand.
+
+## License
+
+Apache-2.0. "eocrm" is a trademark of eocrm; the license grants no right to use it.
