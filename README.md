@@ -9,7 +9,7 @@ Reports Claude Code agent work (runs, plan steps, commits, test runs, PRs, revie
 /plugin install eocrm@eocrm
 ```
 
-The repository is private: you need git access to it. Prerequisites: Node 20+ on PATH, `git`, optionally `gh`.
+Prerequisites: Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
 
 ## Use
 
@@ -31,7 +31,7 @@ Environment a repo injects into hooks (`NODE_OPTIONS`, `NODE_EXTRA_CA_CERTS`, pr
 
 ## Releasing
 
-Before a release run `claude plugin validate --strict .` locally (no model call) and put its result line in the PR.
+Users get a release only when `version` in `.claude-plugin/plugin.json` changes: bump it (and `package.json`) in the release PR. Before a release run `claude plugin validate --strict .` locally (no model call) and put its result line in the PR.
 
 ## Nightly smoke (setup)
 
