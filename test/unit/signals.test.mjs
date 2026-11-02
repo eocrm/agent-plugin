@@ -67,6 +67,16 @@ test('stop queues turn ended', async () => {
   assert.ok(events().every((e) => e.id.length <= 64 && e.occurred_at));
 });
 
+test('stop ends a waiting stretch a denied prompt left open', async () => {
+  const { data, fire, events } = setup();
+  await fire('UserPromptSubmit', { prompt: 'go' });
+  await fire('Notification', { notification_type: 'permission_prompt' });
+  await fire('Stop', { stop_hook_active: false });
+  await fire('Notification', { notification_type: 'idle_prompt' });
+  assert.deepEqual(shape(events()), [['turn', 'started'], ['waiting', 'permission'], ['resumed', null], ['turn', 'ended'], ['waiting', 'idle']]);
+  assert.equal(loadRun(data, 's').waiting, true);
+});
+
 test('Resume exits without queueing when not waiting, even with the lock held', async () => {
   const { data, fire, events } = setup();
   mkdirSync(join(data, '.lock'));
