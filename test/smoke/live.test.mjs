@@ -11,13 +11,16 @@ test('live agent-run round trip', { skip: !ready && (console.log('::warning::smo
   let tokens = { access_token: 'stale', refresh_token: refresh, client_id: clientId, expires_at: 0 };
   const store = {
     get: async () => tokens,
-    set: async (_k, t) => { tokens = t; return 'memory'; },
+    set: async (_k, t) => {
+      tokens = t;
+      if (out && t.refresh_token !== refresh) writeFileSync(out, t.refresh_token, { mode: 0o600 });
+      return 'memory';
+    },
     update: async (k, fn) => { const next = await fn(tokens); if (next && next !== tokens) await store.set(k, next); return next; },
   };
   const client = createClient({ endpoints: endpoints({ region }), workspace, store });
   const day = new Date().toISOString().slice(0, 10).replaceAll('-', '');
   const started = await client.startRun({ client_run_id: `smoke-${day}-${process.env.GITHUB_RUN_ID ?? Date.now()}`, task });
-  if (out && tokens.refresh_token !== refresh) writeFileSync(out, tokens.refresh_token, { mode: 0o600 });
   assert.ok([200, 201].includes(started.status), `startRun ${started.status}`);
   const id = started.body.id;
   const events = [

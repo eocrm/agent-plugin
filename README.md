@@ -23,7 +23,7 @@ Run metadata (branch, repo, task key), plan items, commits (sha, subject), test 
 
 ## Troubleshooting
 
-Run `eocrm status` for sign-in, workspace, queue and last-sync state.
+Run `/eocrm:status` for sign-in, workspace and pairing state.
 
 ## Trust boundary
 
@@ -39,3 +39,5 @@ Before a release run `claude plugin validate --strict .` locally (no model call)
 
 - Secrets: `EOCRM_SMOKE_REGION`, `EOCRM_SMOKE_CLIENT_ID`, `EOCRM_SMOKE_REFRESH_TOKEN`, `SMOKE_SECRETS_PAT` (secrets write; stores the rotated refresh token).
 - Variables: `EOCRM_SMOKE_WORKSPACE`, `EOCRM_SMOKE_TASK`.
+- Runs never overlap (one `concurrency` group): each spends the stored refresh token once.
+- Re-seed when the store step fails (expired PAT, revoked token family): renew `SMOKE_SECRETS_PAT` if expired, sign the smoke agent in again to get a fresh refresh token, then `gh secret set EOCRM_SMOKE_REFRESH_TOKEN --repo <owner>/<repo>` and paste it.

@@ -19,8 +19,12 @@ test('each skill parses and meets its caps; only plugin variables appear', () =>
     assert.equal(s.name, n);
     assert.ok(s.description.length <= 200, `${n} description`);
     assert.ok(s.body.length <= 1200, `${n} body`);
-    for (const [, v] of s.body.matchAll(/\$\{([^}]*)\}/g)) assert.ok(['CLAUDE_PLUGIN_ROOT', 'CLAUDE_PLUGIN_DATA'].includes(v), `${n} ${v}`);
+    for (const [, v] of s.body.matchAll(/\$\{([^}]*)\}/g)) assert.ok(['CLAUDE_PLUGIN_ROOT', 'CLAUDE_PLUGIN_DATA', 'CLAUDE_SESSION_ID'].includes(v), `${n} ${v}`);
     for (const line of s.body.split('\n').filter((l) => l.includes('eocrm.mjs'))) assert.ok(line.includes('--data "${CLAUDE_PLUGIN_DATA}"'), `${n} data`);
+    for (const line of s.body.split('\n').filter((l) => / (?:record|link|conventions) /.test(l))) {
+      assert.ok(line.includes('--session "${CLAUDE_SESSION_ID}"'), `${n} session`);
+      assert.doesNotMatch(line, /"</, `${n} model text in double quotes`);
+    }
   }
 });
 

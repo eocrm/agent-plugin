@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: nightly-smoke
+  cancel-in-progress: false
 jobs:
   smoke:
     runs-on: ubuntu-latest
