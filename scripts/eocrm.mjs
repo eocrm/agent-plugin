@@ -7,10 +7,14 @@ import { createClient } from '../lib/api.mjs';
 import { credentialStore } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, plain } from '../lib/login.mjs';
 import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine } from '../lib/workspace.mjs';
-import { linkWorktree } from '../lib/run.mjs';
-import { writeJsonAtomic } from '../lib/state.mjs';
+import { linkWorktree, runsOf } from '../lib/run.mjs';
+import { enqueue } from '../lib/outbox.mjs';
+import { eventId } from '../lib/ids.mjs';
+import { worktreeOf, writeJsonAtomic } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' } };
+const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' } };
+const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
+const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
 const APPROVE = 'pairing requested: approve in Account → Agents within 15 minutes';
 
@@ -24,6 +28,17 @@ function pairingLines(p) {
   if (p.status === 'choose') return ['pairing: choose a connection, then run pair <id>', ...p.candidates.map((c) => `connection ${plain(c.id)} ${plain(c.label).replace(/\s+/g, ' ')}`)];
   return [p.refused ? `running standalone (${p.refused})` : 'running standalone'];
 }
+
+function liveRun(data, cwd) {
+  const run = runsOf(data, worktreeOf(cwd).key).find((r) => !r.ended);
+  if (!run) throw new Error('no active run in this worktree');
+  return run;
+}
+
+const need = (v, name) => {
+  if (typeof v !== 'string' || !v.trim()) throw new Usage(`--${name} required`);
+  return v;
+};
 
 const commands = {
   async login({ values, positionals: [workspace], env, cwd, out, data, store, open }) {
@@ -79,6 +94,32 @@ const commands = {
     out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
   },
 
+  async record({ values: v, positionals: [kind], cwd, out, data }) {
+    let type;
+    let key;
+    let fields;
+    if (kind === 'ruling') {
+      type = 'ruling';
+      fields = { what: need(v.what, 'what'), why: need(v.why, 'why'), ...(v['cost-if-wrong'] ? { cost_if_wrong: v['cost-if-wrong'] } : {}) };
+      key = `${fields.what}\0${fields.why}`;
+    } else if (kind === 'finding') {
+      type = 'review_finding';
+      if (!SEVERITIES.includes(v.severity)) throw new Usage(`--severity must be ${SEVERITIES.join('|')}`);
+      if (v.outcome !== undefined && !OUTCOMES.includes(v.outcome)) throw new Usage(`--outcome must be ${OUTCOMES.join('|')}`);
+      fields = { severity: v.severity, summary: need(v.summary, 'summary'), ...(v.outcome ? { outcome: v.outcome } : {}) };
+      key = `${fields.severity}\0${fields.summary}`;
+    } else throw new Usage('usage: eocrm record ruling|finding');
+    const run = liveRun(data, cwd);
+    await enqueue(data, { kind: 'event', sessionId: run.sessionId, event: { id: eventId(type, key), type, occurred_at: new Date().toISOString(), ...fields } });
+    out(`recorded ${kind}`);
+  },
+
+  async conventions({ cwd, out, data }) {
+    const compact = { ...liveRun(data, cwd).conventions };
+    delete compact.workflows;
+    out(JSON.stringify(compact));
+  },
+
   async logout({ env, out, data, store }) {
     const account = loadAccount(data);
     const keys = new Set(Array.isArray(account.keys) ? account.keys : []);
@@ -117,7 +158,7 @@ export async function main({
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
-    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|logout --data <dir>');
+    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout --data <dir>');
     let data;
     try {
       data = dataDir({ argv, env, data: values.data });
