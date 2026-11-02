@@ -588,3 +588,20 @@ test('SessionStart keeps an 8 s overall deadline when the lock is held after ens
   const took = Date.now() - started;
   assert.ok(took < 8500, `took ${took} ms`);
 });
+
+test('it does not recount history after a tombstoned resume', async () => {
+  const data = signedIn();
+  const cwd = repo('main');
+  const s = sid();
+  const p = join(cwd, 'old.jsonl');
+  const row = (id, n) => `${JSON.stringify({ type: 'assistant', message: { id, model: 'a', usage: { input_tokens: n, output_tokens: 1 } } })}\n`;
+  writeFileSync(p, row('old', 5));
+  writeFileSync(join(data, 'generations.json'), JSON.stringify({ [s]: { generation: 0, at: Date.now() } }));
+  const ctx = ctxFor(data);
+  await handle('SessionStart', input(s, cwd, { source: 'resume', transcript_path: p }), ctx);
+  appendFileSync(p, row('new', 2));
+  await handle('UserPromptSubmit', input(s, cwd, { transcript_path: p }), ctx);
+  await handle('Stop', input(s, cwd, { transcript_path: p }), ctx);
+  const counted = readOutbox(data).filter((e) => e.event?.cache_read_tokens !== undefined).map((e) => e.event.input_tokens);
+  assert.deepEqual(counted, [2]);
+});
