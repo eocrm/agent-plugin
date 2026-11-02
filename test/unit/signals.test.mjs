@@ -109,3 +109,16 @@ test('it restarts the offset for a new transcript file', async () => {
   await fire('Stop', { transcript_path: mk('m2') });
   assert.deepEqual(events().filter((e) => e.type === 'usage' && e.cache_read_tokens !== undefined).map((e) => e.input_tokens), [1, 1]);
 });
+
+test('usage event ids differ after a shrink restart', async () => {
+  const { data, fire, events } = setup({ turns: 1 });
+  const p = join(data, 'u.jsonl');
+  const row = (id) => `${JSON.stringify({ type: 'assistant', message: { id, model: 'a', usage: { input_tokens: 1, output_tokens: 1 } } })}\n`;
+  writeFileSync(p, row('m1') + row('m2'));
+  await fire('Stop', { transcript_path: p });
+  writeFileSync(p, row('m3'));
+  await fire('Stop', { transcript_path: p });
+  const ids = events().filter((e) => e.type === 'usage' && e.cache_read_tokens !== undefined).map((e) => e.id);
+  assert.equal(ids.length, 2);
+  assert.notEqual(ids[0], ids[1]);
+});

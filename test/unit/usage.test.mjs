@@ -56,7 +56,7 @@ test('it caps one read at maxBytes', () => {
 });
 
 test('a missing file keeps the offset', () => {
-  assert.deepEqual(readUsage('/nonexistent/x.jsonl', 7), { from: 7, offset: 7, models: {}, ids: [] });
+  assert.deepEqual(readUsage('/nonexistent/x.jsonl', 7), { from: 7, offset: 7, models: {}, ids: [], reset: false });
 });
 
 test('it restarts a file that shrank below its offset', () => {
@@ -110,4 +110,34 @@ test('sizesOf lists main and subagent sizes', () => {
   writeFileSync(main, 'abc\n');
   writeFileSync(sub, 'de\n');
   assert.deepEqual(sizesOf(main), { [main]: 4, [sub]: 3 });
+});
+
+test('it keeps the main offset with more than 64 subagent files', () => {
+  const { main, sub } = session();
+  writeFileSync(main, line('m1', 'a'));
+  const dir = dirname(sub);
+  for (let i = 0; i < 70; i++) writeFileSync(join(dir, `agent-${String(i).padStart(3, '0')}.jsonl`), '');
+  const first = readSession(main);
+  const second = readSession(main, first.offsets, first.ids);
+  assert.equal(second.offsets[main], Buffer.byteLength(line('m1', 'a')));
+  assert.deepEqual(second.reads[0].models, {});
+});
+
+test('a read truncated by the shared budget consumes nothing from that file', () => {
+  const l = line('m1', 'a');
+  const p = file(l + l.replace('m1', 'm2'));
+  const r = readUsage(p, 0, l.length + 5, [], 1e6);
+  assert.deepEqual([r.offset, r.models.a.input_tokens], [l.length, 1]);
+  const t = readUsage(p, l.length, 5, [], 1e6);
+  assert.deepEqual([t.offset, t.models], [l.length, {}]);
+});
+
+test('event epoch increments when a file shrinks', () => {
+  const { main } = session();
+  writeFileSync(main, line('m1', 'a'));
+  const first = readSession(main);
+  writeFileSync(main, line('m9', 'a').slice(0, -1) + '\n');
+  const small = Object.assign({}, first.offsets, { [main]: 1e6 });
+  const second = readSession(main, small, [], undefined, first.epochs);
+  assert.deepEqual([first.reads[0].epoch, second.reads[0].epoch, second.reads[0].from], [0, 1, 0]);
 });
