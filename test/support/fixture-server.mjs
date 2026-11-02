@@ -185,7 +185,8 @@ export async function startFixtureServer({ responses = {} } = {}) {
     }
     const query = Object.fromEntries(url.searchParams);
     const r = route(req.method, url.pathname);
-    requests.push({ method: req.method, path: r?.path ?? url.pathname, workspace: r?.workspace ?? null, query, headers: req.headers, body });
+    req.logged = { method: req.method, path: r?.path ?? url.pathname, workspace: r?.workspace ?? null, query, headers: req.headers, body };
+    requests.push(req.logged);
     if (!r || (r.name.startsWith('oauth.') && req.method !== (r.name === 'oauth.authorize' ? 'GET' : 'POST'))) {
       return { status: 404, body: { message: 'Not Found' } };
     }
@@ -225,6 +226,7 @@ export async function startFixtureServer({ responses = {} } = {}) {
         result = { status: 500, body: { message: `fixture error: ${e.message}` } };
       }
       const { status, body, location } = result;
+      if (req.logged) Object.assign(req.logged, { status, response: body });
       const headers = location ? { location } : body === undefined ? {} : { 'content-type': 'application/json' };
       res.writeHead(status, headers).end(body === undefined ? undefined : JSON.stringify(body));
     });

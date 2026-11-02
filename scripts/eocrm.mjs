@@ -7,11 +7,17 @@ import { createClient } from '../lib/api.mjs';
 import { credentialStore } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, plain } from '../lib/login.mjs';
 import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine } from '../lib/workspace.mjs';
-import { linkWorktree } from '../lib/run.mjs';
-import { writeJsonAtomic } from '../lib/state.mjs';
+import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
+import { loadConventions } from '../lib/reconcile.mjs';
+import { enqueue } from '../lib/outbox.mjs';
+import { eventId } from '../lib/ids.mjs';
+import { worktreeOf, writeJsonAtomic, withLock, loadRun, saveRun } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' } };
+const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' } };
+const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
+const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
+const CONVENTIONS_MS = 4000;
 const APPROVE = 'pairing requested: approve in Account → Agents within 15 minutes';
 
 class Usage extends Error {
@@ -24,6 +30,19 @@ function pairingLines(p) {
   if (p.status === 'choose') return ['pairing: choose a connection, then run pair <id>', ...p.candidates.map((c) => `connection ${plain(c.id)} ${plain(c.label).replace(/\s+/g, ' ')}`)];
   return [p.refused ? `running standalone (${p.refused})` : 'running standalone'];
 }
+
+// Without a matching --session, the most recently touched run.
+function liveRun(data, cwd, session) {
+  const live = runsOf(data, worktreeOf(cwd).key).filter((r) => !r.ended);
+  const run = live.find((r) => r.sessionId === session) ?? live[0];
+  if (!run) throw new Error('no active run in this worktree');
+  return run;
+}
+
+const need = (v, name) => {
+  if (typeof v !== 'string' || !v.trim()) throw new Usage(`--${name} required`);
+  return v;
+};
 
 const commands = {
   async login({ values, positionals: [workspace], env, cwd, out, data, store, open }) {
@@ -72,11 +91,47 @@ const commands = {
     if (pending) out(committedLine(pending));
   },
 
-  async link({ positionals: [answer], env, cwd, out, data, spawnFlush }) {
+  async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush }) {
     if (answer !== 'none' && !LINK_KEY.test(answer ?? '')) throw new Usage('usage: eocrm link <KEY|none>');
     const taskKey = answer === 'none' ? null : answer;
-    await linkWorktree({ data, env, now: Date.now, spawnFlush }, cwd, taskKey);
+    await linkWorktree({ data, env, now: Date.now, spawnFlush }, cwd, taskKey, values.session);
     out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
+  },
+
+  async record({ values: v, positionals: [kind], cwd, out, data }) {
+    let type;
+    let key;
+    let fields;
+    if (kind === 'ruling') {
+      type = 'ruling';
+      fields = { what: need(v.what, 'what'), why: need(v.why, 'why'), ...(v['cost-if-wrong'] ? { cost_if_wrong: v['cost-if-wrong'] } : {}) };
+      key = `${fields.what}\0${fields.why}`;
+    } else if (kind === 'finding') {
+      type = 'review_finding';
+      if (!SEVERITIES.includes(v.severity)) throw new Usage(`--severity must be ${SEVERITIES.join('|')}`);
+      if (v.outcome !== undefined && !OUTCOMES.includes(v.outcome)) throw new Usage(`--outcome must be ${OUTCOMES.join('|')}`);
+      fields = { severity: v.severity, summary: need(v.summary, 'summary'), ...(v.outcome ? { outcome: v.outcome } : {}) };
+      key = `${fields.severity}\0${fields.summary}\0${fields.outcome ?? ""}`;
+    } else throw new Usage('usage: eocrm record ruling|finding');
+    const run = liveRun(data, cwd, v.session);
+    const queued = await enqueue(data, { kind: 'event', sessionId: run.sessionId, event: { id: eventId(type, key), type, occurred_at: new Date().toISOString(), ...fields } });
+    if (!queued) throw Object.assign(new Error(`${kind} not recorded: the local queue is unavailable`), { exitCode: 1 });
+    out(`recorded ${kind}`);
+  },
+
+  async conventions({ values, env, cwd, out, data, store }) {
+    const run = liveRun(data, cwd, values.session);
+    let conventions = run.conventions;
+    if (!conventions) {
+      conventions = await loadConventions({}, run, runClient({ data, env, store })(run), Date.now() + CONVENTIONS_MS);
+      if (!conventions) throw new Error('conventions unavailable: ask the member');
+      await withLock(data, async () => {
+        if (!loadRun(data, run.sessionId).conventions) saveRun(data, run.sessionId, { conventions });
+      }, { giveUpMs: 1500 }).catch(() => {});
+    }
+    const compact = { workspace: run.workspace, ...conventions };
+    delete compact.workflows;
+    out(JSON.stringify(compact));
   },
 
   async logout({ env, out, data, store }) {
@@ -117,7 +172,7 @@ export async function main({
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
-    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|logout --data <dir>');
+    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout --data <dir>');
     let data;
     try {
       data = dataDir({ argv, env, data: values.data });

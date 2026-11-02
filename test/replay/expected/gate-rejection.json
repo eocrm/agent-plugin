@@ -1,0 +1,57 @@
+[
+  {
+    "method": "GET",
+    "path": "/v1/agent-work/conventions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs",
+    "body": {
+      "branch": "feat/AB-3-fix",
+      "worktree": "<repo>",
+      "repo": "o/r",
+      "client_run_id": "gate-rejection"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "model-AFkSvubuRUPOxEBLWgK5vL-0-0",
+          "type": "usage",
+          "occurred_at": "<time>",
+          "model": "claude-opus-5-5"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "commit:J4a2fut7RYMGyZBdnGIP5a",
+          "type": "commit",
+          "occurred_at": "<time>",
+          "sha": "fe4fd2f221bf3b3225f95076f823ada258a539bc",
+          "subject": "WIP",
+          "repo": "o/r"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agent-runs/:id/events"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/agent-runs/:id",
+    "body": {
+      "state": "finished"
+    }
+  }
+]

@@ -1,0 +1,33 @@
+name: nightly-smoke
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nightly-smoke
+  cancel-in-progress: false
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      EOCRM_SMOKE_REGION: ${{ secrets.EOCRM_SMOKE_REGION }}
+      EOCRM_SMOKE_WORKSPACE: ${{ vars.EOCRM_SMOKE_WORKSPACE }}
+      EOCRM_SMOKE_TASK: ${{ vars.EOCRM_SMOKE_TASK }}
+      EOCRM_SMOKE_CLIENT_ID: ${{ secrets.EOCRM_SMOKE_CLIENT_ID }}
+      EOCRM_SMOKE_REFRESH_TOKEN: ${{ secrets.EOCRM_SMOKE_REFRESH_TOKEN }}
+      EOCRM_SMOKE_TOKEN_OUT: ${{ runner.temp }}/rotated-token
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: node --test test/smoke/live.test.mjs
+      - name: Store rotated refresh token
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.SMOKE_SECRETS_PAT }}
+        run: |
+          [ -s "$EOCRM_SMOKE_TOKEN_OUT" ] || exit 0
+          gh secret set EOCRM_SMOKE_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" < "$EOCRM_SMOKE_TOKEN_OUT"

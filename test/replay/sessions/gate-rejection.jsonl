@@ -1,0 +1,6 @@
+{"hook": "SessionStart", "input": {"source": "startup", "model": "claude-opus-5-5"}, "git": [["checkout", "-q", "-b", "feat/AB-3-fix"]]}
+{"hook": "UserPromptSubmit", "input": {"prompt": "Fix the bug."}}
+{"hook": "PostToolUse", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -am \"WIP\""}, "tool_response": {"stdout": "[feat/AB-3-fix 9a8b7c6] WIP", "stderr": "", "interrupted": false}, "tool_use_id": "toolu_c1"}, "git": [["add", "-A"], ["commit", "-q", "-m", "WIP"]], "fs": {"fix.txt": "fixed\n"}}
+{"hook": "Stop", "input": {"stop_hook_active": false}}
+{"hook": "Stop", "input": {"stop_hook_active": true}}
+{"hook": "SessionEnd", "input": {"reason": "other"}}
