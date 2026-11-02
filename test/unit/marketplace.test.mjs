@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -20,6 +20,16 @@ test('marketplace.json lists the plugin by relative source', () => {
   assert.equal(m.plugins[0].name, json('.claude-plugin/plugin.json').name);
   assert.ok(m.plugins[0].description);
   assert.equal('version' in m.plugins[0], false);
+});
+
+test('eocrm-mcp is a separate tools-only plugin that eocrm depends on', () => {
+  const m = json('.claude-plugin/marketplace.json');
+  const entry = m.plugins.find((p) => p.name === 'eocrm-mcp');
+  assert.equal(entry.source, './mcp');
+  assert.equal(json('mcp/.claude-plugin/plugin.json').name, 'eocrm-mcp');
+  assert.deepEqual(json('mcp/.mcp.json').mcpServers.eocrm, { type: 'http', url: 'https://mcp.eu.eocrm.io/' });
+  assert.ok(json('.claude-plugin/plugin.json').dependencies.includes('eocrm-mcp'));
+  assert.equal(existsSync(new URL('mcp/hooks', root)), false);
 });
 
 test('nightly smoke without credentials warns and exits 0', () => {
