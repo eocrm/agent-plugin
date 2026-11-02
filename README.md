@@ -9,6 +9,8 @@ Reports Claude Code agent work (runs, plan steps, commits, test runs, PRs, revie
 /plugin install eocrm@eocrm
 ```
 
+Then turn on updates: `/plugin` → Marketplaces → `eocrm` → Enable auto-update. Claude Code leaves it off for third-party catalogues, and you only receive a release when its `version` changes.
+
 Prerequisites: Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
 
 ## Use
