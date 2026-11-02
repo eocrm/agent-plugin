@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -107,4 +107,29 @@ test('a rejected start is not re-sent until the run changes, and its record is k
   await go();
   assert.equal(starts(), 3);
   assert.equal(loadRun(data, 'sess-c6').rejected.length, 1);
+});
+
+const usageLine = (id, model) => `${JSON.stringify({ type: 'assistant', message: { id, model, usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 7 } } })}\n`;
+const usageEvents = (server) => server.requests.filter((r) => r.path.endsWith('/events') && r.method === 'POST').flatMap((r) => r.body.events).filter((e) => e.type === 'usage' && e.cache_read_tokens !== undefined);
+
+test('Stop queues one usage event per model with a stable id, and a second Stop sends only new messages', async (t) => {
+  const { server, dir, transcript, ctx, go } = await setup(t);
+  const input = { session_id: 'sess-u1', cwd: dir, transcript_path: transcript };
+  await handle('SessionStart', input, ctx);
+  await handle('UserPromptSubmit', input, ctx);
+  writeFileSync(transcript, usageLine('m1', 'model-a') + usageLine('m1', 'model-a') + usageLine('m2', 'model-b'));
+  await handle('Stop', input, ctx);
+  await go();
+  const first = usageEvents(server);
+  assert.deepEqual(first.map((e) => [e.model, e.input_tokens, e.output_tokens, e.cache_read_tokens, e.cache_write_tokens, 'cost_usd' in e]), [['model-a', 10, 5, 100, 7, false], ['model-b', 10, 5, 100, 7, false]]);
+  assert.equal(new Set(first.map((e) => e.id)).size, 2);
+  await handle('UserPromptSubmit', input, ctx);
+  appendFileSync(transcript, usageLine('m3', 'model-a'));
+  await handle('Stop', input, ctx);
+  await go();
+  const all = usageEvents(server);
+  assert.equal(all.length, 3);
+  assert.deepEqual(all[2].model, 'model-a');
+  assert.equal(all[2].input_tokens, 10);
+  assert.notEqual(all[2].id, first[0].id);
 });

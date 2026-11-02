@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "eocrm",
-    "version": "0.21.0"
+    "version": "0.22.0"
   },
   "paths": {
     "/v1/agent-runs": {
@@ -240,7 +240,7 @@
       },
       "get": {
         "operationId": "agentRun.events.index",
-        "description": "Oldest first, 100 per page. Pass `next_cursor` back as `cursor` for the next page.",
+        "description": "Oldest first, 100 per page, without `waiting`, `resumed` and `turn` signals. Pass `next_cursor` back as `cursor`.",
         "summary": "List a run's events",
         "tags": [
           "AgentRun"
@@ -837,6 +837,22 @@
                   "maximum": 1000000000000
                 },
                 "output_tokens": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "cache_read_tokens": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "cache_write_tokens": {
                   "type": [
                     "integer",
                     "null"

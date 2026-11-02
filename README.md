@@ -29,6 +29,8 @@ Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`
 
 Run metadata (branch, repo, task key), plan items, commits (sha, subject), test commands and result lines, PR links and review findings. Everything is scrubbed for secrets and capped in length before it leaves the machine. Events are queued locally and retried; when the queue cannot be flushed the run shows as "tracking stale".
 
+Token counts per model are read from the local session transcript; nothing else from it leaves the machine.
+
 ## Troubleshooting
 
 Run `/eocrm:status` for sign-in, workspace and pairing state.
