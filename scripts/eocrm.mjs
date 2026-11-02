@@ -5,7 +5,7 @@ import { dataDir } from '../lib/paths.mjs';
 import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { credentialStore, spawnWithStdin } from '../lib/credentials.mjs';
-import { login, openBrowser, requestPair, recordPairing, plain } from '../lib/login.mjs';
+import { login, openBrowser, requestPair, recordPairing, pairing, plain } from '../lib/login.mjs';
 import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine } from '../lib/workspace.mjs';
 import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
 import { loadConventions } from '../lib/reconcile.mjs';
@@ -31,6 +31,17 @@ function pairingLines(p) {
   return [p.refused ? `running standalone (${p.refused})` : 'running standalone'];
 }
 
+async function recheck({ data, env, store, workspace, region }) {
+  try {
+    const result = await pairing(createClient({ endpoints: endpoints({ region, env }), workspace, store }));
+    if (result.status === 'choose' || result.refused) return ['pairing requested'];
+    recordPairing(data, workspace, result.status);
+    return pairingLines(result);
+  } catch {
+    return ['pairing requested'];
+  }
+}
+
 // Without a matching --session, the most recently touched run.
 function liveRun(data, cwd, session) {
   const live = runsOf(data, worktreeOf(cwd).key).filter((r) => !r.ended);
@@ -46,8 +57,9 @@ const need = (v, name) => {
 
 const commands = {
   async login({ values, positionals: [workspace], env, cwd, out, data, store, open }) {
-    const result = await login({ data, region: values.region, workspace, env, store, openBrowser: (u) => open(u, { print: out }) });
-    const lines = [`signed in to ${result.workspace} (${values.region})`];
+    const region = values.region ?? 'eu';
+    const result = await login({ data, region, workspace, env, store, openBrowser: (u) => open(u, { print: out }) });
+    const lines = [`signed in to ${result.workspace} (${region})`];
     if (result.storage === 'file') lines.push(`tokens stored in ${join(data, 'credentials.json')}: no keychain found`);
     lines.push(...pairingLines(result.pairing));
     const { pending } = resolveWorkspace({ data, cwd });
@@ -87,6 +99,7 @@ const commands = {
     const known = account.workspaces?.[workspace];
     if (region !== account.region) out(`run /eocrm:login --region ${region} ${workspace}`);
     else if (!known) out(`run /eocrm:login ${workspace}`);
+    else if (known === 'requested') for (const l of await recheck({ data, env, store, workspace, region })) out(l);
     else out(`pairing ${known}`);
     if (pending) out(committedLine(pending));
   },
