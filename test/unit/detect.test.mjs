@@ -334,6 +334,7 @@ test('an ended run queues no detected events', async () => {
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'one');
   const { s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
+  writeOutbox(data, []);
   await fire('SessionEnd');
   await fire('PostToolUse', bash('git commit -m one && npm test', '1 passed'));
   assert.deepEqual(readOutbox(data).filter((e) => e.sessionId === s && e.kind === 'event'), []);

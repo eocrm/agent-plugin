@@ -23,12 +23,11 @@ async function main() {
     }
     gitTimeout.ms = HOOK_GIT_MS;
     const { stdout } = await handle(argv[0], JSON.parse(await readStdin()), ctx);
-    if (stdout) process.stdout.write(stdout);
+    if (stdout) await new Promise((resolve) => process.stdout.write(stdout, resolve));
   } catch (e) {
     if (data) logError(data, e);
   }
 }
 
-main().finally(() => {
-  process.exitCode = 0;
-});
+// Exits at once: a request the reconciler gave up on must not keep the hook past its timeout.
+main().finally(() => process.exit(0));

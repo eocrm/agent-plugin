@@ -102,11 +102,14 @@ test('a second sign-in reuses the client registration, and a live token skips th
 test('a callback with the wrong state is refused and nothing is stored', async (t) => {
   const { data, store, key, run, calls } = await setup(t);
   let refused;
-  const wrongState = async (url) => {
-    const res = await fetch(new URL('/callback?code=evil&state=wrong', url));
-    refused = res.status;
+  let browsed;
+  const wrongState = (url) => {
+    browsed = fetch(new URL('/callback?code=evil&state=wrong', url)).then((res) => {
+      refused = res.status;
+    });
   };
-  await assert.rejects(run({ openBrowser: wrongState, timeoutMs: 400 }), (e) => e instanceof LoginError && e.exitCode === 3 && /timed out/.test(e.message));
+  await assert.rejects(run({ openBrowser: wrongState, timeoutMs: 2000 }), (e) => e instanceof LoginError && e.exitCode === 3 && /timed out/.test(e.message));
+  await browsed;
   assert.equal(refused, 400);
   assert.equal(calls('POST', '/oauth/token').length, 0);
   assert.equal(await store.get(key), null);
@@ -116,15 +119,19 @@ test('a callback with the wrong state is refused and nothing is stored', async (
 test('a callback addressed to another host name is refused', async (t) => {
   const { run } = await setup(t);
   let status;
-  const rebound = (url) => new Promise((resolve) => {
-    const u = new URL(url);
-    request({ host: '127.0.0.1', port: u.port, path: '/start', headers: { host: `evil.test:${u.port}` } }, (res) => {
-      status = res.statusCode;
-      res.resume();
-      resolve();
-    }).end();
-  });
-  await assert.rejects(run({ openBrowser: rebound, timeoutMs: 400 }), /timed out/);
+  let browsed;
+  const rebound = (url) => {
+    browsed = new Promise((resolve, reject) => {
+      const u = new URL(url);
+      request({ host: '127.0.0.1', port: u.port, path: '/start', headers: { host: `evil.test:${u.port}` } }, (res) => {
+        status = res.statusCode;
+        res.resume();
+        resolve();
+      }).on('error', reject).end();
+    });
+  };
+  await assert.rejects(run({ openBrowser: rebound, timeoutMs: 2000 }), /timed out/);
+  await browsed;
   assert.equal(status, 400);
 });
 

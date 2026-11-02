@@ -321,3 +321,13 @@ test('del does not throw when the credentials file cannot be removed', { skip: p
     chmodSync(data, 0o700);
   }
 });
+
+test('del with when deletes only while the stored tokens still match', async () => {
+  const data = tmp();
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(ISSUER, TOKENS);
+  assert.equal(await store.del(ISSUER, { when: (t) => t?.access_token === 'other' }), false);
+  assert.equal((await store.get(ISSUER)).access_token, TOKENS.access_token);
+  assert.equal(await store.del(ISSUER, { when: (t) => t?.access_token === TOKENS.access_token }), true);
+  assert.equal(await store.get(ISSUER), null);
+});

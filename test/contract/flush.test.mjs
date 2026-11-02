@@ -59,16 +59,17 @@ test('flushing twice sends the same event ids; the second is all duplicates', as
   assert.deepEqual(replies.map((r) => r.body.duplicates), [0, n]);
 });
 
-test('a batch never mixes plan sources', async (t) => {
+test('each plan opens its own batch, so ticks follow their own plan', async (t) => {
   const { server, data, go } = await setup(t);
   const planEv = (id, source) => ({ kind: 'event', sessionId: SID, event: { id, type: 'plan', source, items: [{ key: 'k', text: 't' }] } });
   await enqueue(data, planEv('plan:a', 'todo'));
   await enqueue(data, ev(1));
   await enqueue(data, planEv('plan:b', 'todo'));
+  await enqueue(data, { kind: 'event', sessionId: SID, event: { id: 'step:b1', type: 'step', phase: 'finished', plan_key: 'k' } });
   await enqueue(data, planEv('plan:c', 'markdown'));
   await go();
   const batches = server.requests.filter((r) => r.path.endsWith('/events')).map((r) => r.body.events.map((e) => e.id));
-  assert.deepEqual(batches, [['plan:a', 'commit:1', 'plan:b'], ['plan:c']]);
+  assert.deepEqual(batches, [['plan:a', 'commit:1'], ['plan:b', 'step:b1'], ['plan:c']]);
 });
 
 test('a 422 on events.1.url rejects only entry 1', async (t) => {
@@ -79,10 +80,28 @@ test('a 422 on events.1.url rejects only entry 1', async (t) => {
   const result = await go();
   assert.deepEqual(result.rejected.map((r) => [r.eventId, r.type, r.label, r.status]), [['pull_request:x', 'pull_request', 'not a url', 422]]);
   assert.match(result.rejected[0].message, /uri/);
+  assert.deepEqual(result.rejected[0].fields, ['url']);
   const batches = server.requests.filter((r) => r.path.endsWith('/events')).map((r) => r.body.events.map((e) => e.id));
   assert.deepEqual(batches, [['commit:0', 'pull_request:x', 'commit:2'], ['commit:0', 'commit:2']]);
   assert.deepEqual(readOutbox(data), []);
   assert.deepEqual(loadRun(data, SID).rejected.map((r) => r.eventId), ['pull_request:x']);
+});
+
+test('a rejected plan drops its ticks unrecorded, up to the next plan', async (t) => {
+  const { server, data, go } = await setup(t, {
+    'agentRun.events.store': ({ body }) => body.events[0].id === 'plan:b'
+      ? { status: 422, body: { message: 'Bad.', errors: { 'events.0.items': ['bad items'] } } }
+      : { status: 200, body: { accepted: body.events.length, duplicates: 0, dropped: 0 } },
+  });
+  const planEv = (id) => ({ kind: 'event', sessionId: SID, event: { id, type: 'plan', source: 'todo', items: [{ key: 'k', text: 't' }] } });
+  const tick = (id) => ({ kind: 'event', sessionId: SID, event: { id, type: 'step', phase: 'finished', plan_key: 'k' } });
+  for (const e of [planEv('plan:a'), tick('step:a1'), planEv('plan:b'), tick('step:b1'), ev(1), tick('step:b2'), planEv('plan:c'), tick('step:c1')]) await enqueue(data, e);
+  const result = await go();
+  assert.deepEqual(result.rejected.map((r) => [r.eventId, r.status]), [['plan:b', 422]]);
+  assert.deepEqual(loadRun(data, SID).rejected.map((r) => r.eventId), ['plan:b']);
+  const batches = server.requests.filter((r) => r.path.endsWith('/events')).map((r) => r.body.events.map((e) => e.id));
+  assert.deepEqual(batches, [['plan:a', 'step:a1'], ['plan:b', 'step:b1', 'commit:1', 'step:b2'], ['commit:1'], ['plan:c', 'step:c1']]);
+  assert.deepEqual(readOutbox(data), []);
 });
 
 test('any other 422 rejects the whole batch', async (t) => {
@@ -170,12 +189,13 @@ test('one broken session does not hold back the others', async (t) => {
 
 test('a 404 on events rolls to generation 1 and keeps the events', async (t) => {
   const { server, data, go } = await setup(t);
-  saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
+  saveRun(data, SID, { runId: '01JZGONE0000000000000000000', acked: { 'commit:old': true }, serverEventsRead: true });
   await enqueue(data, ev(0));
   assert.deepEqual(await go(), { sent: 1, rejected: [], retryable: false, signedOut: false });
   assert.deepEqual(server.requests.filter((r) => r.path === '/v1/agent-runs').map((r) => r.body.client_run_id), [`${SID}.1`]);
   const run = loadRun(data, SID);
   assert.deepEqual([run.generation, run.clientRunId], [1, `${SID}.1`]);
+  assert.deepEqual([run.acked, run.serverEventsRead], [{ 'commit:0': true }, false], 'the old run\'s acks and server read do not carry over');
   assert.equal(server.requests.at(-1).body.events[0].id, 'commit:0');
 });
 

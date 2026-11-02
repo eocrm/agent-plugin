@@ -54,10 +54,9 @@ export function* cases(pick) {
   for (const sh of shapes) for (const c of ctx(sh)) yield c;
 }
 
-// Accepted: curl -u/--user never takes a dash-led value (ruling); JSON escaped inside JSON (filed residual);
+// Accepted: curl -u/--user never takes a dash-led value (ruling);
 // a single-dash keyword flag after a secret flag is taken as that flag's value (ruling 5);
-// a bare attached -p prompts, so the next word is not its value (by design, also inside sh -c).
+// 7z's bare -p prompts, so the next word is not its value (also inside sh -c).
 export const accepted = (t) => /\bcurl\b[^\n]*?(?:-u|--user)(?:[\s=]|\\\n)+["'$]*-Qv/.test(t)
-  || /^\{"k":"\\"/.test(t)
   || /--(?:no-)?password -(?:token|password)(?:[\s\u0085]|\\\n)/.test(t)
-  || /^sh -c "(?:mysqldump|mariadb-admin|7z a)[\s\u0085]-p[\s\u0085]/.test(t);
+  || /^sh -c "7z a[\s\u0085]-p[\s\u0085]/.test(t);

@@ -8,9 +8,12 @@ const vectors = JSON.parse(readFileSync(new URL('../fixtures/scrubber-vectors.js
 
 test('vectors', () => {
   assert.ok(vectors.length > 100);
-  for (const { input, expected } of vectors) {
-    assert.equal(scrub(input), input.length > 16384 ? '[redacted: unscannable]' : expected, JSON.stringify(input));
+  const fails = [];
+  for (const { input, expected, plugin } of vectors) {
+    const want = input.length > 16384 ? '[redacted: unscannable]' : plugin ?? expected;
+    if (scrub(input) !== want) fails.push(input);
   }
+  assert.deepEqual(fails, []);
 });
 
 test('clean truncates to the limit with a suffix', () => {
@@ -60,6 +63,16 @@ test('clean never leaves a lone surrogate at the cut', () => {
   assert.ok(inner.isWellFormed());
 });
 
+// EventPayload::clean gives "[redacted]\n": the plugin also drops the whitespace before the cut and marks it.
+test('clean matches EventPayload on a PEM or token the raw cut drops', () => {
+  const body = 'MIIJKAIBAAKCAgEA'.repeat(198).slice(0, 3161).replace(/(.{64})(?!$)/g, '$1\n');
+  const pem = `-----BEGIN RSA PRIVATE KEY-----\n${body}\n-----END RSA PRIVATE KEY-----`;
+  assert.equal(pem.length, 3272);
+  assert.equal(clean(pem, 500), '[redacted]… [truncated]');
+  const short = `-----BEGIN RSA PRIVATE KEY-----\n${'A'.repeat(1915)}\n-----END RSA PRIVATE KEY-----`;
+  assert.equal(clean(`${short}\nghp_${'F'.repeat(36)}`, 500), '[redacted]… [truncated]');
+});
+
 test('clean drops the token cut by the scan window', () => {
   const head = '-----BEGIN RSA PRIVATE KEY-----\n';
   const tail = '\n-----END RSA PRIVATE KEY-----';
@@ -87,10 +100,19 @@ test('scrub fails closed above 16384 chars', () => {
   assert.equal(scrub(`TOKEN=x ${'a'.repeat(16384)}`), '[redacted: unscannable]');
 });
 
-for (const unit of ['a-', '-', 'eyJ', 'mysql ', 'sk-', ' -u a', '_PASSx', 'zip ', 'redis-cli ', 'Cookie:', '-pass ', 'curl ', 'curl -b ', '\\', '\\"TOKEN\\": \\"', 'TOKEN: \\\\"a\\\\\\\\', "$'\\x", "$'\\n "]) {
+const units = JSON.parse(readFileSync(new URL('../fixtures/scrubber-linear-units.json', import.meta.url), 'utf8'));
+for (const unit of units) {
   test(`scrubs a long adversarial field in linear time: ${JSON.stringify(unit)}`, () => {
     const text = fill(unit, 16000);
     assert.ok(ms(() => scrub(text)) < 50);
+  });
+}
+
+for (const unit of ['token', 'a_TOKEN_b', 'TOKENX']) {
+  test(`does not blank a field that repeats a key word without a value: ${unit}`, () => {
+    const text = `x ${unit.repeat(1500)}`;
+    assert.equal(scrub(text), text);
+    assert.ok(ms(() => scrub(text)) < 200);
   });
 }
 
