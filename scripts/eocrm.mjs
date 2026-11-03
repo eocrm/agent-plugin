@@ -111,7 +111,7 @@ const commands = {
     out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
     if (!values.session) out('Only the default for new sessions changed (no --session).');
     if (others.length) {
-      const tasks = [...new Set(others.map((o) => o.task ?? 'none'))].join(', ');
+      const tasks = [...new Set(others.map((o) => o.task ?? 'none'))].sort().join(', ');
       out(`Also active here: ${others.length} other session${others.length === 1 ? '' : 's'} (on ${tasks}).`);
     }
   },

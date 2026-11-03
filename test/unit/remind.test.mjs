@@ -92,6 +92,26 @@ test('after_pause reminds only after 10 idle minutes', async () => {
   assert.equal((await fire('UserPromptSubmit'))?.additionalContext, promptLine('EO-1'));
 });
 
+test('after_pause reminds once per pause', async () => {
+  const { ctx, fire } = setup({ conventions: { task_switch_check: 'after_pause' }, lastStopAt: 100 * 60_000 - 11 * 60_000 });
+  assert.equal((await fire('UserPromptSubmit'))?.additionalContext, promptLine('EO-1'));
+  ctx.at += 6000;
+  assert.equal(await fire('UserPromptSubmit'), null);
+});
+
+test('a ULID or lower-case key of the linked task does not remind', async () => {
+  const { fire } = setup();
+  assert.equal(await fire(...tool('update', { id: '01J9ZQ4X7W8V6T5S4R3Q2P1N0M' })), null);
+  assert.equal(await fire(...tool('move_stage', { key: 'eo-1' })), null);
+  assert.equal((await fire(...tool('update', { id: 'eo-7' })))?.additionalContext, linkedLine('EO-1'));
+  assert.equal(await fire(...tool('update', { id: 'EO-7' })), null);
+});
+
+test('a non-string id does not remind', async () => {
+  const { fire } = setup();
+  for (const id of [7, { key: 'EO-7' }, ['EO-7'], undefined]) assert.equal(await fire(...tool('update', { id })), null);
+});
+
 test('signals_only never reminds on a prompt', async () => {
   const { fire } = setup({ conventions: { task_switch_check: 'signals_only' }, lastStopAt: 1 });
   assert.equal(await fire('UserPromptSubmit'), null);

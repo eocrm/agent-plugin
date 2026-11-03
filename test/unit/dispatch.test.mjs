@@ -189,6 +189,27 @@ test('link moves only my run; a later session gets the default', async () => {
   assert.equal(loadRun(data, c).start.task, 'EO-2');
 });
 
+test('a later default doesn\'t move a session that already started', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await ensureRun(ctx, input(a, dir));
+  await ensureRun(ctx, input(b, dir));
+  await linkWorktree(ctx, dir, 'EO-1', a);
+  assert.equal((await ensureRun(ctx, input(b, dir, { source: 'compact' }))).start.task, undefined);
+  saveRun(data, b, { ended: true, runId: 'r1' });
+  const resumed = await ensureRun(ctx, input(b, dir, { source: 'resume' }));
+  assert.equal(resumed.generation, 1);
+  assert.equal(resumed.start.task, undefined);
+  const starts = [];
+  const ok = { status: 200, body: {} };
+  const client = { startRun: async (body) => { starts.push(body); return { status: 201, body: { id: 'r2' } }; }, recordEvents: async () => ok, heartbeat: async () => ok, updateRun: async () => ok };
+  await flush({ data, sessionId: b, clientFor: () => client });
+  assert.equal(starts.length, 1);
+  assert.equal(starts[0].task, undefined);
+});
+
 test('link with no live run of mine relinks nobody', async () => {
   const data = signedIn();
   const dir = repo('main');
@@ -272,6 +293,10 @@ test('link reports other active sessions', async () => {
     return out;
   };
   assert.ok((await link(a, dir)).includes('Also active here: 1 other session (on EO-1).'));
+  const c2 = sid();
+  await ensureRun(ctx, input(c2, dir));
+  await linkWorktree(ctx, dir, null, c2);
+  assert.ok((await link(a, dir)).includes('Also active here: 2 other sessions (on EO-1, none).'));
   const alone = repo('main');
   const c = sid();
   await ensureRun(ctx, input(c, alone));
