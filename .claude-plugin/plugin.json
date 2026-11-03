@@ -1,6 +1,6 @@
 {
   "name": "eocrm",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Reports Claude Code agent work (runs, commits, tests, PRs, plan steps) to eocrm.",
   "license": "Apache-2.0",
   "author": {
