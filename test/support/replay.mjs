@@ -31,9 +31,9 @@ export const sessionFile = (name) => join(ROOT, 'test/replay/sessions', `${name}
 const CONVENTIONS = JSON.parse(readFileSync(join(ROOT, 'test/contract/responses/agentWorkConventions.show.json'), 'utf8'));
 
 // Plans import, and eocrm refuses any commit subject "WIP".
-export const startReplayServer = () => startFixtureServer({
+export const startReplayServer = (conventions = {}) => startFixtureServer({
   responses: {
-    'agentWorkConventions.show': { status: 200, body: { ...CONVENTIONS, plan_import: true } },
+    'agentWorkConventions.show': { status: 200, body: { ...CONVENTIONS, plan_import: true, ...conventions } },
     'agentRun.events.store': ({ body }) => {
       const i = body.events.findIndex((e) => e.type === 'commit' && e.subject === 'WIP');
       return i < 0 ? undefined : { status: 422, body: { message: 'The given data was invalid.', errors: { [`events.${i}.subject`]: ['The subject is not allowed.'] } } };
