@@ -36,7 +36,7 @@ test('nightly smoke without credentials skips locally and fails in CI, naming wh
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('EOCRM_') && !['CI', 'NODE_TEST_CONTEXT'].includes(k)));
   const local = spawnSync(process.execPath, [SMOKE], { env, encoding: 'utf8' });
   assert.equal(local.status, 0);
-  assert.match(local.stdout, /# missing EOCRM_SMOKE_REGION, .*EOCRM_SMOKE_REFRESH_TOKEN/);
+  assert.match(local.stdout, /missing EOCRM_SMOKE_REGION, .*EOCRM_SMOKE_REFRESH_TOKEN/);
   const ci = spawnSync(process.execPath, [SMOKE], { env: { ...env, CI: 'true' }, encoding: 'utf8' });
   assert.equal(ci.status, 1);
   assert.match(ci.stdout, /missing EOCRM_SMOKE_REGION, .*EOCRM_SMOKE_REFRESH_TOKEN/);
