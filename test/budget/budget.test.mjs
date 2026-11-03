@@ -25,7 +25,7 @@ for (const name of SESSIONS) {
     const server = await startReplayServer();
     t.after(() => server.close());
     const { injected, printed } = await replay(sessionFile(name), { server, data: signedIn(), harness: 'codex' });
-    assert.ok(printed.length > 0 || name !== 'gate-rejection', 'the gate ran under Codex hooks');
+    if (name === 'gate-rejection') assert.ok(printed.some(({ hook, stdout }) => hook === 'Stop' && JSON.parse(stdout).decision === 'block'), 'the gate ran under Codex hooks');
     for (const { hook, stdout } of printed) assert.ok(QUIET(hook, JSON.parse(stdout)), `${hook} printed ${stdout}`);
     const total = injected.reduce((s, { text }) => s + tokens(text), 0);
     assert.ok(total <= BUDGET, `${name}: ${total} > ${BUDGET}`);

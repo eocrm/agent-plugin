@@ -8,7 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const NAMES = ['link-run', 'file-human-work', 'pick-type', 'record-judgement', 'login', 'status', 'use'];
 
 function parse(name) {
-  const m = /^---\nname: (.+)\ndescription: (.+)\n---\n([\s\S]*)$/.exec(readFileSync(join(root, 'skills', name, 'SKILL.md'), 'utf8'));
+  const m = /^---\nname: (.+)\ndescription: (.+)\n(?:(?:argument-hint|disable-model-invocation): .+\n)*---\n([\s\S]*)$/.exec(readFileSync(join(root, 'skills', name, 'SKILL.md'), 'utf8'));
   assert.ok(m, `${name} frontmatter`);
   return { name: m[1], description: m[2], body: m[3] };
 }

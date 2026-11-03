@@ -1,6 +1,8 @@
 ---
 name: login
 description: Sign in to eocrm and pair with your agent connection
+argument-hint: "[workspace]"
+disable-model-invocation: true
 ---
 Run, adding the workspace slug if the member gave one:
 
