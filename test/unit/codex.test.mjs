@@ -14,9 +14,9 @@ const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe', encoding: 'utf8' }).trim();
 const shell = (command, tool_response = '') => ({ session_id: 's', cwd: '/w', tool_name: 'shell', tool_use_id: 'c1', tool_input: { command }, tool_response });
 const only = (event, input) => {
-  const out = codexEvents(event, input);
-  assert.equal(out[0].event, event);
-  return out[0].input;
+  const hit = codexEvents(event, input).find((e) => e.event === event);
+  assert.ok(hit);
+  return hit.input;
 };
 
 test('maps PermissionRequest to a permission waiting notification', () => {
@@ -27,7 +27,7 @@ test('maps PermissionRequest to a permission waiting notification', () => {
 });
 
 test('PostToolUse also resumes', () => {
-  assert.deepEqual(codexEvents('PostToolUse', fixture('post-tool-use-shell')).map((e) => e.event), ['PostToolUse', 'Resume']);
+  assert.deepEqual(codexEvents('PostToolUse', fixture('post-tool-use-shell')).map((e) => e.event), ['Resume', 'PostToolUse']);
   assert.deepEqual(codexEvents('PreToolUse', fixture('post-tool-use-shell')).map((e) => e.event), ['PreToolUse']);
 });
 
@@ -55,6 +55,13 @@ test('normalises an argv shell command', () => {
   assert.equal(only('PostToolUse', shell(['git', 'commit', '-m', 'two words'])).tool_input.command, "git commit -m 'two words'");
 });
 
+test('unwraps a shell with extra flags', () => {
+  for (const argv of [['bash', '-e', '-lc', 'git commit -m x'], ['bash', '--noprofile', '-ec', 'git commit -m x']]) {
+    assert.equal(only('PostToolUse', shell(argv)).tool_input.command, 'git commit -m x');
+  }
+  assert.equal(only('PostToolUse', shell(['bash', '--rcfile', 'x'])).tool_input.command, 'bash --rcfile x');
+});
+
 test('maps shell output to the detector shape', () => {
   const r = testRun({ ...only('PostToolUse', fixture('post-tool-use-shell')), hook_event_name: 'PostToolUse' });
   assert.equal(r.command, 'npm test');
@@ -62,6 +69,9 @@ test('maps shell output to the detector shape', () => {
   assert.equal(r.exit_code, 1);
   const s = testRun({ ...only('PostToolUse', shell('npm test', { stdout: 'ok 1\n# pass 1', exitCode: 0 })), hook_event_name: 'PostToolUse' });
   assert.deepEqual([s.result_line, s.exit_code], ['# pass 1', 0]);
+  for (const field of ['aggregated_output', 'formatted_output']) {
+    assert.equal(testRun({ ...only('PostToolUse', shell('npm test', { [field]: '# pass 2', exit_code: 0 })), hook_event_name: 'PostToolUse' }).result_line, '# pass 2');
+  }
   const str = testRun({ ...only('PostToolUse', shell('npm test', 'tests 2 passed')), hook_event_name: 'PostToolUse' });
   assert.deepEqual([str.result_line, str.exit_code], ['tests 2 passed', 0]);
 });
