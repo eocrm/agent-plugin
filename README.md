@@ -23,6 +23,7 @@ Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`
 
 - `/eocrm:login` signs in through the browser (sign-in starts in the EU and eocrm resolves your home region; `--region ru` signs in to an RU workspace) and stores tokens in the OS keychain, or a 0600 file when no keychain is usable.
 - `/eocrm:use` maps the current repo to a workspace. The mapping is stored per repo, and `.claude/eocrm.json` (workspace slug and region only) can be committed to share it; each user confirms it once. With a single workspace the plugin picks it automatically.
+- Reminders: on session start, resume or `/clear`, on a new branch, or when work moves to another task, the plugin reminds Claude of the linked task. The Conventions **Task switch check** sets how often it checks for a task switch: Every prompt, After a pause (the default), or Signals only.
 - Four skills: `pick-type`, `link-run`, `record-judgement`, `file-human-work`.
 
 ## What is sent

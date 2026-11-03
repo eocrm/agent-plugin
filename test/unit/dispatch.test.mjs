@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { handle, linkContext, ensureRun, LINK_ASK } from '../../lib/run.mjs';
+import { handle, linkContext, ensureRun, linkWorktree, LINK_ASK } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
 import { git as stateGit, loadRun, saveRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
 import { repoSlug } from '../../lib/git.mjs';
 import { main } from '../../scripts/eocrm.mjs';
+import { flush } from '../../lib/flush.mjs';
 import { committedLine } from '../../lib/workspace.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../../hooks/dispatch.mjs', import.meta.url));
@@ -65,9 +66,11 @@ test('hooks.json declares exactly the planned hooks', () => {
   assert.deepEqual(rows, [
     ['SessionStart', 'SessionStart', 'startup|resume|clear|compact|fork', false, 10],
     ['UserPromptSubmit', 'UserPromptSubmit', null, true, null],
+    ['UserPromptSubmit', 'Remind', null, false, 5],
     ['PreToolUse', 'PreToolUse', 'Agent|Task', true, null],
     ['PostToolUse', 'PostToolUse', 'Bash|Write|Edit|MultiEdit|TodoWrite|TaskCreate|TaskUpdate|Agent|Task', true, null],
     ['PostToolUse', 'Resume', '*', true, null],
+    ['PostToolUse', 'Remind', 'Bash|mcp__.*eocrm.*__tasks_(create|update|move_stage)', false, 5],
     ['PostToolUseFailure', 'PostToolUseFailure', 'Bash', true, null],
     ['Notification', 'Notification', 'permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input', true, null],
     ['Stop', 'Stop', null, false, 30],
@@ -148,7 +151,7 @@ test('after link none the next session prints nothing', async () => {
   const dir = repo('main');
   const out = [];
   assert.equal(await main({ argv: ['link', 'none', '--data', data], cwd: dir, env: {}, out: (l) => out.push(l), err: () => {} }), 0);
-  assert.equal(out.length, 1);
+  assert.deepEqual(out, ['not linked to a task', 'Only the default for new sessions changed (no --session).']);
   const r = hook('SessionStart', JSON.stringify(input(sid(), dir)), { data });
   assert.deepEqual([r.status, r.stdout], [0, '']);
 });
@@ -161,13 +164,173 @@ test('link KEY saves the answer and queues a task update for the live run only',
   await handle('SessionStart', input(ended, dir), ctx);
   await handle('SessionEnd', input(ended, dir), ctx);
   await handle('SessionStart', input(live, dir), ctx);
-  const code = await main({ argv: ['link', 'AB-12', '--data', data], cwd: dir, env: ctx.env, out: () => {}, err: () => {} });
+  const out = [];
+  const code = await main({ argv: ['link', 'AB-12', '--session', live, '--data', data], cwd: dir, env: ctx.env, out: (l) => out.push(l), err: () => {} });
   assert.equal(code, 0);
+  assert.deepEqual(out, ['linked to AB-12']);
   assert.deepEqual(loadWorktree(data, worktreeOf(dir).key).taskKey, 'AB-12');
   assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => [e.sessionId, e.task]), [[live, 'AB-12']]);
   for (const bad of ['ab-12', 'AB-', 'AB-12 x', '']) {
     assert.equal(await main({ argv: ['link', bad, '--data', data], cwd: dir, env: {}, out: () => {}, err: () => {} }), 2, bad);
   }
+});
+
+test('link moves only my run; a later session gets the default', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b, c] = [sid(), sid(), sid()];
+  await ensureRun(ctx, input(a, dir));
+  await ensureRun(ctx, input(b, dir));
+  await linkWorktree(ctx, dir, 'EO-2', a);
+  assert.equal(loadRun(data, a).start.task, 'EO-2');
+  assert.equal(loadRun(data, b).start.task, undefined);
+  await ensureRun(ctx, input(c, dir));
+  assert.equal(loadRun(data, c).start.task, 'EO-2');
+});
+
+test('a later default doesn\'t move a session that already started', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await ensureRun(ctx, input(a, dir));
+  await ensureRun(ctx, input(b, dir));
+  await linkWorktree(ctx, dir, 'EO-1', a);
+  assert.equal((await ensureRun(ctx, input(b, dir, { source: 'compact' }))).start.task, undefined);
+  saveRun(data, b, { ended: true, runId: 'r1' });
+  const resumed = await ensureRun(ctx, input(b, dir, { source: 'resume' }));
+  assert.equal(resumed.generation, 1);
+  assert.equal(resumed.start.task, undefined);
+  const starts = [];
+  const ok = { status: 200, body: {} };
+  const client = { startRun: async (body) => { starts.push(body); return { status: 201, body: { id: 'r2' } }; }, recordEvents: async () => ok, heartbeat: async () => ok, updateRun: async () => ok };
+  await flush({ data, sessionId: b, clientFor: () => client });
+  assert.equal(starts.length, 1);
+  assert.equal(starts[0].task, undefined);
+});
+
+test('link --session moves my run after I cd into another worktree', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const feat = `${dir}-feat`;
+  git(dir, 'worktree', 'add', '-q', feat, '-b', 'feat');
+  const ctx = ctxFor(data);
+  const a = sid();
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, feat, 'EO-5', a);
+  assert.deepEqual([loadRun(data, a).linkedTask, loadRun(data, a).start.task], ['EO-5', 'EO-5']);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => [e.sessionId, e.task]), [[a, 'EO-5']]);
+  assert.equal((await ensureRun(ctx, input(a, feat, { source: 'compact' }))).start.task, 'EO-5');
+});
+
+test('a 0.1.4 run keeps its own first task after the default changes', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await linkWorktree(ctx, dir, 'EO-1', undefined);
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, dir, null, undefined);
+  await ensureRun(ctx, input(b, dir));
+  saveRun(data, a, { linkedTask: undefined });
+  saveRun(data, b, { linkedTask: undefined });
+  await linkWorktree(ctx, dir, 'EO-2', undefined);
+  assert.equal((await ensureRun(ctx, input(a, dir, { source: 'compact' }))).start.task, 'EO-1');
+  assert.equal((await ensureRun(ctx, input(b, dir, { source: 'compact' }))).start.task, undefined);
+});
+
+test('link with no live run of mine relinks nobody', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await ensureRun(ctx, input(a, dir));
+  await ensureRun(ctx, input(b, dir));
+  await linkWorktree(ctx, dir, 'EO-2', 'not-a-live-session');
+  assert.deepEqual([loadRun(data, a).start.task, loadRun(data, b).start.task], [undefined, undefined]);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task'), []);
+  assert.equal(loadWorktree(data, worktreeOf(dir).key).taskKey, 'EO-2');
+});
+
+test('resume keeps the session\'s own task', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, dir, 'EO-1', a);
+  await ensureRun(ctx, input(b, dir));
+  await linkWorktree(ctx, dir, 'EO-2', b);
+  saveRun(data, a, { ended: true });
+  const before = loadRun(data, a).generation;
+  const run = await ensureRun(ctx, input(a, dir, { source: 'resume' }));
+  assert.equal(run.generation, before + 1);
+  assert.equal(run.start.task, 'EO-1');
+});
+
+test('link none sticks for my session', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await ensureRun(ctx, input(a, dir));
+  await ensureRun(ctx, input(b, dir));
+  await linkWorktree(ctx, dir, null, a);
+  await linkWorktree(ctx, dir, 'EO-2', b);
+  assert.equal((await ensureRun(ctx, input(a, dir, { source: 'resume' }))).start.task, undefined);
+});
+
+test('link none unfiles my run on the server', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const a = sid();
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, dir, null, a);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => [e.sessionId, e.task]), [[a, null]]);
+  const updates = [];
+  const ok = { status: 200, body: {} };
+  const client = { startRun: async () => ({ status: 201, body: { id: 'r1' } }), recordEvents: async () => ok, heartbeat: async () => ok, updateRun: async (id, body) => { updates.push([id, body]); return ok; } };
+  await flush({ data, sessionId: a, clientFor: () => client });
+  assert.deepEqual(updates, [['r1', { task: null }]]);
+});
+
+test('link while my run is ended applies on resume', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const a = sid();
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, dir, 'EO-1', a);
+  saveRun(data, a, { ended: true });
+  await linkWorktree(ctx, dir, 'EO-3', a);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => e.task), ['EO-1']);
+  assert.equal((await ensureRun(ctx, input(a, dir, { source: 'resume' }))).start.task, 'EO-3');
+});
+
+test('link reports other active sessions', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await ensureRun(ctx, input(a, dir));
+  await ensureRun(ctx, input(b, dir));
+  await linkWorktree(ctx, dir, 'EO-1', b);
+  const link = async (session, d) => {
+    const out = [];
+    assert.equal(await main({ argv: ['link', 'EO-3', '--session', session, '--data', data], cwd: d, env: ctx.env, out: (l) => out.push(l), err: () => {} }), 0);
+    return out;
+  };
+  assert.ok((await link(a, dir)).includes('Also active here: 1 other session (on EO-1).'));
+  const c2 = sid();
+  await ensureRun(ctx, input(c2, dir));
+  await linkWorktree(ctx, dir, null, c2);
+  assert.ok((await link(a, dir)).includes('Also active here: 2 other sessions (on EO-1, none).'));
+  const alone = repo('main');
+  const c = sid();
+  await ensureRun(ctx, input(c, alone));
+  assert.deepEqual(await link(c, alone), ['linked to EO-3']);
 });
 
 test('a linked worktree starts with its task', async () => {

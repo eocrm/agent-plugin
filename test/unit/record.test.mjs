@@ -69,7 +69,7 @@ test('record requires its arguments and a live run', async () => {
 });
 
 test('conventions prints compact JSON without workflows', async () => {
-  const s = setup({ workspace: 'ws', conventions: { epic_type: 'epic', human_space: null, priorities: ['p1'], workflows: [{ a: 1 }] } });
+  const s = setup({ workspace: 'ws', conventionsAt: Date.now(), conventions: { epic_type: 'epic', human_space: null, priorities: ['p1'], workflows: [{ a: 1 }] } });
   const r = await cli(['conventions'], s);
   assert.equal(r.code, 0);
   assert.deepEqual(JSON.parse(r.out), { workspace: 'ws', epic_type: 'epic', human_space: null, priorities: ['p1'] });
@@ -118,6 +118,7 @@ test('--session targets that run; an unknown session falls back to the newest', 
   await cli(['record', 'ruling', '--what', 'c', '--why', 'd', '--session', 'nope'], s);
   const by = Object.fromEntries(readOutbox(s.data).filter((e) => e.kind === 'event').map((e) => [e.event.what, e.sessionId]));
   assert.deepEqual(by, { a: 'sess', c: 'other' });
+  saveRun(s.data, 'sess', { startedAt: 1 });
   await cli(['link', 'ABC-1', '--session', 'sess'], s, { spawnFlush: () => {} });
   assert.equal(loadRun(s.data, 'sess').start.task, 'ABC-1');
   assert.equal(loadRun(s.data, 'other').start?.task, undefined);
