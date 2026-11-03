@@ -107,8 +107,12 @@ const commands = {
   async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush }) {
     if (answer !== 'none' && !LINK_KEY.test(answer ?? '')) throw new Usage('usage: eocrm link <KEY|none>');
     const taskKey = answer === 'none' ? null : answer;
-    await linkWorktree({ data, env, now: Date.now, spawnFlush }, cwd, taskKey, values.session);
+    const { others } = await linkWorktree({ data, env, now: Date.now, spawnFlush }, cwd, taskKey, values.session);
     out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
+    if (others.length) {
+      const tasks = [...new Set(others.map((o) => o.task ?? 'none'))].join(', ');
+      out(`Also active here: ${others.length} other session${others.length === 1 ? '' : 's'} (on ${tasks}).`);
+    }
   },
 
   async record({ values: v, positionals: [kind], cwd, out, data }) {
