@@ -16,3 +16,18 @@ for (const name of SESSIONS) {
     assert.ok(total <= BUDGET, `${name}: ${total} > ${BUDGET}\n${rows.map(([s, n]) => `${String(n).padStart(5)} ${s}`).join('\n')}`);
   });
 }
+
+const QUIET = (hook, o) => (hook === 'SessionStart' && Object.keys(o).join() === 'hookSpecificOutput' && Object.keys(o.hookSpecificOutput).join() === 'hookEventName,additionalContext')
+  || (hook === 'Stop' && Object.keys(o).join() === 'decision,reason' && o.decision === 'block');
+
+for (const name of SESSIONS) {
+  test(`${name}: Codex hooks stay within ${BUDGET} tokens and print only SessionStart context and the gate`, async (t) => {
+    const server = await startReplayServer();
+    t.after(() => server.close());
+    const { injected, printed } = await replay(sessionFile(name), { server, data: signedIn(), harness: 'codex' });
+    assert.ok(printed.length > 0 || name !== 'gate-rejection', 'the gate ran under Codex hooks');
+    for (const { hook, stdout } of printed) assert.ok(QUIET(hook, JSON.parse(stdout)), `${hook} printed ${stdout}`);
+    const total = injected.reduce((s, { text }) => s + tokens(text), 0);
+    assert.ok(total <= BUDGET, `${name}: ${total} > ${BUDGET}`);
+  });
+}

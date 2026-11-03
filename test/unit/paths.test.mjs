@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, existsSync, statSync, chmodSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { dataDir } from '../../lib/paths.mjs';
+import { dataDir, cliHarness, codexData } from '../../lib/paths.mjs';
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), 'eocrm-')), 'a', 'b');
 
@@ -46,4 +46,20 @@ test('--data=<dir> and a parsed value are honoured', () => {
 test('PLUGIN_DATA is the fallback when no --data and no CLAUDE_PLUGIN_DATA', () => {
   const dir = tmp();
   assert.equal(dataDir({ argv: [], env: { PLUGIN_DATA: dir } }), dir);
+});
+
+test('the CLI harness: flag, then plugin env, then install path; codex data under CODEX_HOME', () => {
+  const home = join(tmpdir(), 'h');
+  const env = { CODEX_HOME: join(home, '.codex') };
+  const codexScript = join(home, '.codex/plugins/cache/eocrm/eocrm/0.1.4/scripts/eocrm.mjs');
+  const claudeScript = join(home, '.claude/plugins/cache/eocrm/eocrm/0.1.4/scripts/eocrm.mjs');
+  assert.equal(cliHarness({ env, script: codexScript }), 'codex');
+  assert.equal(cliHarness({ env, script: claudeScript }), 'claude');
+  assert.equal(cliHarness({ env: {}, script: join(homedir(), '.codex/plugins/cache/x/scripts/eocrm.mjs') }), 'codex');
+  assert.equal(cliHarness({ env: { ...env, PLUGIN_DATA: '/d' }, script: claudeScript }), 'codex');
+  assert.equal(cliHarness({ env: { ...env, CLAUDE_PLUGIN_DATA: '/d', PLUGIN_DATA: '/d' }, script: codexScript }), 'claude');
+  assert.equal(cliHarness({ flag: 'claude', env, script: codexScript }), 'claude');
+  assert.equal(cliHarness({ flag: 'codex', env, script: claudeScript }), 'codex');
+  assert.equal(codexData(env), join(home, '.codex/plugins/data/eocrm-eocrm'));
+  assert.equal(codexData({}), join(homedir(), '.codex/plugins/data/eocrm-eocrm'));
 });

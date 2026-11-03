@@ -10,7 +10,8 @@ import { main } from '../../scripts/eocrm.mjs';
 import { startFixtureServer } from './fixture-server.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/, '');
-const HOOKS = JSON.parse(readFileSync(join(ROOT, 'hooks/hooks.json'), 'utf8')).hooks;
+const hooksOf = (file) => JSON.parse(readFileSync(join(ROOT, 'hooks', file), 'utf8')).hooks;
+const HOOKS = { claude: hooksOf('hooks.json'), codex: hooksOf('codex.json') };
 const T0 = Date.parse('2026-11-01T10:00:00Z');
 // Fixed identity and dates make commit shas, and so commit event ids, the same on every run.
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_AUTHOR_DATE: '2026-11-01T10:00:00Z', GIT_COMMITTER_DATE: '2026-11-01T10:00:00Z' };
@@ -50,14 +51,13 @@ function frontmatter(file) {
 
 export function catalog() {
   const skills = readdirSync(join(ROOT, 'skills')).map((n) => [`skill:${n}`, frontmatter(join(ROOT, 'skills', n, 'SKILL.md'))]);
-  const commands = readdirSync(join(ROOT, 'commands')).map((f) => [`command:${f.slice(0, -3)}`, frontmatter(join(ROOT, 'commands', f))]);
-  return new Map([...skills, ...commands]);
+  return new Map(skills);
 }
 
-// The dispatch events Claude Code would run for this hook, in hooks.json order.
-function hookRuns(hook, input) {
+// The dispatch events the harness would run for this hook, in its hooks file order.
+function hookRuns(hook, input, harness) {
   const key = hook === 'SessionStart' ? input.source : TOOL_EVENTS.has(hook) ? input.tool_name : hook === 'Notification' ? input.notification_type : null;
-  return (HOOKS[hook] ?? []).filter(({ matcher }) => !matcher || matcher === '*' || new RegExp(`^(?:${matcher})$`).test(key ?? '')).map((g) => g.hooks[0].args[1]);
+  return (HOOKS[harness][hook] ?? []).filter(({ matcher }) => !matcher || matcher === '*' || new RegExp(`^(?:${matcher})$`).test(key ?? '')).map((g) => g.hooks[0].args?.[1] ?? g.hooks[0].command.split(' ').at(-1));
 }
 
 function cliArgs(command, data) {
@@ -77,7 +77,7 @@ const noGh = (cmd, args, opts) => {
 };
 
 // Each line: {hook, input, fs?: {path: text}, git?: [[args]]}; ${REPO} in a line is the temp repo.
-export async function replay(sessionFile, { server, data }) {
+export async function replay(sessionFile, { server, data, harness = 'claude' }) {
   const repo = tmp('repo');
   gitIn(repo, ['init', '-q', '-b', 'main']);
   gitIn(repo, ['commit', '-q', '--allow-empty', '-m', 'init']);
@@ -85,11 +85,11 @@ export async function replay(sessionFile, { server, data }) {
   const tokens = { access_token: server.auth.access, refresh_token: server.auth.refresh, client_id: server.auth.clientId };
   const store = { get: async () => tokens, update: async () => null, del: async () => {} };
   let at = T0;
-  const ctx = { data, env: server.endpointsEnv, now: () => at, store, spawnFlush: () => {}, git: { exec: noGh } };
+  const ctx = { data, env: server.endpointsEnv, now: () => at, store, spawnFlush: () => {}, git: { exec: noGh }, harness };
   const sid = basename(sessionFile, '.jsonl');
   const known = catalog();
   const injected = [...known].map(([source, { description }]) => ({ source: `${source} description`, text: description }));
-  const outputs = [];
+  const printed = [];
   const from = server.requests.length;
   const lines = readFileSync(sessionFile, 'utf8').split('\n').filter(Boolean);
   for (const raw of lines) {
@@ -103,7 +103,7 @@ export async function replay(sessionFile, { server, data }) {
     const input = { session_id: sid, cwd: repo, hook_event_name: line.hook, ...line.input };
     const skill = line.hook === 'PreToolUse' && input.tool_name === 'Skill' && /^eocrm:(.+)$/.exec(input.tool_input?.skill ?? '');
     const command = line.hook === 'UserPromptSubmit' && /^\/eocrm:(\S+)/.exec(input.prompt ?? '');
-    const invoked = skill ? `skill:${skill[1]}` : command ? `command:${command[1]}` : null;
+    const invoked = skill ? `skill:${skill[1]}` : command ? `skill:${command[1]}` : null;
     if (invoked) injected.push({ source: `${invoked} body`, text: known.get(invoked).body });
     const args = line.hook === 'PostToolUse' && input.tool_name === 'Bash' && cliArgs(input.tool_input.command, data);
     if (args) {
@@ -112,10 +112,10 @@ export async function replay(sessionFile, { server, data }) {
       input.tool_response = { stdout: out.join('\n'), stderr: '', interrupted: false };
       injected.push({ source: `cli ${args[0]}`, text: input.tool_response.stdout });
     }
-    for (const event of hookRuns(line.hook, input)) {
+    for (const event of hookRuns(line.hook, input, harness)) {
       const { stdout } = await handle(event, input, ctx);
       if (stdout) {
-        outputs.push(stdout);
+        printed.push({ hook: line.hook, stdout });
         const o = JSON.parse(stdout);
         if (o.hookSpecificOutput?.additionalContext) injected.push({ source: `${line.hook} additionalContext`, text: o.hookSpecificOutput.additionalContext });
         if (o.decision === 'block') injected.push({ source: 'Stop reason', text: o.reason });
@@ -124,5 +124,5 @@ export async function replay(sessionFile, { server, data }) {
     await flush({ data, deadlineMs: 5000, clientFor: runClient(ctx) });
   }
   const log = server.requests.slice(from);
-  return { requests: log.map(({ method, path, body }) => normalise({ method, path, body }, { repo, data })), injected, outputs, log, repo };
+  return { requests: log.map(({ method, path, body }) => normalise({ method, path, body }, { repo, data })), injected, outputs: printed.map((p) => p.stdout), printed, log, repo };
 }

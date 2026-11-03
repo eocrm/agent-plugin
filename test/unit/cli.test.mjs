@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -12,6 +12,7 @@ import { normaliseRemote, resolveWorkspace } from '../../lib/workspace.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
+import { handle } from '../../lib/run.mjs';
 
 const tmp = (p) => mkdtempSync(join(tmpdir(), `eocrm-${p}-`));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe' });
@@ -405,4 +406,56 @@ test('smoke-seed rejects a bad --repo or no sign-in with exit 2', async () => {
   assert.equal(r.code, 2);
   assert.match(r.err, /sign in first/);
   assert.equal(s.calls.length, 0);
+});
+
+async function loginAs(t, args) {
+  const server = await startFixtureServer();
+  t.after(() => server.close());
+  const data = tmp('data');
+  const spawn = (cmd, a) => {
+    fetch(a.at(-1)).catch(() => {});
+    return Object.assign(new EventEmitter(), { unref() {} });
+  };
+  const store = credentialStore({ data, platform: 'none' });
+  const r = await cli(['login', '--data', data, ...args, 'acme'], { env: server.endpointsEnv, store, openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) });
+  assert.equal(r.code, 0);
+  return server.requests.find((q) => q.path === '/oauth/register').body.client_name;
+}
+
+test('codex login registers as Codex (eocrm plugin)', async (t) => {
+  assert.equal(await loginAs(t, ['--harness', 'codex']), 'Codex (eocrm plugin)');
+});
+
+test('claude login still registers as Claude Code (eocrm plugin)', async (t) => {
+  assert.equal(await loginAs(t, []), 'Claude Code (eocrm plugin)');
+});
+
+const TRUST = 'Hooks have not run here yet. In Codex, open /hooks and trust the eocrm hooks.';
+
+test('status reports hooks not trusted when no hook ran in this worktree', async () => {
+  const data = tmp('data');
+  const dir = repo();
+  account(data, { signedInAt: Date.now() });
+  const lines = async (...extra) => (await cli(['status', '--data', data, ...extra], { cwd: dir, store: credentialStore({ data, platform: 'none' }) })).out.split('\n');
+  assert.ok((await lines('--harness', 'codex')).includes(TRUST));
+  assert.ok(!(await lines()).includes(TRUST));
+  await handle('SessionEnd', { session_id: 's1', cwd: dir }, { data, harness: 'codex', now: () => 1, spawnFlush: () => {} });
+  assert.ok((await lines('--harness', 'codex')).includes(TRUST), 'a hook before sign-in does not count');
+});
+
+test('status is silent about trust once a hook ran', async () => {
+  const data = tmp('data');
+  const dir = repo();
+  account(data, { signedInAt: 1 });
+  await handle('SessionEnd', { session_id: 's1', cwd: join(dir, '.') }, { data, harness: 'codex', now: Date.now, spawnFlush: () => {} });
+  const { out } = await cli(['status', '--data', data, '--harness', 'codex'], { cwd: dir, store: credentialStore({ data, platform: 'none' }) });
+  assert.ok(!out.split('\n').includes(TRUST), out);
+});
+
+test('a skill run from a Codex install with an empty --data uses the Codex data dir and harness', async () => {
+  const home = tmp('home');
+  const script = join(home, 'plugins/cache/eocrm/eocrm/0.1.4/scripts/eocrm.mjs');
+  const r = await cli(['status', '--data', ''], { cwd: repo(), env: { CODEX_HOME: home }, script, store: { get: async () => null } });
+  assert.ok(r.out.split('\n').includes(TRUST), r.out);
+  assert.ok(existsSync(join(home, 'plugins/data/eocrm-eocrm')));
 });
