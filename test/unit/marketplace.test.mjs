@@ -32,11 +32,14 @@ test('eocrm-mcp is a separate tools-only plugin that eocrm depends on', () => {
   assert.equal(existsSync(new URL('mcp/hooks', root)), false);
 });
 
-test('nightly smoke without credentials warns and exits 0', () => {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('EOCRM_')));
-  const r = spawnSync(process.execPath, [SMOKE], { env, encoding: 'utf8' });
-  assert.equal(r.status, 0);
-  assert.match(r.stdout, /::warning::smoke credentials not set \(OPS-2\)/);
+test('nightly smoke without credentials skips locally and fails in CI, naming what is missing', () => {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('EOCRM_') && !['CI', 'NODE_TEST_CONTEXT'].includes(k)));
+  const local = spawnSync(process.execPath, [SMOKE], { env, encoding: 'utf8' });
+  assert.equal(local.status, 0);
+  assert.match(local.stdout, /# missing EOCRM_SMOKE_REGION, .*EOCRM_SMOKE_REFRESH_TOKEN/);
+  const ci = spawnSync(process.execPath, [SMOKE], { env: { ...env, CI: 'true' }, encoding: 'utf8' });
+  assert.equal(ci.status, 1);
+  assert.match(ci.stdout, /missing EOCRM_SMOKE_REGION, .*EOCRM_SMOKE_REFRESH_TOKEN/);
 });
 
 test('nightly smoke keeps a rotated refresh token when the retried call fails', async (t) => {
