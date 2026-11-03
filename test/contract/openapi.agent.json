@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "eocrm",
-    "version": "0.19.5"
+    "version": "0.21.0"
   },
   "paths": {
     "/v1/agent-runs": {
@@ -111,6 +111,16 @@
           "404": {
             "$ref": "#/components/responses/ModelNotFoundException"
           },
+          "409": {
+            "description": "A step or state change on an ended run (`run_ended`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodedRefusal"
+                }
+              }
+            }
+          },
           "422": {
             "$ref": "#/components/responses/ValidationException"
           }
@@ -151,6 +161,16 @@
           },
           "404": {
             "$ref": "#/components/responses/ModelNotFoundException"
+          },
+          "409": {
+            "description": "The run has ended (`run_ended`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodedRefusal"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -546,6 +566,12 @@
               "cost_usd",
               "wall_ms"
             ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -562,7 +588,8 @@
           "last_heartbeat_at",
           "ended_at",
           "duration_seconds",
-          "usage"
+          "usage",
+          "model"
         ],
         "title": "AgentRunData"
       },
@@ -593,12 +620,28 @@
         },
         "title": "UpdateAgentRunRequest"
       },
+      "CodedRefusal": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "code"
+        ],
+        "title": "CodedRefusal"
+      },
       "RecordAgentRunEventsRequest": {
         "type": "object",
         "properties": {
           "events": {
             "type": "array",
-            "description": "At most 100. Fields depend on `type`: step {phase, label, plan_key}, commit {sha, repo, subject},\ntest_run {command, result_line, exit_code}, review_finding {severity, summary, outcome},\nruling {what, why, cost_if_wrong}, pull_request {action, url, repo, number},\nusage {model, input_tokens, output_tokens, cost_usd, wall_ms}, plan {source, path, items: [{key, text}], at most 200}. Overlong text is truncated, secrets redacted, other keys dropped.",
+            "description": "At most 100. Fields depend on `type`: step {phase, label, plan_key}, commit {sha, repo, subject},\ntest_run {command, result_line, exit_code}, review_finding {severity, summary, outcome},\nruling {what, why, cost_if_wrong}, pull_request {action, url, repo, number},\nusage {model, input_tokens, output_tokens, cost_usd, wall_ms}, plan {source, path, items: [{key, text}], at most 200},\nwaiting {kind: permission|question|idle}, resumed {}, turn {phase: started|ended}. Overlong text is truncated, secrets redacted, other keys dropped.",
             "items": {
               "type": "object",
               "properties": {
@@ -617,7 +660,10 @@
                     "ruling",
                     "pull_request",
                     "usage",
-                    "plan"
+                    "plan",
+                    "waiting",
+                    "resumed",
+                    "turn"
                   ]
                 },
                 "occurred_at": {
@@ -639,6 +685,7 @@
                   "enum": [
                     "started",
                     "finished",
+                    "ended",
                     null
                   ]
                 },
@@ -856,6 +903,18 @@
                     }
                   },
                   "maxItems": 200
+                },
+                "kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "permission",
+                    "question",
+                    "idle",
+                    null
+                  ]
                 }
               },
               "required": [
@@ -1354,22 +1413,6 @@
           "created_at"
         ],
         "title": "PairableConnectionData"
-      },
-      "CodedRefusal": {
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "message",
-          "code"
-        ],
-        "title": "CodedRefusal"
       }
     },
     "responses": {

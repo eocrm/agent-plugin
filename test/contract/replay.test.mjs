@@ -53,3 +53,12 @@ test('gate-rejection: Stop blocks once naming the refused commit, then lets the 
   const { outputs } = await replay(sessionFile('gate-rejection'), { server, data: signedIn() });
   assert.deepEqual(outputs.map((o) => JSON.parse(o)), [{ decision: 'block', reason: 'eocrm refused 1 tracking update(s): commit "WIP" (422 subject). Fix what it names or tell the member; tracking continues.' }]);
 });
+
+test('permission-resume: one waiting per stretch, each resumed, and no notification text reaches eocrm', async (t) => {
+  const server = await served(t);
+  const { log } = await replay(sessionFile('permission-resume'), { server, data: signedIn() });
+  const signals = log.flatMap((r) => r.body?.events ?? []).filter((e) => ['waiting', 'resumed'].includes(e.type)).map((e) => e.kind ?? e.type);
+  assert.deepEqual(signals, ['permission', 'resumed', 'idle', 'resumed']);
+  const sent = JSON.stringify(log.map((r) => r.body));
+  for (const text of ['Permission needed', 'rm -rf', 'waiting for your input']) assert.ok(!sent.includes(text), text);
+});

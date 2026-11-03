@@ -49,8 +49,8 @@ async function setup(t, { responses, tokens, ...opts } = {}) {
   return { server, store, client };
 }
 
-test('snapshot is the pinned slice of eocrm 0.19.5', () => {
-  assert.equal(snapshot.info.version, '0.19.5');
+test('snapshot is the pinned slice of eocrm 0.21.0', () => {
+  assert.equal(snapshot.info.version, '0.21.0');
   const ops = Object.entries(snapshot.paths).flatMap(([p, ms]) => Object.keys(ms).map((m) => `${m} ${p}`));
   assert.deepEqual(ops.sort(), OPERATIONS.map(([p, m]) => `${m} ${p}`).sort());
 });

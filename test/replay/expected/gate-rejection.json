@@ -33,6 +33,20 @@
     "body": {
       "events": [
         {
+          "id": "turn:J6AKMxeLONdnAmuEbxVkRl",
+          "type": "turn",
+          "phase": "started",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
           "id": "commit:J4a2fut7RYMGyZBdnGIP5a",
           "type": "commit",
           "occurred_at": "<time>",
@@ -46,6 +60,34 @@
   {
     "method": "GET",
     "path": "/v1/agent-runs/:id/events"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "turn:S7xaKcGap4bCgYje__7w6c",
+          "type": "turn",
+          "phase": "ended",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "turn:S7xaKcGap4bCgYje__7w6c",
+          "type": "turn",
+          "phase": "ended",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
   },
   {
     "method": "PATCH",

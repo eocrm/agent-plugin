@@ -1,0 +1,143 @@
+[
+  {
+    "method": "GET",
+    "path": "/v1/agent-work/conventions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs",
+    "body": {
+      "branch": "feat/AB-4-tidy",
+      "worktree": "<repo>",
+      "repo": "o/r",
+      "client_run_id": "permission-resume"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "model-AFkSvubuRUPOxEBLWgK5vL-0-0",
+          "type": "usage",
+          "occurred_at": "<time>",
+          "model": "claude-opus-5-5"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "turn:RRk8c9NePtqke0tHJf4GIM",
+          "type": "turn",
+          "phase": "started",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "waiting:BowbIN7BVcCKwfoL75m1gM",
+          "type": "waiting",
+          "kind": "permission",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "resumed:BowbIN7BVcCKwfoL75m1gM",
+          "type": "resumed",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agent-runs/:id/events"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "turn:4Xh5ll9jQ4WwvxiPautlS_",
+          "type": "turn",
+          "phase": "ended",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "waiting:6NUa2oslqcJB8i0njjKGfD",
+          "type": "waiting",
+          "kind": "idle",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "resumed:6NUa2oslqcJB8i0njjKGfD",
+          "type": "resumed",
+          "occurred_at": "<time>"
+        },
+        {
+          "id": "turn:LfHbwkCAhRRft_ryCw97w6",
+          "type": "turn",
+          "phase": "started",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "turn:YYTAy34T2YmQhKEZ2XN7B6",
+          "type": "turn",
+          "phase": "ended",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/agent-runs/:id",
+    "body": {
+      "state": "finished"
+    }
+  }
+]

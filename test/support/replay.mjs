@@ -26,7 +26,7 @@ export function signedIn() {
   return data;
 }
 
-export const SESSIONS = ['linked-sdd', 'unlinked-ruling', 'gate-rejection'];
+export const SESSIONS = ['linked-sdd', 'unlinked-ruling', 'gate-rejection', 'permission-resume'];
 export const sessionFile = (name) => join(ROOT, 'test/replay/sessions', `${name}.jsonl`);
 const CONVENTIONS = JSON.parse(readFileSync(join(ROOT, 'test/contract/responses/agentWorkConventions.show.json'), 'utf8'));
 
@@ -54,12 +54,10 @@ export function catalog() {
   return new Map([...skills, ...commands]);
 }
 
+// The dispatch events Claude Code would run for this hook, in hooks.json order.
 function hookRuns(hook, input) {
-  const groups = HOOKS[hook];
-  if (!groups) return false;
-  const { matcher } = groups[0];
-  const key = hook === 'SessionStart' ? input.source : TOOL_EVENTS.has(hook) ? input.tool_name : null;
-  return !matcher || new RegExp(`^(?:${matcher})$`).test(key ?? '');
+  const key = hook === 'SessionStart' ? input.source : TOOL_EVENTS.has(hook) ? input.tool_name : hook === 'Notification' ? input.notification_type : null;
+  return (HOOKS[hook] ?? []).filter(({ matcher }) => !matcher || matcher === '*' || new RegExp(`^(?:${matcher})$`).test(key ?? '')).map((g) => g.hooks[0].args[1]);
 }
 
 function cliArgs(command, data) {
@@ -114,8 +112,8 @@ export async function replay(sessionFile, { server, data }) {
       input.tool_response = { stdout: out.join('\n'), stderr: '', interrupted: false };
       injected.push({ source: `cli ${args[0]}`, text: input.tool_response.stdout });
     }
-    if (hookRuns(line.hook, input)) {
-      const { stdout } = await handle(line.hook, input, ctx);
+    for (const event of hookRuns(line.hook, input)) {
+      const { stdout } = await handle(event, input, ctx);
       if (stdout) {
         outputs.push(stdout);
         const o = JSON.parse(stdout);

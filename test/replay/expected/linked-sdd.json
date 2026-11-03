@@ -65,6 +65,20 @@
     "body": {
       "events": [
         {
+          "id": "turn:74aAWH1UNKhD4UtN6hO40-",
+          "type": "turn",
+          "phase": "started",
+          "occurred_at": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
           "id": "step:LH9Q-t-7c6GnbQ6Cw34pnE",
           "type": "step",
           "occurred_at": "<time>",
@@ -247,6 +261,20 @@
           "url": "https://github.com/o/r/pull/7",
           "number": 7,
           "repo": "o/r"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agent-runs/:id/events",
+    "body": {
+      "events": [
+        {
+          "id": "turn:Ma4ib-teLO5ACtpl4Olr6e",
+          "type": "turn",
+          "phase": "ended",
+          "occurred_at": "<time>"
         }
       ]
     }
