@@ -4,10 +4,12 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } fro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { codexEvents } from '../../lib/codex.mjs';
+import { codexEvents, addModelUsage } from '../../lib/codex.mjs';
 import { testRun, isCommit } from '../../lib/detect.mjs';
 import { handle } from '../../lib/run.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
+import { readOutbox } from '../../lib/outbox.mjs';
+import { eventId } from '../../lib/ids.mjs';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/codex/${name}.json`, import.meta.url), 'utf8'));
 const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)));
@@ -93,7 +95,6 @@ test('update_plan becomes todos', () => {
 });
 
 test('unknown events map to nothing', () => {
-  assert.deepEqual(codexEvents('PostModelRequest', { cwd: '/w' }), []);
   assert.deepEqual(codexEvents('Nope', { cwd: '/w' }), []);
 });
 
@@ -125,4 +126,97 @@ test('apply_patch on the plan file triggers a sync', async () => {
   await patch('.superpowers/sdd/p/progress.md');
   assert.equal(calls.length, 3);
   assert.deepEqual(loadRun(data, sid).written, ['notes.md', PLAN, '.superpowers/sdd/p/progress.md'].map((f) => join(dir, f)));
+});
+
+function usageSetup(harness = 'codex') {
+  const data = tmp('data');
+  saveRun(data, 's', { startedAt: 1, generation: 0, runId: 'r1', lastHeartbeatAt: 1e12 });
+  const refused = { status: 503, body: null };
+  const client = { recordEvents: async () => refused, startRun: async () => refused, heartbeat: async () => refused, updateRun: async () => refused };
+  const spawned = [];
+  const ctx = { data, harness, env: {}, now: () => 1e12, spawnFlush: () => spawned.push(1), clientFor: () => client, reconcile: async () => ({ enqueued: false }) };
+  const fire = (event, extra = {}) => handle(event, { session_id: 's', cwd: data, transcript_path: null, ...extra }, ctx);
+  const model = (model, token_usage, status = 'completed') => fire('PostModelRequest', { model, status, token_usage, prompt: 'SECRET' });
+  const events = () => readOutbox(data).filter((e) => e.kind === 'event').map((e) => e.event);
+  const usage = () => events().filter((e) => e.type === 'usage' && e.input_tokens !== undefined);
+  return { data, fire, model, events, usage, spawned };
+}
+const U = { input_tokens: 10, output_tokens: 5, reasoning_output_tokens: 2, cached_input_tokens: 100 };
+const shape = (events) => events.map(({ type, kind, phase }) => [type, kind ?? phase ?? null]);
+
+test('sums PostModelRequest usage per model', async () => {
+  const { data, model, spawned } = usageSetup();
+  await model('gpt-a', U);
+  await model('gpt-a', { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 3, cache_creation_input_tokens: 4 });
+  await model('gpt-b', { input_tokens: 2 });
+  assert.deepEqual(loadRun(data, 's').codexUsage, {
+    'gpt-a': { input_tokens: 11, output_tokens: 8, cache_read_tokens: 103, cache_write_tokens: 4 },
+    'gpt-b': { input_tokens: 2, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 },
+  });
+  assert.equal(spawned.length, 0);
+  assert.equal(addModelUsage({}, { model: 'gpt-a', status: 'completed' }), null);
+});
+
+test('ignores failed or cancelled model requests', async () => {
+  const { data, model } = usageSetup();
+  await model('gpt-a', U, 'failed');
+  await model('gpt-a', U, 'cancelled');
+  await model('gpt-a', U, null);
+  assert.equal(loadRun(data, 's').codexUsage, undefined);
+});
+
+test('Stop sends one usage event per model and resets the sums', async () => {
+  const { data, fire, model, usage } = usageSetup();
+  await model('gpt-a', U);
+  await model('gpt-b', { input_tokens: 2 });
+  await model('gpt-c', { input_tokens: 0, output_tokens: 0 });
+  await fire('Stop', { turn_id: 't1' });
+  const first = usage();
+  assert.deepEqual(first.map((e) => [e.model, e.input_tokens, e.output_tokens, e.cache_read_tokens, e.cache_write_tokens]), [['gpt-a', 10, 7, 100, 0], ['gpt-b', 2, 0, 0, 0]]);
+  assert.equal(first[0].id, eventId('usage', 's:0:codex:t1:gpt-a'));
+  assert.deepEqual(loadRun(data, 's').codexUsage, {});
+  await fire('Stop', { turn_id: 't1' });
+  assert.equal(usage().length, 2);
+  await model('gpt-a', U);
+  await fire('Stop', { turn_id: 't2' });
+  assert.equal(usage().length, 3);
+  assert.notEqual(usage()[2].id, first[0].id);
+});
+
+test('a retried Stop reuses the turn\'s usage event ids', async () => {
+  const { data, fire, model, usage } = usageSetup();
+  await model('gpt-a', U);
+  const sums = loadRun(data, 's').codexUsage;
+  await fire('Stop', { turn_id: 't1' });
+  const first = usage().map((e) => e.id);
+  saveRun(data, 's', { codexUsage: sums });
+  await fire('Stop', { turn_id: 't1' });
+  assert.deepEqual(usage().map((e) => e.id), first);
+});
+
+test('Stop queues idle waiting only when the gate lets the turn end', async () => {
+  const { data, fire, events } = usageSetup();
+  await fire('UserPromptSubmit');
+  await fire('Stop', { turn_id: 't1' });
+  assert.deepEqual(shape(events()), [['turn', 'started'], ['turn', 'ended'], ['waiting', 'idle']]);
+  assert.equal(events()[2].id, eventId('waiting', 's:0:0'));
+  assert.equal(loadRun(data, 's').waiting, true);
+});
+
+test('the next prompt resumes after idle', async () => {
+  const { fire, events } = usageSetup();
+  await fire('Stop', { turn_id: 't1' });
+  await fire('UserPromptSubmit');
+  assert.deepEqual(shape(events()).slice(-2), [['resumed', null], ['turn', 'started']]);
+  assert.equal(events().at(-2).id, eventId('resumed', 's:0:0'));
+});
+
+test('claude Stop still reads usage from the transcript', async () => {
+  const { data, fire, usage, events } = usageSetup('claude');
+  const transcript = join(data, 't.jsonl');
+  writeFileSync(transcript, `${JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'claude-x', usage: { input_tokens: 3, output_tokens: 1 } } })}\n`);
+  saveRun(data, 's', { codexUsage: { 'gpt-a': { input_tokens: 9, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 } } });
+  await fire('Stop', { transcript_path: transcript });
+  assert.deepEqual(usage().map((e) => [e.model, e.input_tokens]), [['claude-x', 3]]);
+  assert.ok(!events().some((e) => e.type === 'waiting'));
 });

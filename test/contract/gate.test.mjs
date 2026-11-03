@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { handle, runClient } from '../../lib/run.mjs';
 import { flush } from '../../lib/flush.mjs';
-import { append, enqueue } from '../../lib/outbox.mjs';
+import { append, enqueue, readOutbox } from '../../lib/outbox.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { writeJsonAtomic } from '../../lib/state.mjs';
@@ -126,6 +126,33 @@ test('a 422 blocks once naming the event; stop_hook_active on the same set does 
   await push(badPr(2));
   const again = blocked(await stop({ stop_hook_active: true }));
   assert.match(again.reason, /^eocrm refused 2 tracking update\(s\): .*"not a url 2" \(422 url\)/);
+});
+
+test('codex Stop gate output matches the Claude gate JSON', async (t) => {
+  const claude = await setup(t);
+  const codex = await setup(t);
+  codex.ctx.harness = 'codex';
+  for (const g of [claude, codex]) {
+    await g.push(badPr(1));
+    g.out = await g.stop();
+    g.again = await g.stop({ stop_hook_active: true });
+  }
+  assert.equal(codex.out.stdout, claude.out.stdout);
+  assert.equal(blocked(codex.out).decision, 'block');
+  assert.deepEqual(codex.again, claude.again);
+  assert.deepEqual(codex.again, {});
+});
+
+test('codex Stop prints at most one JSON object, and a blocked turn queues no idle waiting', async (t) => {
+  const { data, ctx, push, stop } = await setup(t);
+  ctx.harness = 'codex';
+  const idle = () => readOutbox(data).filter((e) => e.event?.type === 'waiting').length;
+  await push(badPr(1));
+  const out = await stop({ turn_id: 't1' });
+  assert.equal(blocked(out).decision, 'block');
+  assert.equal(idle(), 0);
+  assert.deepEqual(await stop({ turn_id: 't1', stop_hook_active: true }), {});
+  assert.equal(idle(), 1);
 });
 
 test('a refusal eocrm records as review_finding answers 200 and does not block', async (t) => {
