@@ -48,7 +48,7 @@ test('requests carry the plugin User-Agent', async () => {
   assert.deepEqual(seen, [`eocrm-plugin/${version} (claude-code)`, `eocrm-plugin/${version} (codex)`]);
 });
 
-test('reply messages are stored once and acked next call', async (t) => {
+test('reply messages are stored, invalid ones skipped, acks sent once', async (t) => {
   const { data, calls, go } = setup(t, [
     { status: 200, body: { accepted: 1, duplicates: 0, dropped: 0, messages: [msg('m1'), msg('m2', { audience: 'agent' }), { id: 'bad' }] } },
   ]);
@@ -119,6 +119,31 @@ test('an oversized reply is capped', async (t) => {
   assert.deepEqual([inbox[0].id.length, inbox[0].text.length, inbox[0].data], [64, 1000, { reload: 'conventions' }]);
   assert.equal(ackPending.length, 100);
   assert.deepEqual([ackPending[0], ackPending.at(-1)], ['old15', 'm18']);
+});
+
+test('inbox overflow leaves the evicted messages unacked', async (t) => {
+  const batches = [0, 1, 2, 3].map((b) => ({ status: 200, body: { messages: Array.from({ length: 20 }, (_, i) => msg(`b${b}m${i}`)) } }));
+  const { data, calls, go } = setup(t, batches);
+  for (let i = 0; i < 4; i++) {
+    await enqueue(data, { kind: 'step', sessionId: SID, step: `Task ${i}` });
+    await go();
+  }
+  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
+  await go();
+  const acked = new Set(calls.flatMap((c) => c.ack ?? []));
+  const inbox = loadRun(data, SID).inbox.map((m) => m.id);
+  assert.equal(inbox.length, 50);
+  const evicted = Array.from({ length: 80 }, (_, i) => `b${Math.floor(i / 20)}m${i % 20}`).filter((id) => !inbox.includes(id));
+  assert.equal(evicted.length, 30);
+  assert.ok(evicted.every((id) => !acked.has(id)));
+  assert.ok(inbox.every((id) => acked.has(id)));
+});
+
+test('a message with an unknown kind or audience is dropped', async (t) => {
+  const { data, go } = setup(t, [{ status: 200, body: { messages: [msg('ok'), msg('k', { kind: 'bogus' }), msg('a', { audience: 'nobody' })] } }]);
+  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
+  await go();
+  assert.deepEqual(loadRun(data, SID).inbox.map((m) => m.id), ['ok']);
 });
 
 test('a 426 with an empty body still pauses and keeps the outbox', async (t) => {
