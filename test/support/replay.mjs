@@ -60,10 +60,10 @@ function hookRuns(hook, input) {
   return (HOOKS[hook] ?? []).filter(({ matcher }) => !matcher || matcher === '*' || new RegExp(`^(?:${matcher})$`).test(key ?? '')).map((g) => g.hooks[0].args[1]);
 }
 
-function cliArgs(command, data) {
+function cliArgs(command, data, sid) {
   const words = segments(command).find((w) => w.some((x) => x.endsWith('scripts/eocrm.mjs')));
   if (!words) return null;
-  return words.slice(words.findIndex((x) => x.endsWith('scripts/eocrm.mjs')) + 1).map((x) => x.replaceAll('${CLAUDE_PLUGIN_DATA}', data));
+  return words.slice(words.findIndex((x) => x.endsWith('scripts/eocrm.mjs')) + 1).map((x) => x.replaceAll('${CLAUDE_PLUGIN_DATA}', data).replaceAll('${CLAUDE_SESSION_ID}', sid));
 }
 
 export function normalise(entry, { repo, data }) {
@@ -105,7 +105,7 @@ export async function replay(sessionFile, { server, data }) {
     const command = line.hook === 'UserPromptSubmit' && /^\/eocrm:(\S+)/.exec(input.prompt ?? '');
     const invoked = skill ? `skill:${skill[1]}` : command ? `command:${command[1]}` : null;
     if (invoked) injected.push({ source: `${invoked} body`, text: known.get(invoked).body });
-    const args = line.hook === 'PostToolUse' && input.tool_name === 'Bash' && cliArgs(input.tool_input.command, data);
+    const args = line.hook === 'PostToolUse' && input.tool_name === 'Bash' && cliArgs(input.tool_input.command, data, sid);
     if (args) {
       const out = [];
       await main({ argv: args, env: server.endpointsEnv, cwd: repo, out: (l) => out.push(l), err: (l) => out.push(l), store, spawnFlush: () => {} });

@@ -63,7 +63,7 @@ test('link KEY after start sends PATCH {task}', async (t) => {
   const { main } = await import('../../scripts/eocrm.mjs');
   await handle('SessionStart', { session_id: 'sess-c3', cwd: dir }, ctx);
   await go();
-  assert.equal(await main({ argv: ['link', 'AB-99', '--data', ctx.data], cwd: dir, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} }), 0);
+  assert.equal(await main({ argv: ['link', 'AB-99', '--session', 'sess-c3', '--data', ctx.data], cwd: dir, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} }), 0);
   await go();
   assert.deepEqual(server.requests.at(-1).body, { task: 'AB-99' });
 });
@@ -100,7 +100,7 @@ test('a rejected start is not re-sent until the run changes, and its record is k
   const run = loadRun(data, 'sess-c6');
   assert.equal(run.startBlocked, fingerprint(run.rejected[0]));
   assert.deepEqual(run.rejectedFingerprints, [fingerprint(run.rejected[0])]);
-  await main({ argv: ['link', 'AB-5', '--data', data], cwd: dir, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} });
+  await main({ argv: ['link', 'AB-5', '--session', 'sess-c6', '--data', data], cwd: dir, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} });
   await go();
   assert.equal(starts(), 2);
   await handle('SessionStart', { ...input, source: 'resume' }, ctx);
