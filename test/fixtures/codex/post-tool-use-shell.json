@@ -1,0 +1,1 @@
+{ "session_id": "cx-1", "transcript_path": null, "cwd": "/w", "hook_event_name": "PostToolUse", "model": "gpt-5-codex", "permission_mode": "default", "turn_id": "t1", "tool_name": "shell", "tool_use_id": "call_1", "tool_input": { "command": ["bash", "-lc", "npm test"], "workdir": "/w" }, "tool_response": { "output": "running\n# pass 3\n# fail 1\n", "exit_code": 1 } }
