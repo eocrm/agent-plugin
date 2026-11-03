@@ -34,10 +34,17 @@ Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`
 - `/eocrm:login` (a skill; in Codex, ask for the `login` skill) signs in through the browser (sign-in starts in the EU and eocrm resolves your home region; `--region ru` signs in to an RU workspace) and stores tokens in the OS keychain, or a 0600 file when no keychain is usable.
 - `/eocrm:use` maps the current repo to a workspace. The mapping is stored per repo, and `.claude/eocrm.json` (workspace slug and region only) can be committed to share it; each user confirms it once. With a single workspace the plugin picks it automatically.
 - Four skills: `pick-type`, `link-run`, `record-judgement`, `file-human-work`.
+- `/eocrm:status` (Codex: the `status` skill) shows sign-in, workspace and pairing.
+
+## Pair with your tools connection
+
+The plugin's sign-in can only report and read runs; it can't change tasks. If your tools (`eocrm-mcp`) are already signed in, the plugin's sign-in sends a pairing request: in eocrm open Account → Agents and select **Approve**, so both show as one agent. If you signed in the tools afterwards, select **Merge into…** on the new connection there instead. Claude Code pairs with Claude Code, Codex with Codex; a request expires after 15 minutes. Someone who uses both signs in twice and sees two agents.
+
+Agent work must be on in the workspace (Settings → Modules); it needs Tasks and AI assistants. What runs show, the conventions and alerts: [Agent work help](https://docs.eocrm.io/help/agent-work/).
 
 ## What is sent
 
-Run metadata (branch, repo, task key), plan items, commits (sha, subject), test commands and result lines, PR links and review findings. Everything is scrubbed for secrets and capped in length before it leaves the machine. Events are queued locally and retried; when the queue cannot be flushed the run shows as "tracking stale".
+Run metadata (branch, repo, task key), plan items, commits (sha, subject), test commands and result lines, PR links, review findings, and turn boundaries and waiting (for permission or for you; Claude Code also for a question). Never your prompts, the assistant's replies or file contents. Everything is scrubbed for secrets and capped in length before it leaves the machine. Events are queued locally and retried; when the queue cannot be flushed the run shows as "tracking stale".
 
 Token counts per model: Claude Code's come from the local session transcript and its subagent transcripts; Codex's come from Codex itself (its per-request hook), with no transcript read. Nothing else from either leaves the machine.
 
