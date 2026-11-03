@@ -65,7 +65,8 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex PostModelRequest",
-            "async": true
+            "async": false,
+            "timeout": 5
           }
         ]
       }

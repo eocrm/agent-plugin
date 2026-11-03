@@ -46,6 +46,8 @@ test('codex hooks call dispatch with --harness codex for every event', () => {
   assert.equal(hooks.SessionStart[0].hooks[0].async, false);
   assert.equal(hooks.SessionEnd[0].hooks[0].timeout, 3);
   assert.equal(hooks.Stop[0].hooks[0].async, false);
+  assert.equal(hooks.PostModelRequest[0].hooks[0].async, false);
+  assert.equal(hooks.PostModelRequest[0].hooks[0].timeout, 5);
   assert.equal(hooks.PreToolUse[0].hooks[0].async, true);
 });
 

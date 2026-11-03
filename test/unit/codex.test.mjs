@@ -244,3 +244,17 @@ test('a codex hook prints one JSON object and the gate decision wins', async () 
     assert.equal(JSON.parse(out.stdout).decision, 'block');
   }
 });
+
+test('SessionEnd sends usage left over after the last Stop', async () => {
+  const { data, fire, model, usage } = usageSetup();
+  await fire('UserPromptSubmit');
+  await model('gpt-a', U);
+  await fire('Stop', { turn_id: 't1' });
+  await model('gpt-a', { input_tokens: 4 });
+  await fire('SessionEnd');
+  assert.deepEqual(usage().map((e) => e.input_tokens), [10, 4]);
+  assert.equal(new Set(usage().map((e) => e.id)).size, 2);
+  const kinds = readOutbox(data).filter((e) => e.kind === 'finish' || e.event?.input_tokens === 4).map((e) => e.kind);
+  assert.deepEqual(kinds, ['event', 'finish']);
+  assert.deepEqual(loadRun(data, 's').codexUsage, {});
+});
