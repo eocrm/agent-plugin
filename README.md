@@ -26,6 +26,10 @@ Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`
 - Reminders: on session start, resume or `/clear`, on a new branch, or when work moves to another task, the plugin reminds Claude of the linked task. The Conventions **Task switch check** sets how often it checks for a task switch: Every prompt, After a pause (the default), or Signals only.
 - Four skills: `pick-type`, `link-run`, `record-judgement`, `file-human-work`.
 
+## Messages from eocrm
+
+eocrm can answer tracking calls with short messages, and the plugin shows each one once, at your next prompt, Bash or task tool call, or stop. Lines meant for you (someone commented on the linked task, conventions changed, a plugin update) appear in the terminal and cost Claude no tokens. A comment you wrote on the linked task yourself is passed to Claude, quoted as your words rather than instructions. An update notice shows at most once a day. If the plugin is older than eocrm's minimum, tracking pauses and keeps its queue until you run `/plugin marketplace update eocrm`. You're also told once per session when Agent work is off for the workspace or you're signed out.
+
 ## What is sent
 
 Run metadata (branch, repo, task key), plan items, commits (sha, subject), test commands and result lines, PR links and review findings. Everything is scrubbed for secrets and capped in length before it leaves the machine. Events are queued locally and retried; when the queue cannot be flushed the run shows as "tracking stale".

@@ -434,11 +434,12 @@ test('heartbeat is queued from any hook once 120 s have passed', async () => {
   assert.equal(loadRun(data, s).lastHeartbeatAt, ctx.at);
 });
 
-test('a hook with no run yet starts one lazily, without printing', async () => {
+test('a hook with no run yet starts one lazily, without printing to the model', async () => {
   const data = signedIn();
   const dir = repo('main');
   const s = sid();
-  assert.deepEqual(await handle('Stop', input(s, dir), ctxFor(data)), {});
+  const { stdout } = await handle('Stop', input(s, dir), ctxFor(data));
+  assert.deepEqual(Object.keys(JSON.parse(stdout ?? '{}')).filter((k) => k !== 'systemMessage'), []);
   assert.deepEqual(queued(data, s), ['start', 'turn']);
 });
 

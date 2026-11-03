@@ -60,7 +60,7 @@ function laravelErrors(errors) {
 
 const now = () => new Date().toISOString();
 
-export async function startFixtureServer({ responses = {} } = {}) {
+export async function startFixtureServer({ responses = {}, messages = [] } = {}) {
   const requests = [];
   let n = 0;
   const auth = { clientId: 'fixture-client', access: 'fixture-access-0', refresh: 'fixture-refresh-0' };
@@ -142,7 +142,7 @@ export async function startFixtureServer({ responses = {} } = {}) {
         run.events.push({ id: eventId, type, occurred_at: occurred_at ?? now(), payload });
         accepted += 1;
       }
-      return { status: 200, body: { accepted, duplicates: body.events.length - accepted, dropped: 0 } };
+      return { status: 200, body: { accepted, duplicates: body.events.length - accepted, dropped: 0, ...(messages.length ? { messages: messages.splice(0) } : {}) } };
     },
     'agentRun.events.index': ({ params: [id], query }) => {
       const run = runs.get(id);
