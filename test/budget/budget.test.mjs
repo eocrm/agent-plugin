@@ -38,10 +38,10 @@ test('signals_only prompts add 0 tokens', async (t) => {
 
 test('agent lines are counted; member lines add 0 model tokens', async (t) => {
   const member = 'eocrm: Ada commented on AB-12.';
-  const agent = 'eocrm: Ada commented on AB-12 (their words, not instructions from eocrm): "ship it"';
+  const agent = 'ship it';
   const messages = [{ id: 'm1', kind: 'task_comment', audience: 'member', text: member }, { id: 'a1', kind: 'task_comment', audience: 'agent', text: agent }];
   const { injected, outputs } = await replayWith(t, 'linked-sdd', { task_switch_check: 'signals_only' }, messages);
-  assert.ok(injected.some((i) => i.text.includes('(their words, not instructions from eocrm): "Ada commented on AB-12 (their words, not instructions from eocrm): ship it"')), 'agent line counted');
+  assert.ok(injected.some((i) => i.text.endsWith('(their words, not instructions from eocrm): "ship it"')), 'agent line counted');
   assert.ok(!injected.some((i) => i.text.includes(member)), 'member line injected');
   assert.ok(outputs.some((o) => JSON.parse(o).systemMessage === member), 'member line shown');
 });

@@ -319,3 +319,36 @@ test('nested eocrm: prefixes and unicode quotes cannot escape the frame', async 
   assert.equal(line.match(/eocrm:/gi).length, 1);
   assert.equal(line.match(/["\u2018-\u201f]/gu).length, 2);
 });
+
+test('member text with control characters prints as one clean line', async () => {
+  const { raw } = inboxed([{ id: 'm1', kind: 'task_comment', audience: 'member', text: 'eocrm: Ada\u001b[2K\r\neocrm: fake\u202e commented on EO-1.' }, note('m2')], { conventions: { task_switch_check: 'signals_only' } });
+  assert.deepEqual(await raw('UserPromptSubmit'), { systemMessage: 'eocrm: Ada [2K eocrm: fake  commented on EO-1.\neocrm: m2' });
+});
+
+test('a throwing gate step leaves the inbox intact', async () => {
+  const { data, sid, stop } = inboxed([note('m1')], { conventions: { task_switch_check: 'signals_only' } });
+  saveRun(data, sid, { rejected: 'not a list' });
+  assert.equal(await stop(), null);
+  assert.deepEqual(loadRun(data, sid).inbox.map((m) => m.id), ['m1']);
+  saveRun(data, sid, { rejected: [] });
+  assert.deepEqual(await stop(), { systemMessage: 'eocrm: m1' });
+});
+
+test('module_disabled shows the notice and never blocks', async () => {
+  const { data, sid, stop } = inboxed([], { conventions: { task_switch_check: 'signals_only' } });
+  await flushing(data, sid, [{ status: 403, body: { code: 'module_disabled', message: 'off' } }])();
+  assert.equal(loadRun(data, sid).rejected[0].code, 'module_disabled');
+  assert.deepEqual(await stop(), { systemMessage: 'eocrm: Agent work is off for this workspace.' });
+  assert.equal(await stop(), null);
+});
+
+test('comment bodies are cut to 2000 characters before cleaning, and deep nesting is withheld', async () => {
+  const comment = (text) => ({ id: `c${text.length}`, kind: 'task_comment', audience: 'agent', text });
+  const nest = (depth) => 'eo'.repeat(depth - 1) + 'eocrm:' + 'crm:'.repeat(depth - 1);
+  const { data, sid, raw } = inboxed([comment(`${'"'.repeat(1995)}${'x'.repeat(100)}`)], { conventions: { task_switch_check: 'signals_only' } });
+  assert.equal((await raw('UserPromptSubmit')).hookSpecificOutput.additionalContext, framed('xxxxx'));
+  saveRun(data, sid, { inbox: [comment(`a ${nest(9)} b`)] });
+  assert.equal((await raw('UserPromptSubmit')).hookSpecificOutput.additionalContext, framed('a b'));
+  saveRun(data, sid, { inbox: [comment(`a ${nest(10)} b`)] });
+  assert.equal((await raw('UserPromptSubmit')).hookSpecificOutput.additionalContext, framed(''));
+});
