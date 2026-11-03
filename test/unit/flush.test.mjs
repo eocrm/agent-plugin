@@ -6,10 +6,16 @@ import { join } from 'node:path';
 import { createClient } from '../../lib/api.mjs';
 import { enqueue, readOutbox } from '../../lib/outbox.mjs';
 import { flush } from '../../lib/flush.mjs';
+import { drain } from '../../lib/remind.mjs';
 import { loadConventions } from '../../lib/reconcile.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
 
 const SID = 'sess-1';
+const show = async (data) => (await drain({ data, now: () => Date.now() }, SID)).map((m) => m.id);
+const beat = async (data, go) => {
+  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
+  await go();
+};
 const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 const msg = (id, extra = {}) => ({ id, kind: 'task_comment', audience: 'member', text: `eocrm: ${id}`, ...extra });
 
@@ -32,6 +38,7 @@ function setup(t, replies) {
     },
   };
   const go = () => flush({ data, sessionId: SID, deadlineMs: 5000, clientFor: () => client });
+  go.replies = replies;
   return { data, calls, client, go };
 }
 
@@ -55,11 +62,9 @@ test('reply messages are stored, invalid ones skipped, acks sent once', async (t
   await enqueue(data, { kind: 'event', sessionId: SID, event: { id: 'commit:1', type: 'commit', sha: 'abc1234', subject: 's' } });
   await go();
   assert.deepEqual(loadRun(data, SID).inbox.map((m) => m.id), ['m1', 'm2']);
-  saveRun(data, SID, { inbox: [] });
-  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
-  await go();
-  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
-  await go();
+  assert.deepEqual(await show(data), ['m1', 'm2']);
+  await beat(data, go);
+  await beat(data, go);
   assert.deepEqual(calls.map((c) => [c.kind, c.ack]), [['events', []], ['heartbeat', ['m1', 'm2']], ['heartbeat', []]]);
   assert.deepEqual(loadRun(data, SID).inbox, []);
 });
@@ -98,13 +103,25 @@ test('a re-sent message is acked again but shown once', async (t) => {
   const { data, calls, go } = setup(t, [
     { status: 200, body: { messages: [msg('m1')] } },
     { status: 200, body: { messages: [msg('m1')] } },
+    { status: 200, body: { messages: [msg('m1')] } },
   ]);
-  for (let i = 0; i < 3; i++) {
-    await enqueue(data, { kind: 'heartbeat', sessionId: SID });
-    await go();
-  }
-  assert.deepEqual(calls.map((c) => c.ack), [[], ['m1'], ['m1']]);
-  assert.deepEqual(loadRun(data, SID).inbox.map((m) => m.id), ['m1']);
+  await beat(data, go);
+  await beat(data, go);
+  assert.deepEqual(await show(data), ['m1']);
+  await beat(data, go);
+  await beat(data, go);
+  assert.deepEqual(calls.map((c) => c.ack), [[], [], ['m1'], ['m1']]);
+  assert.deepEqual(loadRun(data, SID).inbox, []);
+});
+
+test('a message is acked only after it is shown', async (t) => {
+  const { data, calls, go } = setup(t, [{ status: 200, body: { messages: [msg('m1')] } }]);
+  await beat(data, go);
+  await beat(data, go);
+  assert.deepEqual(loadRun(data, SID).ackPending, []);
+  await show(data);
+  await beat(data, go);
+  assert.deepEqual(calls.map((c) => c.ack), [[], [], ['m1']]);
 });
 
 test('an oversized reply is capped', async (t) => {
@@ -117,26 +134,31 @@ test('an oversized reply is capped', async (t) => {
   const { inbox, ackPending } = loadRun(data, SID);
   assert.equal(inbox.length, 20);
   assert.deepEqual([inbox[0].id.length, inbox[0].text.length, inbox[0].data], [64, 1000, { reload: 'conventions' }]);
-  assert.equal(ackPending.length, 100);
-  assert.deepEqual([ackPending[0], ackPending.at(-1)], ['old15', 'm18']);
+  assert.equal(ackPending.length, 95);
+  assert.deepEqual([ackPending[0], ackPending.at(-1)], ['old0', 'old94']);
 });
 
-test('inbox overflow leaves the evicted messages unacked', async (t) => {
-  const batches = [0, 1, 2, 3].map((b) => ({ status: 200, body: { messages: Array.from({ length: 20 }, (_, i) => msg(`b${b}m${i}`)) } }));
-  const { data, calls, go } = setup(t, batches);
-  for (let i = 0; i < 4; i++) {
-    await enqueue(data, { kind: 'step', sessionId: SID, step: `Task ${i}` });
-    await go();
-  }
-  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
-  await go();
-  const acked = new Set(calls.flatMap((c) => c.ack ?? []));
+test('inbox overflow stays unacked until shown, then every message is shown once', async (t) => {
+  const id = (i) => `b${Math.floor(i / 20)}m${i % 20}`;
+  const all = Array.from({ length: 80 }, (_, i) => id(i));
+  const reply = (ids) => ({ status: 200, body: { messages: ids.map((x) => msg(x)) } });
+  const { data, calls, go } = setup(t, [0, 1, 2, 3].map((b) => reply(all.slice(b * 20, b * 20 + 20))));
+  for (let i = 0; i < 4; i++) await beat(data, go);
+  assert.ok(calls.every((c) => c.ack.length === 0));
   const inbox = loadRun(data, SID).inbox.map((m) => m.id);
   assert.equal(inbox.length, 50);
-  const evicted = Array.from({ length: 80 }, (_, i) => `b${Math.floor(i / 20)}m${i % 20}`).filter((id) => !inbox.includes(id));
+  const shown = await show(data);
+  assert.deepEqual(shown, inbox);
+  const evicted = all.filter((x) => !inbox.includes(x));
   assert.equal(evicted.length, 30);
-  assert.ok(evicted.every((id) => !acked.has(id)));
-  assert.ok(inbox.every((id) => acked.has(id)));
+  calls.length = 0;
+  go.replies.push(reply(evicted.slice(0, 20)), reply(evicted.slice(20)));
+  await beat(data, go);
+  assert.deepEqual(calls[0].ack, inbox);
+  await beat(data, go);
+  shown.push(...await show(data));
+  assert.deepEqual(calls[1].ack, []);
+  assert.deepEqual([...shown].sort(), [...all].sort());
 });
 
 test('a message with an unknown kind or audience is dropped', async (t) => {
