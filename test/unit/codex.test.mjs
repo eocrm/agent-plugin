@@ -173,7 +173,7 @@ test('Stop sends one usage event per model and resets the sums', async () => {
   await fire('Stop', { turn_id: 't1' });
   const first = usage();
   assert.deepEqual(first.map((e) => [e.model, e.input_tokens, e.output_tokens, e.cache_read_tokens, e.cache_write_tokens]), [['gpt-a', 10, 7, 100, 0], ['gpt-b', 2, 0, 0, 0]]);
-  assert.equal(first[0].id, eventId('usage', 's:0:codex:t1:gpt-a'));
+  assert.equal(first[0].id, eventId('usage', 's:0:codex:t1:0:gpt-a'));
   assert.deepEqual(loadRun(data, 's').codexUsage, {});
   await fire('Stop', { turn_id: 't1' });
   assert.equal(usage().length, 2);
@@ -189,7 +189,7 @@ test('a retried Stop reuses the turn\'s usage event ids', async () => {
   const sums = loadRun(data, 's').codexUsage;
   await fire('Stop', { turn_id: 't1' });
   const first = usage().map((e) => e.id);
-  saveRun(data, 's', { codexUsage: sums });
+  saveRun(data, 's', { codexUsage: sums, codexStops: 0 });
   await fire('Stop', { turn_id: 't1' });
   assert.deepEqual(usage().map((e) => e.id), first);
 });
@@ -219,4 +219,28 @@ test('claude Stop still reads usage from the transcript', async () => {
   await fire('Stop', { transcript_path: transcript });
   assert.deepEqual(usage().map((e) => [e.model, e.input_tokens]), [['claude-x', 3]]);
   assert.ok(!events().some((e) => e.type === 'waiting'));
+});
+
+test('a blocked Stop and its continuation send distinct usage ids', async () => {
+  const { fire, model, usage } = usageSetup();
+  await fire('UserPromptSubmit');
+  await model('gpt-a', U);
+  await fire('Stop', { turn_id: 't1' });
+  await model('gpt-a', U);
+  await fire('Stop', { turn_id: 't1', stop_hook_active: true });
+  assert.equal(new Set(usage().map((e) => e.id)).size, 2);
+  await fire('UserPromptSubmit');
+  await model('gpt-a', U);
+  await fire('Stop', { turn_id: 't2' });
+  assert.equal(usage().at(-1).id, eventId('usage', 's:0:codex:t2:0:gpt-a'));
+});
+
+test('a codex hook prints one JSON object and the gate decision wins', async () => {
+  const block = JSON.stringify({ decision: 'block', reason: 'r' });
+  const other = JSON.stringify({ hookSpecificOutput: { additionalContext: 'x' } });
+  for (const [resume, post] of [[block, other], [other, block]]) {
+    const ctx = { harness: 'codex', core: async (event) => ({ stdout: event === 'Resume' ? resume : post }) };
+    const out = await handle('PostToolUse', { session_id: 's', cwd: '/w', tool_name: 'x' }, ctx);
+    assert.equal(JSON.parse(out.stdout).decision, 'block');
+  }
 });
