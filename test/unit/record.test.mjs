@@ -118,6 +118,7 @@ test('--session targets that run; an unknown session falls back to the newest', 
   await cli(['record', 'ruling', '--what', 'c', '--why', 'd', '--session', 'nope'], s);
   const by = Object.fromEntries(readOutbox(s.data).filter((e) => e.kind === 'event').map((e) => [e.event.what, e.sessionId]));
   assert.deepEqual(by, { a: 'sess', c: 'other' });
+  saveRun(s.data, 'sess', { startedAt: 1 });
   await cli(['link', 'ABC-1', '--session', 'sess'], s, { spawnFlush: () => {} });
   assert.equal(loadRun(s.data, 'sess').start.task, 'ABC-1');
   assert.equal(loadRun(s.data, 'other').start?.task, undefined);

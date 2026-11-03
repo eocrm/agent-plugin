@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -110,6 +110,24 @@ test('a ULID or lower-case key of the linked task does not remind', async () => 
 test('a non-string id does not remind', async () => {
   const { fire } = setup();
   for (const id of [7, { key: 'EO-7' }, ['EO-7'], undefined]) assert.equal(await fire(...tool('update', { id })), null);
+});
+
+test('prompt reminder still prints when its bookkeeping write fails', async () => {
+  const { data, sid, fire } = setup({ conventions: { task_switch_check: 'after_pause' }, lastStopAt: 1 });
+  chmodSync(join(data, 'runs'), 0o555);
+  try {
+    assert.equal((await fire('UserPromptSubmit'))?.additionalContext, promptLine('EO-1'));
+  } finally {
+    chmodSync(join(data, 'runs'), 0o755);
+  }
+  assert.equal(loadRun(data, sid).promptRemindedAt, undefined);
+  assert.match(readFileSync(join(data, 'plugin.log'), 'utf8'), /EACCES/);
+});
+
+test('a held lock still prints the prompt reminder, unrecorded', async () => {
+  const { data, sid, fire } = setup({ conventions: { task_switch_check: 'after_pause' }, lastStopAt: 1 });
+  assert.equal((await withLock(data, () => fire('UserPromptSubmit')))?.additionalContext, promptLine('EO-1'));
+  assert.equal(loadRun(data, sid).promptRemindedAt, undefined);
 });
 
 test('signals_only never reminds on a prompt', async () => {

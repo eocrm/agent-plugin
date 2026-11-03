@@ -210,6 +210,36 @@ test('a later default doesn\'t move a session that already started', async () =>
   assert.equal(starts[0].task, undefined);
 });
 
+test('link --session moves my run after I cd into another worktree', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const feat = `${dir}-feat`;
+  git(dir, 'worktree', 'add', '-q', feat, '-b', 'feat');
+  const ctx = ctxFor(data);
+  const a = sid();
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, feat, 'EO-5', a);
+  assert.deepEqual([loadRun(data, a).linkedTask, loadRun(data, a).start.task], ['EO-5', 'EO-5']);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => [e.sessionId, e.task]), [[a, 'EO-5']]);
+  assert.equal((await ensureRun(ctx, input(a, feat, { source: 'compact' }))).start.task, 'EO-5');
+});
+
+test('a 0.1.4 run keeps its own first task after the default changes', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const [a, b] = [sid(), sid()];
+  await linkWorktree(ctx, dir, 'EO-1', undefined);
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, dir, null, undefined);
+  await ensureRun(ctx, input(b, dir));
+  saveRun(data, a, { linkedTask: undefined });
+  saveRun(data, b, { linkedTask: undefined });
+  await linkWorktree(ctx, dir, 'EO-2', undefined);
+  assert.equal((await ensureRun(ctx, input(a, dir, { source: 'compact' }))).start.task, 'EO-1');
+  assert.equal((await ensureRun(ctx, input(b, dir, { source: 'compact' }))).start.task, undefined);
+});
+
 test('link with no live run of mine relinks nobody', async () => {
   const data = signedIn();
   const dir = repo('main');
