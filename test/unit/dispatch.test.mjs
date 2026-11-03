@@ -151,7 +151,7 @@ test('after link none the next session prints nothing', async () => {
   const dir = repo('main');
   const out = [];
   assert.equal(await main({ argv: ['link', 'none', '--data', data], cwd: dir, env: {}, out: (l) => out.push(l), err: () => {} }), 0);
-  assert.equal(out.length, 1);
+  assert.deepEqual(out, ['not linked to a task', 'Only the default for new sessions changed (no --session).']);
   const r = hook('SessionStart', JSON.stringify(input(sid(), dir)), { data });
   assert.deepEqual([r.status, r.stdout], [0, '']);
 });
@@ -164,8 +164,10 @@ test('link KEY saves the answer and queues a task update for the live run only',
   await handle('SessionStart', input(ended, dir), ctx);
   await handle('SessionEnd', input(ended, dir), ctx);
   await handle('SessionStart', input(live, dir), ctx);
-  const code = await main({ argv: ['link', 'AB-12', '--session', live, '--data', data], cwd: dir, env: ctx.env, out: () => {}, err: () => {} });
+  const out = [];
+  const code = await main({ argv: ['link', 'AB-12', '--session', live, '--data', data], cwd: dir, env: ctx.env, out: (l) => out.push(l), err: () => {} });
   assert.equal(code, 0);
+  assert.deepEqual(out, ['linked to AB-12']);
   assert.deepEqual(loadWorktree(data, worktreeOf(dir).key).taskKey, 'AB-12');
   assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => [e.sessionId, e.task]), [[live, 'AB-12']]);
   for (const bad of ['ab-12', 'AB-', 'AB-12 x', '']) {
