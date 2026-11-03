@@ -10,6 +10,7 @@ import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
 import { git as stateGit, loadRun, saveRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
 import { repoSlug } from '../../lib/git.mjs';
 import { main } from '../../scripts/eocrm.mjs';
+import { flush } from '../../lib/flush.mjs';
 import { committedLine } from '../../lib/workspace.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../../hooks/dispatch.mjs', import.meta.url));
@@ -223,6 +224,34 @@ test('link none sticks for my session', async () => {
   await linkWorktree(ctx, dir, null, a);
   await linkWorktree(ctx, dir, 'EO-2', b);
   assert.equal((await ensureRun(ctx, input(a, dir, { source: 'resume' }))).start.task, undefined);
+});
+
+test('link none unfiles my run on the server', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const a = sid();
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, dir, null, a);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => [e.sessionId, e.task]), [[a, null]]);
+  const updates = [];
+  const ok = { status: 200, body: {} };
+  const client = { startRun: async () => ({ status: 201, body: { id: 'r1' } }), recordEvents: async () => ok, heartbeat: async () => ok, updateRun: async (id, body) => { updates.push([id, body]); return ok; } };
+  await flush({ data, sessionId: a, clientFor: () => client });
+  assert.deepEqual(updates, [['r1', { task: null }]]);
+});
+
+test('link while my run is ended applies on resume', async () => {
+  const data = signedIn();
+  const dir = repo('main');
+  const ctx = ctxFor(data);
+  const a = sid();
+  await ensureRun(ctx, input(a, dir));
+  await linkWorktree(ctx, dir, 'EO-1', a);
+  saveRun(data, a, { ended: true });
+  await linkWorktree(ctx, dir, 'EO-3', a);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task').map((e) => e.task), ['EO-1']);
+  assert.equal((await ensureRun(ctx, input(a, dir, { source: 'resume' }))).start.task, 'EO-3');
 });
 
 test('link reports other active sessions', async () => {
