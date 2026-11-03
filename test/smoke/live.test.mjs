@@ -5,9 +5,13 @@ import { createClient } from '../../lib/api.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 
 const { EOCRM_SMOKE_REGION: region, EOCRM_SMOKE_WORKSPACE: workspace, EOCRM_SMOKE_TASK: task, EOCRM_SMOKE_CLIENT_ID: clientId, EOCRM_SMOKE_REFRESH_TOKEN: refresh, EOCRM_SMOKE_TOKEN_OUT: out } = process.env;
-const ready = region && workspace && task && clientId && refresh;
+const missing = Object.entries({ EOCRM_SMOKE_REGION: region, EOCRM_SMOKE_WORKSPACE: workspace, EOCRM_SMOKE_TASK: task, EOCRM_SMOKE_CLIENT_ID: clientId, EOCRM_SMOKE_REFRESH_TOKEN: refresh }).filter(([, v]) => !v).map(([k]) => k);
+const ready = missing.length === 0;
 
-test('live agent-run round trip', { skip: !ready && (console.log('::warning::smoke credentials not set (OPS-2)'), 'no credentials') }, async () => {
+// A nightly that silently skips looks healthy: in CI missing config is a failure (names only, never values).
+if (!ready && process.env.CI) test('smoke config present', () => assert.fail(`missing ${missing.join(', ')}`));
+
+test('live agent-run round trip', { skip: !ready && `missing ${missing.join(', ')}` }, async () => {
   let tokens = { access_token: 'stale', refresh_token: refresh, client_id: clientId, expires_at: 0 };
   const store = {
     get: async () => tokens,
@@ -31,8 +35,14 @@ test('live agent-run round trip', { skip: !ready && (console.log('::warning::smo
   ];
   assert.equal((await client.recordEvents(id, events)).status, 200);
   const listed = await client.listEvents(id);
-  const ids = listed.body.items.map((e) => e.id);
-  for (const e of events) assert.ok(ids.includes(e.id), `missing ${e.id}`);
+  // Listed events carry server ids, not our client ids: match by content (as lib/reconcile.mjs does).
+  const items = listed.body.items;
+  assert.deepEqual(items.map((e) => e.type).sort(), ['commit', 'plan', 'step', 'test_run']);
+  const by = Object.fromEntries(items.map((e) => [e.type, e.payload ?? {}]));
+  assert.ok(by.plan.items?.some((i) => i.text === 'smoke'), `plan ${JSON.stringify(by.plan)}`);
+  assert.equal(by.step.label, 'smoke');
+  assert.equal(by.commit.sha, 'abc1234');
+  assert.equal(by.test_run.command, 'npm test');
   assert.equal((await client.recordEvents(id, events)).body.duplicates, 4);
   assert.equal((await client.updateRun(id, { state: 'finished' })).status, 200);
 });
