@@ -69,7 +69,7 @@ test('record requires its arguments and a live run', async () => {
 });
 
 test('conventions prints compact JSON without workflows', async () => {
-  const s = setup({ workspace: 'ws', conventions: { epic_type: 'epic', human_space: null, priorities: ['p1'], workflows: [{ a: 1 }] } });
+  const s = setup({ workspace: 'ws', conventionsAt: Date.now(), conventions: { epic_type: 'epic', human_space: null, priorities: ['p1'], workflows: [{ a: 1 }] } });
   const r = await cli(['conventions'], s);
   assert.equal(r.code, 0);
   assert.deepEqual(JSON.parse(r.out), { workspace: 'ws', epic_type: 'epic', human_space: null, priorities: ['p1'] });

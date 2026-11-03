@@ -11,9 +11,9 @@ import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
 import { loadConventions } from '../lib/reconcile.mjs';
 import { enqueue } from '../lib/outbox.mjs';
 import { eventId } from '../lib/ids.mjs';
-import { worktreeOf, writeJsonAtomic, withLock, loadRun, saveRun } from '../lib/state.mjs';
+import { worktreeOf, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, repo: { type: 'string' } };
+const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
@@ -138,12 +138,11 @@ const commands = {
 
   async conventions({ values, env, cwd, out, data, store }) {
     const run = liveRun(data, cwd, values.session);
-    let conventions = run.conventions;
-    if (!conventions) {
-      conventions = await loadConventions({}, run, runClient({ data, env, store })(run), Date.now() + CONVENTIONS_MS);
-      if (!conventions) throw new Error('conventions unavailable: ask the member');
+    const conventions = await loadConventions({}, run, { conventions: () => runClient({ data, env, store })(run).conventions() }, Date.now() + CONVENTIONS_MS, { refresh: values.refresh });
+    if (!conventions) throw new Error('conventions unavailable: ask the member');
+    if (conventions !== run.conventions) {
       await withLock(data, async () => {
-        if (!loadRun(data, run.sessionId).conventions) saveRun(data, run.sessionId, { conventions });
+        saveRun(data, run.sessionId, { conventions, conventionsAt: Date.now() });
       }, { giveUpMs: 1500 }).catch(() => {});
     }
     const compact = { workspace: run.workspace, ...conventions };
