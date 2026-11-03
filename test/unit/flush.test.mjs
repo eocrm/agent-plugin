@@ -51,7 +51,6 @@ test('requests carry the plugin User-Agent', async () => {
 test('reply messages are stored once and acked next call', async (t) => {
   const { data, calls, go } = setup(t, [
     { status: 200, body: { accepted: 1, duplicates: 0, dropped: 0, messages: [msg('m1'), msg('m2', { audience: 'agent' }), { id: 'bad' }] } },
-    { status: 200, body: { messages: [msg('m1')] } },
   ]);
   await enqueue(data, { kind: 'event', sessionId: SID, event: { id: 'commit:1', type: 'commit', sha: 'abc1234', subject: 's' } });
   await go();
@@ -93,4 +92,41 @@ test('a conventions notice forces a reload', async (t) => {
   const run = loadRun(data, SID);
   assert.deepEqual(await loadConventions({}, run, client), { plan_import: true });
   assert.equal(calls.at(-1).kind, 'conventions');
+});
+
+test('a re-sent message is acked again but shown once', async (t) => {
+  const { data, calls, go } = setup(t, [
+    { status: 200, body: { messages: [msg('m1')] } },
+    { status: 200, body: { messages: [msg('m1')] } },
+  ]);
+  for (let i = 0; i < 3; i++) {
+    await enqueue(data, { kind: 'heartbeat', sessionId: SID });
+    await go();
+  }
+  assert.deepEqual(calls.map((c) => c.ack), [[], ['m1'], ['m1']]);
+  assert.deepEqual(loadRun(data, SID).inbox.map((m) => m.id), ['m1']);
+});
+
+test('an oversized reply is capped', async (t) => {
+  const big = msg('x'.repeat(100), { text: 'y'.repeat(2000), data: { reload: 'conventions', extra: 'z' } });
+  const many = Array.from({ length: 24 }, (_, i) => msg(`m${i}`));
+  const { data, go } = setup(t, [{ status: 200, body: { messages: [big, ...many] } }]);
+  saveRun(data, SID, { ackPending: Array.from({ length: 95 }, (_, i) => `old${i}`) });
+  await enqueue(data, { kind: 'step', sessionId: SID, step: 'Task 1' });
+  await go();
+  const { inbox, ackPending } = loadRun(data, SID);
+  assert.equal(inbox.length, 20);
+  assert.deepEqual([inbox[0].id.length, inbox[0].text.length, inbox[0].data], [64, 1000, { reload: 'conventions' }]);
+  assert.equal(ackPending.length, 100);
+  assert.deepEqual([ackPending[0], ackPending.at(-1)], ['old15', 'm18']);
+});
+
+test('a 426 with an empty body still pauses and keeps the outbox', async (t) => {
+  const { data, calls, go } = setup(t, [{ status: 426, body: null }]);
+  await enqueue(data, { kind: 'event', sessionId: SID, event: { id: 'commit:1', type: 'commit', sha: 'abc1234', subject: 's' } });
+  await go();
+  await go();
+  assert.equal(calls.length, 1);
+  assert.equal(readOutbox(data).length, 1);
+  assert.deepEqual([loadRun(data, SID).outdated.minimum, loadRun(data, SID).outdated.version], [null, version]);
 });
