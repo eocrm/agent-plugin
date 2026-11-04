@@ -116,7 +116,8 @@ test('a non-string id does not remind', async () => {
   for (const id of [7, { key: 'EO-7' }, ['EO-7'], undefined]) assert.equal(await fire(...tool('update', { id })), null);
 });
 
-test('prompt reminder still prints when its bookkeeping write fails', async () => {
+// chmod can't make a directory unwritable on Windows or as root (as in gate.test.mjs).
+test('prompt reminder still prints when its bookkeeping write fails', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
   const { data, sid, fire } = setup({ conventions: { task_switch_check: 'after_pause' }, lastStopAt: 1 });
   chmodSync(join(data, 'runs'), 0o555);
   try {
