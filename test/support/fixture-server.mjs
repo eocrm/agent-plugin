@@ -131,7 +131,7 @@ export async function startFixtureServer({ responses = {}, messages = [] } = {})
       if (!run) return noRun;
       if (run.data.ended_at) return refused('run_ended', 'This run has already ended.', 409);
       run.data.last_heartbeat_at = now();
-      return { status: 204 };
+      return { status: 200, body: { messages: messages.splice(0) } };
     },
     'agentRun.events.store': ({ params: [id], body }) => {
       const run = runs.get(id);
