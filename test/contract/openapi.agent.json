@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "eocrm",
-    "version": "0.22.0"
+    "version": "0.24.0"
   },
   "paths": {
     "/v1/agent-runs": {
@@ -55,6 +55,43 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationException"
+          },
+          "426": {
+            "description": "The plugin is older than `minimum` (`plugin_outdated`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "minimum": {
+                      "type": "string"
+                    },
+                    "latest": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "update": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "code",
+                    "minimum",
+                    "latest",
+                    "update"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -149,9 +186,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatAgentRunRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "204": {
-            "description": "No content"
+          "200": {
+            "description": "Messages for the plugin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunMessagesData"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/AuthenticationException"
@@ -171,6 +224,9 @@
                 }
               }
             }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationException"
           }
         },
         "security": [
@@ -230,6 +286,43 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationException"
+          },
+          "426": {
+            "description": "The plugin is older than `minimum` (`plugin_outdated`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "minimum": {
+                      "type": "string"
+                    },
+                    "latest": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "update": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "code",
+                    "minimum",
+                    "latest",
+                    "update"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -572,6 +665,12 @@
               "string",
               "null"
             ]
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunMessageData"
+            }
           }
         },
         "required": [
@@ -635,6 +734,36 @@
           "code"
         ],
         "title": "CodedRefusal"
+      },
+      "HeartbeatAgentRunRequest": {
+        "type": "object",
+        "properties": {
+          "ack": {
+            "type": "array",
+            "description": "Message ids already shown; ids of other runs are ignored.",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 100
+          }
+        },
+        "title": "HeartbeatAgentRunRequest"
+      },
+      "RunMessagesData": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunMessageData"
+            }
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "RunMessagesData"
       },
       "RecordAgentRunEventsRequest": {
         "type": "object",
@@ -940,6 +1069,15 @@
             },
             "minItems": 1,
             "maxItems": 100
+          },
+          "ack": {
+            "type": "array",
+            "description": "Message ids already shown; ids of other runs are ignored.",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 100
           }
         },
         "required": [
@@ -958,6 +1096,12 @@
           },
           "dropped": {
             "type": "integer"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunMessageData"
+            }
           }
         },
         "required": [
@@ -1238,6 +1382,14 @@
           "keep_project_current": {
             "type": "boolean"
           },
+          "task_switch_check": {
+            "type": "string",
+            "enum": [
+              "every_prompt",
+              "after_pause",
+              "signals_only"
+            ]
+          },
           "workflows": {
             "type": "array",
             "items": {
@@ -1287,6 +1439,7 @@
           "subtask_per_pr",
           "plan_import",
           "keep_project_current",
+          "task_switch_check",
           "workflows"
         ],
         "title": "ResolvedConventionsData"
@@ -1384,6 +1537,36 @@
           "kind"
         ],
         "title": "AgentRefData"
+      },
+      "RunMessageData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "audience",
+          "text"
+        ],
+        "title": "RunMessageData"
       },
       "AgentRunEventData": {
         "type": "object",

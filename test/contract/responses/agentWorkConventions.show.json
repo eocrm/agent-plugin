@@ -9,5 +9,6 @@
   "subtask_per_pr": false,
   "plan_import": false,
   "keep_project_current": false,
+  "task_switch_check": "after_pause",
   "workflows": []
 }

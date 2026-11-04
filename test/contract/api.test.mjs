@@ -49,8 +49,8 @@ async function setup(t, { responses, tokens, ...opts } = {}) {
   return { server, store, client };
 }
 
-test('snapshot is the pinned slice of eocrm 0.22.0', () => {
-  assert.equal(snapshot.info.version, '0.22.0');
+test('snapshot is the pinned slice of eocrm 0.24.0', () => {
+  assert.equal(snapshot.info.version, '0.24.0');
   const ops = Object.entries(snapshot.paths).flatMap(([p, ms]) => Object.keys(ms).map((m) => `${m} ${p}`));
   assert.deepEqual(ops.sort(), OPERATIONS.map(([p, m]) => `${m} ${p}`).sort());
 });
@@ -62,7 +62,7 @@ test('each method hits its documented path with the bearer', async (t) => {
   assert.equal((await client.startRun({ client_run_id: 's1' })).status, 200);
   const id = run.body.id;
   assert.equal((await client.updateRun(id, { step: 'Task 1' })).body.step, 'Task 1');
-  assert.deepEqual(await client.heartbeat(id), { status: 204, body: null });
+  assert.deepEqual(await client.heartbeat(id), { status: 200, body: { messages: [] } });
   const events = [{ id: 'commit:a', type: 'commit', sha: 'abc1234', subject: 's' }, { id: 'step:b', type: 'step', phase: 'started', label: 'l' }];
   assert.deepEqual((await client.recordEvents(id, events)).body, { accepted: 2, duplicates: 0, dropped: 0 });
   assert.deepEqual((await client.recordEvents(id, events)).body, { accepted: 0, duplicates: 2, dropped: 0 });

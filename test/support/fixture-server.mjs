@@ -60,7 +60,7 @@ function laravelErrors(errors) {
 
 const now = () => new Date().toISOString();
 
-export async function startFixtureServer({ responses = {} } = {}) {
+export async function startFixtureServer({ responses = {}, messages = [] } = {}) {
   const requests = [];
   let n = 0;
   const auth = { clientId: 'fixture-client', access: 'fixture-access-0', refresh: 'fixture-refresh-0' };
@@ -131,7 +131,7 @@ export async function startFixtureServer({ responses = {} } = {}) {
       if (!run) return noRun;
       if (run.data.ended_at) return refused('run_ended', 'This run has already ended.', 409);
       run.data.last_heartbeat_at = now();
-      return { status: 204 };
+      return { status: 200, body: { messages: messages.splice(0) } };
     },
     'agentRun.events.store': ({ params: [id], body }) => {
       const run = runs.get(id);
@@ -142,7 +142,7 @@ export async function startFixtureServer({ responses = {} } = {}) {
         run.events.push({ id: eventId, type, occurred_at: occurred_at ?? now(), payload });
         accepted += 1;
       }
-      return { status: 200, body: { accepted, duplicates: body.events.length - accepted, dropped: 0 } };
+      return { status: 200, body: { accepted, duplicates: body.events.length - accepted, dropped: 0, ...(messages.length ? { messages: messages.splice(0) } : {}) } };
     },
     'agentRun.events.index': ({ params: [id], query }) => {
       const run = runs.get(id);

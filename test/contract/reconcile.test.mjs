@@ -14,7 +14,7 @@ const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'u
 const PLAN = 'docs/superpowers/plans/p.md';
 
 test('a run whose events already hold the plan and tick 1: reconcile at resume sends only tick 2', async (t) => {
-  const conventions = { epic_type: null, subtask_type: null, bug_type: null, human_space: null, status_roles: [], priorities: [], epic_per_slice: false, subtask_per_pr: false, plan_import: true, keep_project_current: false, workflows: [] };
+  const conventions = { epic_type: null, subtask_type: null, bug_type: null, human_space: null, status_roles: [], priorities: [], epic_per_slice: false, subtask_per_pr: false, plan_import: true, keep_project_current: false, task_switch_check: 'after_pause', workflows: [] };
   const server = await startFixtureServer({ responses: { 'agentWorkConventions.show': { status: 200, body: conventions } } });
   t.after(() => server.close());
   const data = tmp('data');
