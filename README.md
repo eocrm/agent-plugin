@@ -25,7 +25,7 @@ codex plugin add eocrm@eocrm         # agent work
 codex plugin add eocrm-mcp@eocrm     # tools
 ```
 
-Then open `/hooks` in Codex and trust the eocrm hooks (Codex runs none until you do; `status` says so while no hook has run in the repo), and sign in with the `login` skill. Node 20+ must be on the PATH of the Codex desktop app too.
+Then open `/hooks` in Codex and trust the eocrm hooks (Codex runs none until you do; `status` says so while no hook has run in the repo), and sign in with the `login` skill. Node 20+ must be on the PATH of the Codex desktop app too. Codex uses its own skill texts (`codex-skills/`), which find the plugin's data and session without Claude Code's variables.
 
 Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
 
@@ -45,11 +45,11 @@ Agent work must be on in the workspace (Settings → Modules); it needs Tasks an
 
 ## Messages from eocrm
 
-eocrm can answer tracking calls with short messages, and the plugin shows each one once, at your next prompt, Bash or task tool call, or stop. Lines meant for you (someone commented on the linked task, conventions changed, a plugin update) appear in the terminal and cost Claude no tokens. A comment you wrote on the linked task yourself is passed to Claude, quoted as your words rather than instructions. An update notice shows at most once a day. If the plugin is older than eocrm's minimum, tracking pauses and keeps its queue until you run `/plugin marketplace update eocrm`. You're also told once per session when Agent work is off for the workspace or you're signed out.
+eocrm can answer tracking calls with short messages, and the plugin shows each one once, at your next prompt, Bash or task tool call, or stop. Codex may not display the lines meant for you (`codex exec` doesn't); comments for the agent still reach it. Lines meant for you (someone commented on the linked task, conventions changed, a plugin update) appear in the terminal and cost Claude no tokens. A comment you wrote on the linked task yourself is passed to Claude, quoted as your words rather than instructions. An update notice shows at most once a day. If the plugin is older than eocrm's minimum, tracking pauses and keeps its queue until you run `/plugin marketplace update eocrm`. You're also told once per session when Agent work is off for the workspace or you're signed out.
 
 ## What is sent
 
-Run metadata (branch, repo, task key), plan items, commits (sha, subject), test commands and result lines, PR links, review findings, and turn boundaries and waiting (for permission or for you; Claude Code also for a question). Never your prompts, the assistant's replies or file contents. Everything is scrubbed for secrets and capped in length before it leaves the machine. Events are queued locally and retried; when the queue cannot be flushed the run shows as "tracking stale".
+Run metadata (branch, repo, task key), plan items, commits (sha, subject), test commands and result lines (Codex reports no exit code, so its test runs have none), PR links, review findings, and turn boundaries and waiting (for permission or for you; Claude Code also for a question). Never your prompts, the assistant's replies or file contents. Everything is scrubbed for secrets and capped in length before it leaves the machine. Events are queued locally and retried; when the queue cannot be flushed the run shows as "tracking stale".
 
 Token counts per model: Claude Code's come from the local session transcript and its subagent transcripts; Codex's come from Codex itself (its per-request hook), with no transcript read. Nothing else from either leaves the machine.
 
