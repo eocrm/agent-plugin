@@ -11,7 +11,7 @@ import { git as stateGit, loadRun, saveRun, loadWorktree, worktreeOf } from '../
 import { repoSlug } from '../../lib/git.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { flush } from '../../lib/flush.mjs';
-import { committedLine } from '../../lib/workspace.mjs';
+import { committedLine, useWorkspace } from '../../lib/workspace.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../../hooks/dispatch.mjs', import.meta.url));
 const UNREACHABLE = JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' });
@@ -774,4 +774,93 @@ test('dispatch passes harness codex when the flag is given and claude by default
   const { parseArgs } = await import('../../lib/paths.mjs');
   assert.deepEqual(parseArgs(['--harness', 'codex', 'Stop']), { event: 'Stop', harness: 'codex' });
   assert.deepEqual(parseArgs(['Stop', '--data', '/d']), { event: 'Stop', harness: 'claude' });
+});
+
+const factsFor = (data, cwd, ws) => ({ wt: worktreeOf(cwd), origin: '', branch: 'main', ws: { workspace: ws.workspace, region: ws.region, source: 'repo', pending: null } });
+const retiredOf = (data, s) => readOutbox(data).filter((e) => e.sessionId.startsWith(`${s}--`));
+
+test('a cd into a repo pinned to another workspace finishes the run there and starts the next generation', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  saveRun(data, s, { runId: 'r1' });
+  writeOutbox(data, []);
+  const run = await ensureRun(ctx, input(s, b));
+  assert.deepEqual([run.workspace, run.generation, run.clientRunId, run.runId], ['globex', 1, `${s}.1`, null]);
+  assert.deepEqual(kinds(data, s), ['start']);
+  assert.deepEqual(retiredOf(data, s).map((e) => e.kind), ['finish']);
+  const calls = [];
+  const ok = { status: 200, body: {} };
+  const clientFor = (r) => ({
+    startRun: async (body) => { calls.push([r.workspace, 'start', body.client_run_id]); return { status: 201, body: { id: 'r2' } }; },
+    updateRun: async (id, body) => { calls.push([r.workspace, id, body.state ?? body.task]); return ok; },
+    recordEvents: async () => ok, heartbeat: async () => ok,
+  });
+  await flush({ data, clientFor });
+  assert.deepEqual(calls.sort(), [['acme', 'r1', 'finished'], ['globex', 'start', `${s}.1`]]);
+  await linkWorktree(ctx, b, 'EO-7', s);
+  await flush({ data, clientFor });
+  assert.deepEqual(calls.at(-1), ['globex', 'r2', 'EO-7']);
+});
+
+test('a run whose start never reached the server finishes in its own workspace under its own client_run_id', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  await ensureRun(ctx, input(s, b));
+  const calls = [];
+  const clientFor = (r) => ({
+    startRun: async (body) => { calls.push([r.workspace, body.client_run_id]); return { status: 201, body: { id: `r-${r.workspace}` } }; },
+    updateRun: async (id, body) => { calls.push([r.workspace, id, body.state]); return { status: 200, body: {} }; },
+    recordEvents: async () => ({ status: 200, body: {} }), heartbeat: async () => ({ status: 200, body: {} }),
+  });
+  await flush({ data, clientFor });
+  assert.deepEqual(calls.sort(), [['acme', 'r-acme', 'finished'], ['acme', s], ['globex', `${s}.1`]]);
+});
+
+test('the same workspace in another repo keeps the run', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  saveRun(data, s, { runId: 'r1' });
+  const run = await ensureRun(ctx, input(s, b));
+  assert.deepEqual([run.runId, run.generation], ['r1', 0]);
+  assert.deepEqual(retiredOf(data, s), []);
+});
+
+test('a region change alone finishes the run', async () => {
+  const data = signedIn();
+  const a = repo('main');
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  saveRun(data, s, { runId: 'r1' });
+  writeOutbox(data, []);
+  const run = await ensureRun(ctx, input(s, a), factsFor(data, a, { workspace: 'acme', region: 'ru' }));
+  assert.deepEqual([run.region, run.generation, run.runId], ['ru', 1, null]);
+  assert.deepEqual(retiredOf(data, s).map((e) => e.kind), ['finish']);
+});
+
+test('a link set for the new workspace carries over; one set for the old does not', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const [s, t] = [sid(), sid()];
+  await ensureRun(ctx, input(s, a));
+  await linkWorktree(ctx, b, 'EO-8', s);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task'), []);
+  assert.equal((await ensureRun(ctx, input(s, b))).start.task, 'EO-8');
+  await ensureRun(ctx, input(t, a));
+  await linkWorktree(ctx, a, 'EO-9', t);
+  const moved = await ensureRun(ctx, input(t, b));
+  assert.deepEqual([moved.start.task, moved.linkedTask], [undefined, null]);
 });
