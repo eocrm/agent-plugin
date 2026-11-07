@@ -1090,3 +1090,21 @@ test('a 0.2.0 link with no linkedFor applies in place and stays behind on a move
   assert.equal((await ensureRun(ctx, input(s, a, { source: 'resume' }))).start.task, 'EO-3');
   assert.equal((await ensureRun(ctx, input(t, b, { source: 'resume' }))).start.task, undefined);
 });
+
+test('a resume or a new generation restarts the merge window', async () => {
+  const data = signedIn();
+  const a = repo('main');
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  ctx.at = 2_000_000;
+  await ensureRun(ctx, input(s, a, { source: 'compact' }));
+  assert.equal(loadRun(data, s).activeSince, 1_000_000);
+  await ensureRun(ctx, input(s, a, { source: 'resume' }));
+  assert.equal(loadRun(data, s).activeSince, 2_000_000);
+  saveRun(data, s, { runId: 'r1', ended: true });
+  writeOutbox(data, []);
+  ctx.at = 3_000_000;
+  await handle('UserPromptSubmit', input(s, a), ctx);
+  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).activeSince], [1, 3_000_000]);
+});
