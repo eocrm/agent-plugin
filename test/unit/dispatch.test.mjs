@@ -372,7 +372,7 @@ test('a new session finishes an older still-running run of the same worktree', a
   assert.deepEqual([kinds(data, old), kinds(data, fresh)], [[], ['finish']]);
 });
 
-test('resume with a pending finish clears it and keeps the generation', async () => {
+test('resume with a pending finish finishes that generation and starts the next', async () => {
   const data = signedIn();
   const dir = repo('feat/AB-12-x');
   const ctx = ctxFor(data);
@@ -383,8 +383,10 @@ test('resume with a pending finish clears it and keeps the generation', async ()
   await handle('SessionEnd', input(s, dir), ctx);
   assert.deepEqual(kinds(data, s), ['finish']);
   await handle('SessionStart', input(s, dir, { source: 'resume' }), ctx);
-  assert.deepEqual(kinds(data, s), []);
-  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).runId, loadRun(data, s).ended], [0, 'r1', false]);
+  assert.deepEqual(kinds(data, s).filter((k) => k !== 'event'), ['start']);
+  assert.deepEqual(retiredOf(data, s).map((e) => e.kind), ['finish']);
+  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).runId, loadRun(data, s).ended], [1, null, false]);
+  assert.equal(loadRun(data, `${s}--w0`).runId, 'r1');
 });
 
 test('resume after an acked finish rolls to generation n+1 before queuing anything', async () => {
@@ -647,7 +649,7 @@ test('git runs with windowsHide', () => {
   assert.equal(opts.windowsHide, true);
 });
 
-test('a finish spilled while the lock was held is cleared on resume', async () => {
+test('a finish spilled while the lock was held moves to the old generation on resume', async () => {
   const data = signedIn();
   const dir = repo('feat/AB-12-x');
   const ctx = ctxFor(data);
@@ -657,8 +659,8 @@ test('a finish spilled while the lock was held is cleared on resume', async () =
   writeOutbox(data, []);
   writeFileSync(join(data, 'outbox.1.abcdef.jsonl'), `${JSON.stringify({ kind: 'finish', sessionId: s, seq: 'x' })}\n`);
   await handle('SessionStart', input(s, dir, { source: 'resume' }), ctx);
-  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).ended], [0, false]);
-  assert.deepEqual(kinds(data, s), []);
+  assert.deepEqual([loadRun(data, s).generation, loadRun(data, s).ended], [1, false]);
+  assert.deepEqual(retiredOf(data, s).map((e) => e.kind), ['finish']);
   assert.deepEqual(readdirSync(data).filter((f) => f.startsWith('outbox.1.')), []);
 });
 
@@ -1030,7 +1032,7 @@ test('after a link for another workspace, a hook from that repo moves the run th
   assert.deepEqual([run.workspace, run.generation, run.start.task], ['globex', 1, 'EO-8']);
 });
 
-test('a prompt during a finish in flight keeps the resumed run open', async () => {
+test('a prompt during a finish in flight rolls a new generation that gets the turn', async () => {
   const data = signedIn();
   const a = repo('main');
   const ctx = ctxFor(data);
@@ -1039,18 +1041,52 @@ test('a prompt during a finish in flight keeps the resumed run open', async () =
   saveRun(data, s, { runId: 'r1' });
   writeOutbox(data, []);
   await handle('SessionEnd', input(s, a), ctx);
-  let resumed = false;
+  const calls = [];
   const ok = { status: 200, body: {} };
   const clientFor = () => ({
-    updateRun: async (id, body) => {
-      if (body.state === 'finished' && !resumed) {
-        resumed = true;
-        await handle('UserPromptSubmit', input(s, a), ctx);
-      }
+    updateRun: async (id) => {
+      calls.push(['finish', id]);
+      if (calls.length === 1) await handle('UserPromptSubmit', input(s, a), ctx);
       return ok;
     },
-    startRun: async () => ({ status: 201, body: { id: 'r2' } }), recordEvents: async () => ok, heartbeat: async () => ok,
+    startRun: async (body) => { calls.push(['start', body.client_run_id]); return { status: 201, body: { id: 'r2' } }; },
+    recordEvents: async (id, events) => { calls.push(['events', id, events.map((e) => e.type).join()]); return ok; },
+    heartbeat: async () => ok,
   });
   await flush({ data, clientFor });
-  assert.deepEqual([resumed, loadRun(data, s).ended, loadRun(data, s).generation], [true, false, 0]);
+  assert.deepEqual(calls.filter(([k]) => k === 'start'), [['start', `${s}.1`]]);
+  assert.ok(calls.some(([k, id, types]) => k === 'events' && id === 'r2' && types.includes('turn')));
+  assert.ok(!calls.some(([k, id]) => k === 'events' && id === 'r1'));
+  assert.deepEqual([loadRun(data, s).ended, loadRun(data, s).generation, loadRun(data, `${s}--w0`).ended], [false, 1, true]);
+});
+
+test('a link made while the run is ended reaches the server with the next generation', async () => {
+  const data = signedIn();
+  const a = repo('main');
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  saveRun(data, s, { runId: 'R1' });
+  writeOutbox(data, []);
+  await handle('SessionEnd', input(s, a), ctx);
+  await linkWorktree(ctx, a, 'EO-9', s);
+  await handle('SessionStart', input(s, a, { source: 'resume' }), ctx);
+  const starts = [];
+  const ok = { status: 200, body: {} };
+  await flush({ data, clientFor: () => ({ startRun: async (body) => { starts.push(body); return { status: 201, body: { id: 'R2' } }; }, updateRun: async () => ok, recordEvents: async () => ok, heartbeat: async () => ok }) });
+  assert.deepEqual(starts.map((b) => [b.client_run_id, b.task]), [[`${s}.1`, 'EO-9']]);
+});
+
+test('a 0.2.0 link with no linkedFor applies in place and stays behind on a move', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const [s, t] = [sid(), sid()];
+  for (const x of [s, t]) {
+    await ensureRun(ctx, input(x, a));
+    saveRun(data, x, { linkedTask: 'EO-3', linkedFor: undefined, ended: true });
+  }
+  assert.equal((await ensureRun(ctx, input(s, a, { source: 'resume' }))).start.task, 'EO-3');
+  assert.equal((await ensureRun(ctx, input(t, b, { source: 'resume' }))).start.task, undefined);
 });

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { remind, linkedLine, promptLine } from '../../lib/remind.mjs';
 import { handle, LINK_ASK } from '../../lib/run.mjs';
-import { loadRun, saveRun, withLock } from '../../lib/state.mjs';
+import { loadRun, saveRun, withLock, worktreeOf } from '../../lib/state.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { stopGate } from '../../lib/gate.mjs';
 import { flush } from '../../lib/flush.mjs';
@@ -519,6 +519,31 @@ test('no merge reminder from a merge older than the session or one still in prog
   gitMerge(r, 'c');
   assert.match(execFileSync('git', ['reflog', '-1', '--format=%gs'], { cwd, encoding: 'utf8' }), /^merge new/);
   assert.equal(await fire(...merge(cwd, 'git merge c || true', { stdout: 'CONFLICT', stderr: '' })), null);
+});
+
+test('a merge made after a recent resume reminds; one older than the resume does not', async () => {
+  const { fire, data, sid } = setup();
+  const r = repo();
+  feature(r, 'early');
+  gitMerge(r, 'early');
+  saveRun(data, sid, { startedAt: 1, activeSince: Date.now() + 2000 });
+  assert.equal(await fire(...merge(r.cwd, 'git merge early')), null);
+  saveRun(data, sid, { activeSince: Date.now() - 60_000 });
+  feature(r, 'now');
+  gitMerge(r, 'now');
+  assert.equal((await fire(...merge(r.cwd, 'git merge now')))?.additionalContext, MERGED);
+});
+
+test('a merge in another worktree than the run\'s does not remind', async () => {
+  const { fire, data, sid } = setup();
+  const [mine, other] = [repo(), repo()];
+  saveRun(data, sid, { worktreeKey: worktreeOf(mine.cwd).key });
+  feature(other, 'feat');
+  gitMerge(other, 'feat');
+  assert.equal(await fire(...merge(other.cwd)), null);
+  feature(mine, 'feat');
+  gitMerge(mine, 'feat');
+  assert.equal((await fire(...merge(mine.cwd)))?.additionalContext, MERGED);
 });
 
 test('under Codex a shell git merge with a string response does not remind', async () => {
