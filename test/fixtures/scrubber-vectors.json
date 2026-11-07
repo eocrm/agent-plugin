@@ -2221,5 +2221,25 @@
  {
   "input": "docker run -u 1000:1000 img curl -u a:b x",
   "expected": "docker run -u [redacted] img curl -u [redacted] x"
+ },
+ {
+  "input": "{'auths': {'r': {'auth': 'dXNlcjpwYXNz'}}}",
+  "expected": "{'auths': {'r': {'auth': '[redacted]'}}}"
+ },
+ {
+  "input": "{'password': 'hunter2'}",
+  "expected": "{'password': [redacted]"
+ },
+ {
+  "input": "it's the \"author\": 'x'",
+  "expected": "it's the \"author\": 'x'"
+ },
+ {
+  "input": "{\"auth\": \"abc'def\"}",
+  "expected": "{\"auth\": \"[redacted]\"}"
+ },
+ {
+  "input": "{'auth': 'ab\"cd'}",
+  "expected": "{'auth': '[redacted]'}"
  }
 ]
