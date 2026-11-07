@@ -177,3 +177,10 @@ test('a 426 with an empty body still pauses and keeps the outbox', async (t) => 
   assert.equal(readOutbox(data).length, 1);
   assert.deepEqual([loadRun(data, SID).outdated.minimum, loadRun(data, SID).outdated.version], [null, version]);
 });
+
+test('a task_unfinished message keeps its key and status', async (t) => {
+  const m = msg('u1', { kind: 'task_unfinished', audience: 'agent', data: { key: 'EO-1', status: 'In progress', extra: 'x' } });
+  const { data, go } = setup(t, [{ status: 200, body: { messages: [m] } }]);
+  await beat(data, go);
+  assert.deepEqual(loadRun(data, SID).inbox, [{ id: 'u1', kind: 'task_unfinished', audience: 'agent', text: 'eocrm: u1', data: { key: 'EO-1', status: 'In progress' } }]);
+});

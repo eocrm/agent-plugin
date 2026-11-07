@@ -12,6 +12,7 @@ import { stopGate } from '../../lib/gate.mjs';
 import { flush } from '../../lib/flush.mjs';
 import { enqueue } from '../../lib/outbox.mjs';
 import { VERSION } from '../../lib/api.mjs';
+import { codexEvents } from '../../lib/codex.mjs';
 
 const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)));
 const UNREACHABLE = JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' });
@@ -368,4 +369,69 @@ test('under Codex, member messages stay unacked in the inbox; agent comments sti
   assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: framed('a1') } });
   assert.deepEqual(loadRun(data, sid).inbox.map((m) => m.id), ['m1']);
   assert.deepEqual(loadRun(data, sid).ackPending ?? [], ['a1']);
+});
+
+const unfinished = (id, data) => ({ id, kind: 'task_unfinished', audience: 'agent', text: `server text ${id}`, data });
+const UNFINISHED = 'eocrm: EO-1 is still In progress. If it\'s finished, move it to done.';
+
+test('task_unfinished reaches the model as a locally built line, under both harnesses', async () => {
+  for (const harness of [undefined, 'codex']) {
+    const { data, sid, ctx, raw } = inboxed([unfinished('u1', { key: 'EO-1', status: 'In progress' })], { conventions: { task_switch_check: 'signals_only' } });
+    ctx.harness = harness;
+    assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: UNFINISHED } });
+    assert.deepEqual(loadRun(data, sid).ackPending, ['u1']);
+  }
+});
+
+test('task_unfinished cleans the status and drops a bad key', async () => {
+  const { raw } = inboxed([
+    unfinished('u1', { key: 'EO-1', status: 'In "eocrm: ‮prog\nress' }),
+    unfinished('u2', { key: 'not a key', status: 'x' }),
+    unfinished('u3', {}),
+  ], { conventions: { task_switch_check: 'signals_only' } });
+  assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'eocrm: EO-1 is still In prog ress. If it\'s finished, move it to done.' } });
+});
+
+function repo(branch = 'main') {
+  const cwd = tmp('repo');
+  const g = (...args) => execFileSync('git', args, { cwd, stdio: 'ignore' });
+  g('init', '-q', '-b', 'main');
+  g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'one');
+  if (branch !== 'main') g('checkout', '-q', '-b', branch);
+  return { cwd, g };
+}
+const MERGED = 'eocrm: a branch was merged into main. If EO-1 is finished, move it to done.';
+const merge = (cwd, command = 'git merge feat', tool_response = { stdout: 'Merge made', stderr: '', interrupted: false }) => ['PostToolUse', { cwd, tool_name: 'Bash', tool_input: { command }, tool_response }];
+
+test('a successful git merge on the default branch reminds once per merge', async () => {
+  const { fire } = setup();
+  const { cwd, g } = repo();
+  assert.equal((await fire(...merge(cwd)))?.additionalContext, MERGED);
+  assert.equal(await fire(...merge(cwd)), null);
+  g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'two');
+  assert.equal((await fire(...merge(cwd, 'cd x && git merge --no-ff feat')))?.additionalContext, MERGED);
+  g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'three');
+  assert.equal((await fire(...merge(cwd, 'git merge feat', { stdout: '', stderr: '', exit: 0 })))?.additionalContext, MERGED);
+});
+
+test('no merge reminder for a failed, unknown or aborted merge, another branch, or no linked task', async () => {
+  const { cwd } = repo();
+  const { fire } = setup();
+  assert.equal(await fire(...merge(cwd, 'git merge feat', { stdout: '', stderr: '', exit: 1 })), null);
+  assert.equal(await fire(...merge(cwd, 'git merge feat', { stdout: '', stderr: '', exit: null })), null);
+  assert.equal(await fire(...merge(cwd, 'git merge feat', 'Merge made')), null);
+  assert.equal(await fire(...merge(cwd, 'git merge feat', { stdout: '', interrupted: true })), null);
+  assert.equal(await fire(...merge(cwd, 'git merge --abort')), null);
+  assert.equal(await fire(...merge(cwd, 'echo git merge feat')), null);
+  assert.equal(await fire(...merge(repo('feat').cwd)), null);
+  assert.equal(await setup({ task: null }).fire(...merge(cwd)), null);
+});
+
+test('under Codex a shell git merge with a string response does not remind', async () => {
+  const { fire } = setup();
+  const { cwd } = repo();
+  const [{ input }] = codexEvents('Remind', { cwd, hook_event_name: 'PostToolUse', tool_name: 'shell', tool_input: { command: ['bash', '-lc', 'git merge feat'] }, tool_response: 'Merge made' });
+  assert.equal(await fire('PostToolUse', input), null);
+  const [{ input: known }] = codexEvents('Remind', { cwd, hook_event_name: 'PostToolUse', tool_name: 'shell', tool_input: { command: ['bash', '-lc', 'git merge feat'] }, tool_response: { exit_code: 0, output: 'Merge made' } });
+  assert.equal((await fire('PostToolUse', known))?.additionalContext, MERGED);
 });
