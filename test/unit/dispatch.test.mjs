@@ -932,3 +932,39 @@ test('a start acked after the run moved lands on the old generation', async () =
   assert.deepEqual([loadRun(data, s).runId, loadRun(data, s).generation], ['r-globex', 1]);
   assert.deepEqual(calls.sort(), [['acme', 'r-acme', 'finished'], ['acme', 'start', s], ['globex', 'start', `${s}.1`]]);
 });
+
+test('a start rejected after the run moved blocks the old generation, not the new one', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  const starts = [];
+  const ok = { status: 200, body: {} };
+  const clientFor = (r) => ({
+    startRun: async (body) => {
+      starts.push([r.workspace, body.client_run_id]);
+      if (r.workspace !== 'acme') return { status: 201, body: { id: 'r-globex' } };
+      await ensureRun(ctx, input(s, b));
+      return { status: 422, body: { message: 'Bad.', errors: { branch: ['too long'] } } };
+    },
+    updateRun: async () => ok, recordEvents: async () => ok, heartbeat: async () => ok,
+  });
+  await flush({ data, clientFor });
+  assert.deepEqual(starts, [['acme', s], ['globex', `${s}.1`]]);
+  assert.deepEqual([loadRun(data, s).runId, loadRun(data, s).startBlocked ?? null], ['r-globex', null]);
+  assert.ok(loadRun(data, `${s}--w0`).startBlocked);
+});
+
+test('a hook from a subdirectory of the same worktree remembers its cwd', async () => {
+  const data = signedIn();
+  const a = repo('main');
+  const sub = join(a, 'sub');
+  mkdirSync(sub);
+  const ctx = ctxFor(data);
+  const s = sid();
+  await handle('SessionStart', input(s, a), ctx);
+  await handle('PostToolUse', { ...input(s, sub), tool_name: 'Read', tool_input: {} }, ctx);
+  assert.deepEqual([loadRun(data, s).cwd, loadRun(data, s).generation], [sub, 0]);
+});
