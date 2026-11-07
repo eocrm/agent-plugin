@@ -3,7 +3,7 @@
 Two plugins in one catalogue, for Claude Code and for Codex:
 
 - **`eocrm-mcp`**: eocrm tools only. Claude can read and change tasks, contacts, deals, appointments and records in your workspaces through the eocrm MCP server. No hooks and no tracking.
-- **`eocrm`**: agent work. It reports Claude Code and Codex runs, plan steps, commits, test runs, PRs and review findings to your eocrm workspace. It installs `eocrm-mcp` too.
+- **`eocrm`**: agent work. It reports Claude Code and Codex runs, plan steps, commits, test runs, PRs and review findings to your eocrm workspace. In Claude Code it installs `eocrm-mcp` too; in Codex, add `eocrm-mcp` yourself.
 
 ## Install (Claude Code)
 
