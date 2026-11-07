@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { codexEvents, addModelUsage } from '../../lib/codex.mjs';
-import { testRun, isCommit } from '../../lib/detect.mjs';
+import { testRun, isCommit, prEvent } from '../../lib/detect.mjs';
 import { handle, spawnFlush } from '../../lib/run.mjs';
 import { parseArgs } from '../../lib/paths.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
@@ -298,4 +298,38 @@ test('the detached flush keeps the codex harness', () => {
   };
   assert.deepEqual(parseArgs(argv('codex')), { event: 'flush', harness: 'codex' });
   assert.deepEqual(argv('claude'), ['flush', '--data', '/d']);
+});
+
+test('Codex gh pr merge/create are confirmed with GitHub because the exit code is unknown', () => {
+  const url = 'https://github.com/o/r/pull/12';
+  const post = (command, tool_response) => only('PostToolUse', { ...fixture('real-bash'), tool_input: { command }, tool_response });
+  const failedMerge = post('gh pr merge 12 --squash', 'X Pull request o/r#12 is not mergeable.\n');
+  const opts = (state) => ({ open: () => [{ branch: 'b', url }], branch: () => 'b', state: () => state });
+  assert.equal(prEvent(failedMerge, opts('OPEN')), null);
+  assert.equal(prEvent(failedMerge, opts(null)), null);
+  assert.equal(prEvent(failedMerge, { open: () => [{ branch: 'b', url }], branch: () => 'b' }), null);
+  assert.deepEqual(prEvent(failedMerge, opts('MERGED')), { action: 'merged', url, number: 12 });
+  const create = post('gh pr create --fill', `${url}\n`);
+  assert.equal(prEvent(create, { branch: () => 'b', state: () => 'CLOSED' }), null);
+  assert.equal(prEvent(create, { branch: () => 'b', state: () => 'OPEN' }).action, 'opened');
+  const claude = { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'gh pr merge 12' }, tool_response: { stdout: '', stderr: '' } };
+  assert.equal(prEvent(claude, { open: () => [{ branch: 'b', url }], state: () => null }).url, url);
+});
+
+test('a Codex gh pr merge is queued only when gh says MERGED', async () => {
+  const url = 'https://github.com/o/r/pull/12';
+  const merged = async (state) => {
+    const dir = tmp('repo');
+    git(dir, 'init', '-q', '-b', 'main');
+    git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
+    const data = tmp('data');
+    writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+    const exec = (cmd, args, opts) => (cmd === 'gh' ? (args.includes('state') ? `${state}\n` : '') : execFileSync(cmd, args, opts));
+    const ctx = { data, harness: 'codex', now: () => 1_000_000, spawnFlush: () => {}, git: { exec }, env: {}, reconcile: async () => ({ enqueued: 0 }) };
+    await handle('SessionStart', { session_id: 's', cwd: dir, source: 'startup' }, ctx);
+    await handle('PostToolUse', { session_id: 's', cwd: dir, tool_name: 'Bash', tool_use_id: 'exec-1', tool_input: { command: `gh pr merge ${url}` }, tool_response: 'X not mergeable\n' }, ctx);
+    return readOutbox(data).filter((e) => e.event?.type === 'pull_request').map((e) => e.event.action);
+  };
+  assert.deepEqual(await merged('OPEN'), []);
+  assert.deepEqual(await merged('MERGED'), ['merged']);
 });

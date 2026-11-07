@@ -360,3 +360,12 @@ test('comment bodies are cut to 2000 characters before cleaning, and deep nestin
   saveRun(data, sid, { inbox: [comment(`a ${nest(10)} b`)] });
   assert.equal((await raw('UserPromptSubmit')).hookSpecificOutput.additionalContext, framed(''));
 });
+
+test('under Codex, member messages stay unacked in the inbox; agent comments still reach the model', async () => {
+  const { data, sid, ctx, raw, stop } = inboxed([note('m1'), note('a1', 'agent')], { conventions: { task_switch_check: 'signals_only' } });
+  ctx.harness = 'codex';
+  assert.deepEqual(await stop(), null);
+  assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: framed('a1') } });
+  assert.deepEqual(loadRun(data, sid).inbox.map((m) => m.id), ['m1']);
+  assert.deepEqual(loadRun(data, sid).ackPending ?? [], ['a1']);
+});

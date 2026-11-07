@@ -14,7 +14,7 @@ import { endpoints } from '../../lib/endpoints.mjs';
 import { createServer } from 'node:http';
 import { worktreeOf, loadRun, saveRun } from '../../lib/state.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
-import { handle } from '../../lib/run.mjs';
+import { handle, spawnFlush as realSpawnFlush } from '../../lib/run.mjs';
 
 const tmp = (p) => mkdtempSync(join(tmpdir(), `eocrm-${p}-`));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe' });
@@ -527,4 +527,25 @@ test('a Codex skill without --data or --session uses the install\'s data dir and
   await cli(['link', 'ABC-2', '--data', flagged, '--session', 'mine'], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: () => {} });
   assert.equal(loadRun(flagged, 'mine').start.task, 'ABC-2');
   assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+});
+
+test('Codex link: flush keeps --harness codex; Claude inside Codex keeps its own session; a bad session writes nothing', async () => {
+  const home = tmp('home');
+  const data = join(home, 'plugins/data/eocrm-mkt');
+  mkdirSync(data, { recursive: true });
+  const dir = repo();
+  saveRun(data, 'thread-1', { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  const script = join(home, 'plugins/cache/mkt/eocrm/0.2.0/scripts/eocrm.mjs');
+  const argv = [];
+  const capture = (c) => realSpawnFlush({ ...c, spawn: (_, a) => (argv.push(a.slice(1)), { on() { return this; }, unref() {} }) });
+  assert.equal((await cli(['link', 'ABC-1'], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: capture })).code, 0);
+  assert.deepEqual(argv, [['flush', '--data', data, '--harness', 'codex']]);
+  const claude = await cli(['link', 'ABC-2', '--data', data], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1', CLAUDECODE: '1' }, script, spawnFlush: () => {} });
+  assert.match(claude.out, /no --session/);
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+  const bad = tmp('data');
+  const r = await cli(['link', 'ABC-3', '--data', bad], { cwd: dir, env: { CODEX_THREAD_ID: '../../etc/x' }, script, spawnFlush: () => {} });
+  assert.equal(r.code, 2, r.err);
+  assert.match(r.err, /invalid --session/);
+  assert.ok(!existsSync(join(bad, 'worktrees')));
 });

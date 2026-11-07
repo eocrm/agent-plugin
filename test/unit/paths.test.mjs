@@ -70,4 +70,5 @@ test('installData maps a plugin cache script to its data dir; CODEX_THREAD_ID me
   assert.equal(installData(join(tmpdir(), 'checkout/scripts/eocrm.mjs')), undefined);
   assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't' }, script: join(tmpdir(), 'x/scripts/eocrm.mjs') }), 'codex');
   assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't', CLAUDE_PLUGIN_DATA: '/d' }, script: '/x' }), 'claude');
+  assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't', CLAUDECODE: '1' }, script: '/x' }), 'claude');
 });

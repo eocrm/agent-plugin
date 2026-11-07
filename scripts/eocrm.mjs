@@ -109,10 +109,10 @@ const commands = {
     if (pending) out(committedLine(pending));
   },
 
-  async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush }) {
+  async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush, harness }) {
     if (answer !== 'none' && !LINK_KEY.test(answer ?? '')) throw new Usage('usage: eocrm link <KEY|none>');
     const taskKey = answer === 'none' ? null : answer;
-    const { others } = await linkWorktree({ data, env, now: Date.now, spawnFlush }, cwd, taskKey, values.session);
+    const { others } = await linkWorktree({ data, env, now: Date.now, spawnFlush, harness }, cwd, taskKey, values.session);
     out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
     if (!values.session) out('Only the default for new sessions changed (no --session).');
     if (others.length) {
@@ -234,7 +234,8 @@ export async function main({
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
     if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout|smoke-seed --data <dir>');
     const harness = cliHarness({ flag: values.harness, env, script });
-    values.session ||= env.CODEX_THREAD_ID;
+    if (harness === 'codex') values.session ||= env.CODEX_THREAD_ID;
+    if (values.session && !/^[\w-]+$/.test(values.session)) throw new Usage('invalid --session');
     let data;
     try {
       data = dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : undefined });
