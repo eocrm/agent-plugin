@@ -8,10 +8,10 @@ disable-model-invocation: true
 
 Run, adding the workspace slug if the member gave one:
 
-`node "<root>/scripts/eocrm.mjs" login [<workspace>]`
+`node "<root>/scripts/eocrm.mjs" login --harness codex [<workspace>]`
 
 - `node` missing or `needs Node 20+`: tell the member eocrm needs Node 20+ on PATH.
 - `workspace required`: show the `workspace` lines, ask for the slug, run again with it.
-- `choose a connection`: show the labels, then run the same script with `pair <id>` for the member's pick.
+- `choose a connection`: show the labels, then run the same script with `pair --harness codex <id>` for the member's pick.
 - `pairing requested`: tell the member to approve in Account → Agents within 15 minutes.
 - `.claude/eocrm.json names`: ask the member, then run the use skill with `--accept` or `--decline`.

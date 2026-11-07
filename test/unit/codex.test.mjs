@@ -312,6 +312,8 @@ test('Codex gh pr merge/create are confirmed with GitHub because the exit code i
   const create = post('gh pr create --fill', `${url}\n`);
   assert.equal(prEvent(create, { branch: () => 'b', state: () => 'CLOSED' }), null);
   assert.equal(prEvent(create, { branch: () => 'b', state: () => 'OPEN' }).action, 'opened');
+  const exists = post('gh pr create --fill', `a pull request for branch "b" into branch "main" already exists:\n${url}\n`);
+  assert.equal(prEvent(exists, { branch: () => 'b', state: () => 'OPEN' }), null);
   const claude = { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'gh pr merge 12' }, tool_response: { stdout: '', stderr: '' } };
   assert.equal(prEvent(claude, { open: () => [{ branch: 'b', url }], state: () => null }).url, url);
 });

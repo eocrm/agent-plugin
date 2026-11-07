@@ -50,7 +50,7 @@ test('login, status and use exist as skills', () => {
 });
 
 const ROOT_LINE = (n) => `\`<root>\` is the eocrm plugin folder: this file's path without \`/codex-skills/${n}/SKILL.md\`.\n\n`;
-const forCodex = (body) => body.replaceAll(' --session "${CLAUDE_SESSION_ID}"', '').replaceAll(' --data "${CLAUDE_PLUGIN_DATA}"', '').replaceAll('${CLAUDE_PLUGIN_ROOT}', '<root>');
+const forCodex = (body) => body.replaceAll(' --session "${CLAUDE_SESSION_ID}"', '').replaceAll(' --data "${CLAUDE_PLUGIN_DATA}"', ' --harness codex').replaceAll('${CLAUDE_PLUGIN_ROOT}', '<root>');
 
 test('the Codex manifest points at codex-skills, one per Claude skill', () => {
   assert.equal(JSON.parse(readFileSync(join(root, '.codex-plugin/plugin.json'), 'utf8')).skills, './codex-skills/');
@@ -66,5 +66,7 @@ test('each Codex skill is its Claude skill with a resolvable root and no substit
     assert.ok(codex.body.length <= 1300, `${n} body`);
     assert.doesNotMatch(codex.body, /\$\{|--data|--session/, n);
     for (const line of codex.body.split('\n').filter((l) => l.includes('eocrm.mjs'))) assert.ok(line.includes('node "<root>/scripts/eocrm.mjs" '), `${n}: ${line}`);
+    const commands = [...codex.body.matchAll(/`([^`]*(?:eocrm\.mjs|pair )[^`]*)`/g)].map((m) => m[1]);
+    for (const c of commands) assert.match(c, / --harness codex\b/, `${n}: ${c}`);
   }
 });

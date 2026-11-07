@@ -6,6 +6,6 @@ description: Link this worktree's eocrm run to a task, or to none. Use when aske
 
 Ask the member which task this worktree is for, if not already said. Then run:
 
-`node "<root>/scripts/eocrm.mjs" link <KEY|none>`
+`node "<root>/scripts/eocrm.mjs" link <KEY|none> --harness codex`
 
 `KEY` is the task key, like `ABC-12`. Use `none` when the work belongs to no task. Report the output. Never continue unrelated work under another task's link: re-link (or `none`) first, or ask the member. Ask once per worktree; the answer is remembered.

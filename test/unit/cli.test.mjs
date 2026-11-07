@@ -549,3 +549,15 @@ test('Codex link: flush keeps --harness codex; Claude inside Codex keeps its own
   assert.match(r.err, /invalid --session/);
   assert.ok(!existsSync(join(bad, 'worktrees')));
 });
+
+test('a Codex skill command with --harness codex works even under an inherited CLAUDECODE', async () => {
+  const home = tmp('home');
+  const data = join(home, 'plugins/data/eocrm-mkt');
+  mkdirSync(data, { recursive: true });
+  const dir = repo();
+  saveRun(data, 'thread-1', { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  const script = join(home, 'plugins/cache/mkt/eocrm/0.2.0/scripts/eocrm.mjs');
+  const r = await cli(['link', 'ABC-1', '--harness', 'codex'], { cwd: dir, env: { CLAUDECODE: '1', CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: () => {} });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+});
