@@ -2193,5 +2193,33 @@
   "group": "shared-2ef54c052",
   "input": "x identified by hunter2;",
   "expected": "x identified by hunter2;"
+ },
+ {
+  "input": "DOCKER_AUTH_CONFIG={\"auths\":{\"r\":{\"auth\":\"dXNlcjpwYXNz\"}}}",
+  "expected": "DOCKER_AUTH_CONFIG={\"auths\":{\"r\":{\"auth\":\"[redacted]\"}}}"
+ },
+ {
+  "input": "{\"auth\": \"dXNlcjpwYXNz\", \"x\": 1}",
+  "expected": "{\"auth\": \"[redacted]\", \"x\": 1}"
+ },
+ {
+  "input": "{\\\"Auth\\\":\\\"dXNlcjpwYXNz\\\"}",
+  "expected": "{\\\"Auth\\\":\\\"[redacted]\\\"}"
+ },
+ {
+  "input": "{\"identitytoken\":\"abc123\"}",
+  "expected": "{\"identitytoken\":[redacted]"
+ },
+ {
+  "input": "{\"author\":\"me\",\"auths\":{}}",
+  "expected": "{\"author\":\"me\",\"auths\":{}}"
+ },
+ {
+  "input": "docker run -u 1000:1000 img ls",
+  "expected": "docker run -u 1000:1000 img ls"
+ },
+ {
+  "input": "docker run -u 1000:1000 img curl -u a:b x",
+  "expected": "docker run -u [redacted] img curl -u [redacted] x"
  }
 ]
