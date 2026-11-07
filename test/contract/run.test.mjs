@@ -78,17 +78,13 @@ test('a cd into a repo pinned to another workspace finishes the old run there an
   await handle('SessionStart', { session_id: 'sess-c7', cwd: dir }, ctx);
   await go();
   const first = loadRun(data, 'sess-c7').runId;
-  await handle('SessionStart', { session_id: 'sess-c7', cwd: other, source: 'resume' }, ctx);
-  await go();
+  await handle('UserPromptSubmit', { session_id: 'sess-c7', cwd: other }, ctx);
   await main({ argv: ['link', 'AB-7', '--session', 'sess-c7', '--data', data], cwd: other, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} });
   await go();
-  const seen = server.requests.filter((r) => r.method !== 'GET').map((r) => [r.workspace, r.method, r.path.endsWith(first) ? 'first' : r.path, r.body?.state ?? r.body?.task ?? r.body?.client_run_id]);
-  assert.ok(seen.some((r) => r.join() === ['acme', 'PATCH', 'first', 'finished'].join()));
-  assert.ok(seen.some((r) => r.join() === ['globex', 'POST', '/v1/agent-runs', 'sess-c7.1'].join()));
-  const second = loadRun(data, 'sess-c7').runId;
-  assert.notEqual(second, first);
-  assert.deepEqual(server.requests.at(-1), { ...server.requests.at(-1), workspace: 'globex', method: 'PATCH', body: { task: 'AB-7' } });
-  assert.ok(server.requests.at(-1).path.endsWith(second));
+  const seen = server.requests.filter((r) => r.method !== 'GET').map((r) => [r.workspace, r.method, r.path.endsWith(first) ? 'first' : r.path, r.body?.state ?? r.body?.client_run_id, r.body?.task]);
+  assert.ok(seen.some((r) => r.join() === ['acme', 'PATCH', 'first', 'finished', undefined].join()));
+  assert.ok(seen.some((r) => r.join() === ['globex', 'POST', '/v1/agent-runs', 'sess-c7.1', 'AB-7'].join()));
+  assert.notEqual(loadRun(data, 'sess-c7').runId, first);
 });
 
 test('a resume after its run file was pruned starts a new run, not the old one', async (t) => {
