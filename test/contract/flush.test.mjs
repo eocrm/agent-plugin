@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { endpoints } from '../../lib/endpoints.mjs';
@@ -10,6 +10,7 @@ import { flush } from '../../lib/flush.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 
+const recorded = (name) => JSON.parse(readFileSync(new URL(`./responses/${name}.json`, import.meta.url), 'utf8'));
 const SID = 'sess-1';
 const ev = (n, extra = {}) => ({ kind: 'event', sessionId: SID, event: { id: `commit:${n}`, type: 'commit', occurred_at: '2026-11-01T00:00:00Z', sha: `abc123${n}`, subject: `c${n}`, ...extra } });
 
@@ -324,4 +325,58 @@ test('a session enqueued mid-pass is sent by the same flush', async (t) => {
   assert.equal(result.retryable, false);
   assert.equal(server.requests.filter((r) => r.path.endsWith('/events')).length, 2);
   assert.deepEqual(readOutbox(data), []);
+});
+
+const msg = (id, kind, audience, extra = {}) => ({ id, kind, audience, text: `text ${id}`, ...extra });
+
+test('ack goes out on events and heartbeat bodies; messages of each kind land in the inbox', async (t) => {
+  const messages = [
+    msg('m1', 'plugin_update', 'member'),
+    msg('m2', 'task_comment', 'agent'),
+    msg('m3', 'notice', 'member', { data: { reload: 'conventions' } }),
+  ];
+  const { server, data, go } = await setup(t, { 'agentRun.heartbeat': () => ({ status: 200, body: { messages: messages.splice(0) } }) });
+  saveRun(data, SID, { ackPending: ['old1', 'old2'] });
+  await enqueue(data, { kind: 'start', sessionId: SID });
+  await enqueue(data, ev(0));
+  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
+  await go();
+  const [events, beat] = server.requests.filter((r) => r.method === 'POST' && /events|heartbeat/.test(r.path));
+  assert.deepEqual(events.body.ack, ['old1', 'old2']);
+  assert.equal(beat.body, undefined, 'acks were already sent with the events');
+  assert.equal(events.status, 200);
+  assert.deepEqual(loadRun(data, SID).inbox.map((m) => [m.id, m.kind, m.audience, m.data]), [
+    ['m1', 'plugin_update', 'member', undefined], ['m2', 'task_comment', 'agent', undefined], ['m3', 'notice', 'member', { reload: 'conventions' }],
+  ]);
+  assert.deepEqual(loadRun(data, SID).ackPending, []);
+
+  saveRun(data, SID, { ackPending: ['m1'] });
+  await enqueue(data, { kind: 'heartbeat', sessionId: SID });
+  await go();
+  assert.deepEqual(server.requests.at(-1).body, { ack: ['m1'] });
+  assert.deepEqual(loadRun(data, SID).ackPending, []);
+});
+
+test('replies to start and events carry messages the same way', async (t) => {
+  const { data, go } = await setup(t, {
+    'agentRun.store': () => ({ status: 201, body: { ...recorded('agentRun.store'), messages: [msg('s1', 'notice', 'member')] } }),
+    'agentRun.events.store': { status: 200, body: { accepted: 1, duplicates: 0, dropped: 0, messages: [msg('e1', 'task_comment', 'member')] } },
+  });
+  await enqueue(data, { kind: 'start', sessionId: SID });
+  await enqueue(data, ev(0));
+  await go();
+  assert.deepEqual(loadRun(data, SID).inbox.map((m) => m.id), ['s1', 'e1']);
+});
+
+test('a 426 plugin_outdated body of the documented shape pauses tracking with a notice', async (t) => {
+  const body = { code: 'plugin_outdated', message: 'Update.', minimum: '99.0.0', latest: null, update: '/plugin marketplace update eocrm' };
+  const { server, data, go } = await setup(t, { 'agentRun.events.store': { status: 426, body } });
+  saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
+  await enqueue(data, ev(0));
+  await go();
+  assert.equal(server.requests.at(-1).status, 426);
+  const run = loadRun(data, SID);
+  assert.equal(run.outdated.minimum, '99.0.0');
+  assert.match(run.inbox[0].text, /below the minimum 99\.0\.0/);
+  assert.equal(readOutbox(data).length, 1);
 });

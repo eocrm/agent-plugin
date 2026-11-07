@@ -11,6 +11,8 @@ import { openBrowser, plain } from '../../lib/login.mjs';
 import { normaliseRemote, resolveWorkspace } from '../../lib/workspace.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
+import { createServer } from 'node:http';
+import { worktreeOf, loadRun, saveRun } from '../../lib/state.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 import { handle } from '../../lib/run.mjs';
 
@@ -458,4 +460,31 @@ test('a skill run from a Codex install with an empty --data uses the Codex data 
   const r = await cli(['status', '--data', ''], { cwd: repo(), env: { CODEX_HOME: home }, script, store: { get: async () => null } });
   assert.ok(r.out.split('\n').includes(TRUST), r.out);
   assert.ok(existsSync(join(home, 'plugins/data/eocrm-eocrm')));
+});
+
+test('conventions --refresh refetches', async (t) => {
+  let hits = 0;
+  const srv = createServer((req, res) => {
+    hits += 1;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ task_switch_check: true, n: hits }));
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  t.after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const env = { EOCRM_ENDPOINTS: JSON.stringify({ issuer: base, api: `${base}/{workspace}/api` }) };
+  const data = tmp('data');
+  account(data);
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(endpoints({ region: 'eu', env }).key, { access_token: 'at', refresh_token: 'rt', client_id: 'c', expires_at: Date.now() + 3_600_000 });
+  const dir = repo();
+  saveRun(data, 's1', { startedAt: 1, workspace: 'acme', region: 'eu', worktreeKey: worktreeOf(dir).key, conventions: { n: 0 }, conventionsAt: Date.now() });
+  const args = ['conventions', '--data', data, '--session', 's1'];
+  const o = { cwd: dir, env, store };
+  assert.equal(JSON.parse((await cli(args, o)).out).n, 0);
+  assert.equal(hits, 0);
+  assert.equal(JSON.parse((await cli([...args, '--refresh'], o)).out).n, 1);
+  assert.equal(hits, 1);
+  assert.equal(loadRun(data, 's1').conventions.n, 1);
+  assert.ok(loadRun(data, 's1').conventionsAt > 0);
 });

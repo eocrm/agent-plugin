@@ -11,6 +11,7 @@ import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 import { main } from '../../scripts/eocrm.mjs';
+import { userAgent } from '../../lib/api.mjs';
 
 const browse = (url) => { fetch(url).catch(() => {}); };
 
@@ -321,4 +322,12 @@ test('each issuer keeps its own client: eu, ru, eu registers twice in all', asyn
   assert.equal(await main({ argv: ['logout', '--data', data], env: eu.endpointsEnv, store, out: (l) => out.push(l), err: () => {} }), 0);
   assert.deepEqual(out.sort(), [`signed out of ${eu.url}`, `signed out of ${ru.url}`].sort());
   for (const s of [eu, ru]) assert.equal(await store.get(endpoints({ region: 'eu', env: s.endpointsEnv }).key), null);
+});
+
+test('the login requests carry the plugin User-Agent', async (t) => {
+  const { server, run } = await setup(t);
+  await run();
+  const ours = server.requests.filter((r) => r.path !== '/oauth/authorize');
+  assert.ok(ours.some((r) => r.path === '/oauth/register') && ours.some((r) => r.path === '/oauth/token'));
+  assert.deepEqual([...new Set(ours.map((r) => r.headers['user-agent']))], [userAgent()]);
 });

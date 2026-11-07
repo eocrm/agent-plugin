@@ -15,6 +15,8 @@ import { writeJsonAtomic } from '../../lib/state.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 
+const SIGNED_OUT = { stdout: JSON.stringify({ systemMessage: 'eocrm: you\'re signed out of eocrm; run /eocrm:login.' }) };
+
 const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe' });
 const badPr = (n) => ({ id: `pull_request:bad${n}`, type: 'pull_request', action: 'opened', url: `not a url ${n}` });
@@ -84,7 +86,7 @@ test('a refused connection never blocks', async (t) => {
   const { push, stop, ctx } = await setup(t);
   ctx.env = { EOCRM_ENDPOINTS: JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' }) };
   await push(badPr(1));
-  assert.deepEqual(await stop(), {});
+  assert.equal(JSON.parse((await stop()).stdout ?? '{}').decision, undefined);
 });
 
 test('a 401 never blocks and signs out locally', async (t) => {
@@ -92,7 +94,7 @@ test('a 401 never blocks and signs out locally', async (t) => {
   server.auth.access = 'revoked';
   server.auth.refresh = 'revoked';
   await push(badPr(1));
-  assert.deepEqual(await stop(), {});
+  assert.deepEqual(await stop(), SIGNED_OUT);
   assert.equal(await status(), 'signed out: run /eocrm:login');
 });
 
@@ -111,7 +113,7 @@ test('a 401 keeps tokens stored by a login that landed meanwhile', async (t) => 
   ({ data, key, server } = rest);
   server.auth.access = 'revoked';
   await push(badPr(1));
-  assert.deepEqual(await stop(), {});
+  assert.deepEqual(await stop(), SIGNED_OUT);
   assert.equal(await status(), 'signed in (eu)');
 });
 

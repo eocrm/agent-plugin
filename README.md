@@ -33,6 +33,7 @@ Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`
 
 - `/eocrm:login` (a skill; in Codex, ask for the `login` skill) signs in through the browser (sign-in starts in the EU and eocrm resolves your home region; `--region ru` signs in to an RU workspace) and stores tokens in the OS keychain, or a 0600 file when no keychain is usable.
 - `/eocrm:use` maps the current repo to a workspace. The mapping is stored per repo, and `.claude/eocrm.json` (workspace slug and region only) can be committed to share it; each user confirms it once. With a single workspace the plugin picks it automatically.
+- Reminders: on session start, resume or `/clear`, on a new branch, or when work moves to another task, the plugin reminds Claude of the linked task. The Conventions **Task switch check** sets how often it checks for a task switch: Every prompt, After a pause (the default), or Signals only.
 - Four skills: `pick-type`, `link-run`, `record-judgement`, `file-human-work`.
 - `/eocrm:status` (Codex: the `status` skill) shows sign-in, workspace and pairing.
 
@@ -41,6 +42,10 @@ Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`
 The plugin's sign-in can only report and read runs; it can't change tasks. If your tools (`eocrm-mcp`) are already signed in, the plugin's sign-in sends a pairing request: in eocrm open Account → Agents and select **Approve**, so both show as one agent. If you signed in the tools afterwards, select **Merge into…** on the new connection there instead. Claude Code pairs with Claude Code, Codex with Codex; a request expires after 15 minutes. Someone who uses both signs in twice and sees two agents.
 
 Agent work must be on in the workspace (Settings → Modules); it needs Tasks and AI assistants. What runs show, the conventions and alerts: [Agent work help](https://docs.eocrm.io/help/agent-work/).
+
+## Messages from eocrm
+
+eocrm can answer tracking calls with short messages, and the plugin shows each one once, at your next prompt, Bash or task tool call, or stop. Lines meant for you (someone commented on the linked task, conventions changed, a plugin update) appear in the terminal and cost Claude no tokens. A comment you wrote on the linked task yourself is passed to Claude, quoted as your words rather than instructions. An update notice shows at most once a day. If the plugin is older than eocrm's minimum, tracking pauses and keeps its queue until you run `/plugin marketplace update eocrm`. You're also told once per session when Agent work is off for the workspace or you're signed out.
 
 ## What is sent
 

@@ -28,6 +28,12 @@ test('each skill parses and meets its caps; only plugin variables appear', () =>
   }
 });
 
+test('link-run forbids working under another task\'s link; pick-type refreshes and creates by type key', () => {
+  assert.ok(parse('link-run').body.includes('Never continue unrelated work under another task\'s link'));
+  const p = parse('pick-type').body;
+  for (const s of ['--refresh', 'type: "bug"', 'task_type', 'task_checklist_item']) assert.ok(p.includes(s), s);
+});
+
 test('skills and lib name no tenant key, person or id', () => {
   const walk = (d) => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
   for (const d of ['skills', 'lib']) {

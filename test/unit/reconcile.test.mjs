@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { reconcile, desiredEvents, currentStep, loadConventions } from '../../lib/reconcile.mjs';
+import { reconcile, desiredEvents, currentStep, loadConventions, CONVENTIONS_MAX_AGE_MS } from '../../lib/reconcile.mjs';
 import { flush } from '../../lib/flush.mjs';
 import { stopGate } from '../../lib/gate.mjs';
 import { cleanEvent } from '../../lib/api.mjs';
@@ -392,4 +392,47 @@ test('run.written keeps the newest 50, moving a rewritten path to the end', asyn
   assert.equal(written.length, 50);
   assert.equal(written.at(-1), join(dir, 'f10'));
   assert.equal(written[0], join(dir, 'f2'));
+});
+
+const OLD = { plan_import: false };
+const NEW = { plan_import: true };
+
+test('fresh conventions are served from cache', async () => {
+  const run = { conventions: OLD, conventionsAt: Date.now() - 1000 };
+  assert.equal(await loadConventions({}, run, { conventions: () => assert.fail('fetched') }), OLD);
+});
+
+test('conventions older than 5 minutes are refetched', async () => {
+  const run = { conventions: OLD, conventionsAt: Date.now() - CONVENTIONS_MAX_AGE_MS - 1 };
+  assert.equal(CONVENTIONS_MAX_AGE_MS, 300000);
+  assert.deepEqual(await loadConventions({}, run, { conventions: async () => ({ status: 200, body: NEW }) }), NEW);
+});
+
+test('stale conventions survive a failed refresh', async () => {
+  const run = { conventions: OLD, conventionsAt: 1 };
+  assert.equal(await loadConventions({}, run, { conventions: async () => ({ status: 503, body: null }) }), OLD);
+  assert.equal(await loadConventions({}, run, { conventions: async () => { throw new Error('down'); } }), OLD);
+  assert.equal(await loadConventions({}, run, { conventions: () => assert.fail('no time') }, Date.now() + 10), OLD);
+});
+
+test('a run with conventions but no conventionsAt refetches', async () => {
+  const run = { conventions: OLD };
+  assert.deepEqual(await loadConventions({}, run, { conventions: async () => ({ status: 200, body: NEW }) }), NEW);
+});
+
+test('refresh bypasses a fresh cache', async () => {
+  const run = { conventions: OLD, conventionsAt: Date.now() };
+  assert.deepEqual(await loadConventions({}, run, { conventions: async () => ({ status: 200, body: NEW }) }, Infinity, { refresh: true }), NEW);
+});
+
+test('reconcile saves fetched conventions with conventionsAt and keeps them on a failed refetch', async () => {
+  const { go, data, sid } = setup({ conventions: (i) => (i === 1 ? { status: 200, body: NEW } : { status: 503, body: null }) });
+  await go();
+  const first = loadRun(data, sid);
+  assert.deepEqual(first.conventions, NEW);
+  assert.ok(first.conventionsAt > 0);
+  saveRun(data, sid, { conventionsAt: 1 });
+  await go();
+  assert.deepEqual(loadRun(data, sid).conventions, NEW);
+  assert.equal(loadRun(data, sid).conventionsAt, 1);
 });

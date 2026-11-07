@@ -30,6 +30,20 @@
             "async": true
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs",
+              "Remind"
+            ],
+            "async": false,
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -74,6 +88,21 @@
               "Resume"
             ],
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__.*eocrm.*__tasks_(create|update|move_stage)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.mjs",
+              "Remind"
+            ],
+            "async": false,
+            "timeout": 5
           }
         ]
       }
