@@ -89,5 +89,12 @@
  "htpasswd -c -b ",
  "TOKEN:\n\n - a",
  "\n\n - a",
- "TOKEN:\n - a\n"
+ "TOKEN:\n - a\n",
+ "pass=",
+ "Bearer \"",
+ "IDENTIFIED BY ",
+ "password:\r",
+ "TOKEN=[]",
+ "[\"curl\",\"-u\"] ",
+ "my\"sql\" "
 ]

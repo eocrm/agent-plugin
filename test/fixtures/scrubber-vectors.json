@@ -702,7 +702,7 @@
  },
  {
   "input": "psql --pass hunter2",
-  "expected": "psql --pass hunter2"
+  "expected": "psql --pass [redacted]"
  },
  {
   "input": "myscript --pass --verbose",
@@ -1900,26 +1900,298 @@
  },
  {
   "input": "PASSWORD=[]hunter2X",
-  "expected": "PASSWORD=[redacted]hunter2X",
-  "plugin": "PASSWORD=[redacted]",
-  "group": "plugin-stricter-eocrm#1518"
+  "expected": "PASSWORD=[redacted]"
  },
  {
   "input": "TOKEN={}x",
-  "expected": "TOKEN=[redacted]x",
-  "plugin": "TOKEN=[redacted]",
-  "group": "plugin-stricter-eocrm#1518"
+  "expected": "TOKEN=[redacted]"
  },
  {
   "input": "api_key=[a]x",
-  "expected": "api_key=[redacted]x",
-  "plugin": "api_key=[redacted]",
-  "group": "plugin-stricter-eocrm#1518"
+  "expected": "api_key=[redacted]"
  },
  {
   "input": "TOKEN={x}x",
-  "expected": "TOKEN=[redacted]x",
-  "plugin": "TOKEN=[redacted]",
-  "group": "plugin-stricter-eocrm#1518"
+  "expected": "TOKEN=[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "$c = ['password' => 'hunter2', 'host' => 'x'];",
+  "expected": "$c = ['password' => '[redacted]', 'host' => 'x'];"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "PASSWORD=\"it's S3CRET pw\" make",
+  "expected": "PASSWORD=\"[redacted]\" make"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "db pass=hunter2 x",
+  "expected": "db pass=[redacted] x"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "openconnect --pass hunter2 vpn",
+  "expected": "openconnect --pass [redacted] vpn"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "REDISCLI_AUTH=hunter2 redis-cli",
+  "expected": "REDISCLI_AUTH=[redacted] redis-cli"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "unzip -P hunter2 a.zip",
+  "expected": "unzip -P [redacted] a.zip"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "-H 'Authorization: Bearer \"hunter2abc'",
+  "expected": "-H 'Authorization: Bearer \"[redacted]'"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "[\"curl\",\"-u\"] me:hunter2",
+  "expected": "[\"curl\",\"-u\"] [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "[\"curl\", \"-u\"] me:hunter2",
+  "expected": "[\"curl\", \"-u\"] [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "run([\"mysql\",\"-p\"], input=\"hunter2\")",
+  "expected": "run([\"mysql\",\"-p\"], [redacted])"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "CREATE USER x IDENTIFIED BY hunter2;",
+  "expected": "CREATE USER x IDENTIFIED BY [redacted];"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "password:\rhunter2",
+  "expected": "password:[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "password:\r\r\nhunter2",
+  "expected": "password:[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "PASSWORD=[]hunter2X y",
+  "expected": "PASSWORD=[redacted] y"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "TOKEN={}hunter2",
+  "expected": "TOKEN=[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "api_key=[a]hunter2",
+  "expected": "api_key=[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "my\"sql\" -phunter2",
+  "expected": "my\"sql\" -p[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "m''ysql -phunter2",
+  "expected": "m''ysql -p[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "my\\sql -phunter2",
+  "expected": "my\\sql -p[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "mysql -phunter2,-v db",
+  "expected": "mysql -p[redacted] db"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "app -u 1000:5678",
+  "expected": "app -u [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker run img zip -ruP hunter2 x.zip",
+  "expected": "docker run img zip -ruP [redacted] x.zip"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker exec c unzip -uP hunter2 x.zip",
+  "expected": "docker exec c unzip -uP [redacted] x.zip"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "unzip -uP hunter2 x.zip",
+  "expected": "unzip -uP [redacted] x.zip"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker run -itu me:hunter2 img",
+  "expected": "docker run -itu [redacted] img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker exec c app -authToken s3cr3t",
+  "expected": "docker exec c app -authToken [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "curl -bsid=hunter2,-v x",
+  "expected": "curl -b[redacted] x"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "x -v,-u me:hunter2",
+  "expected": "x -v,-u [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker exec -u me db curl -u 1:2 x",
+  "expected": "docker exec -u [redacted] db curl -u [redacted] x"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "mycli -u 1234:5678 docker run img",
+  "expected": "mycli -u [redacted] docker run img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "mytool --out /opt/docker run -u 1234:5678 x",
+  "expected": "mytool --out /opt/docker run -u [redacted] x"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "mytool --engine docker run -u 1234:5678 img",
+  "expected": "mytool --engine docker run -u [redacted] img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "tool -u 1234:5678 --docker docker create x",
+  "expected": "tool -u [redacted] --docker docker create x"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker run img mytool -u 4242:9876",
+  "expected": "docker run img mytool -u [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker run img app -u 1000:1000 --password=hunter2",
+  "expected": "docker run img app -u [redacted] --password=[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker run -e A=1 --name n -v a:b img app -u 1:2",
+  "expected": "docker run -e A=1 --name n -v a:b img app -u [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "bypass=1 compass=north passes=3",
+  "expected": "bypass=1 compass=north passes=3"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "DB_AUTH_SOURCE=admin",
+  "expected": "DB_AUTH_SOURCE=admin"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "The bug was identified by the tests",
+  "expected": "The bug was identified by the tests"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker run -u 1000:1000 img",
+  "expected": "docker run -u 1000:1000 img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "podman exec --user 0:0 c sh",
+  "expected": "podman exec --user 0:0 c sh"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "docker compose -f x.yml run -e A=1 -itu 1000:1000 web sh",
+  "expected": "docker compose -f x.yml run -e A=1 -itu 1000:1000 web sh"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "[\"git\",\"checkout\",\"-b\"] x",
+  "expected": "[\"git\",\"checkout\",\"-b\"] x"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "psql --pass X",
+  "expected": "psql --pass [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "openconnect --pass X",
+  "expected": "openconnect --pass [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "REDISCLI_AUTH=X",
+  "expected": "REDISCLI_AUTH=[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "unzip -P X",
+  "expected": "unzip -P [redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "my\"sql\" -pX",
+  "expected": "my\"sql\" -p[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "m''ysql -pX",
+  "expected": "m''ysql -p[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "my\\sql -pX",
+  "expected": "my\\sql -p[redacted]"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "mycli -u me:hunter2 docker run img",
+  "expected": "mycli -u [redacted] docker run img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "sudo -u 1234:5678 docker run img",
+  "expected": "sudo -u [redacted] docker run img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "sudo -u me:hunter2 docker run img",
+  "expected": "sudo -u [redacted] docker run img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "mytool -u 1234:5678 sudo docker run img",
+  "expected": "mytool -u [redacted] sudo docker run img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "mytool -u me:hunter2 sudo docker run img",
+  "expected": "mytool -u [redacted] sudo docker run img"
+ },
+ {
+  "group": "shared-2ef54c052",
+  "input": "x identified by hunter2;",
+  "expected": "x identified by hunter2;"
  }
 ]
