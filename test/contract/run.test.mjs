@@ -8,6 +8,7 @@ import { handle, runClient } from '../../lib/run.mjs';
 import { flush, fingerprint } from '../../lib/flush.mjs';
 import { loadRun } from '../../lib/state.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
+import { useWorkspace } from '../../lib/workspace.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 
 const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)));
@@ -66,6 +67,24 @@ test('link KEY after start sends PATCH {task}', async (t) => {
   assert.equal(await main({ argv: ['link', 'AB-99', '--session', 'sess-c3', '--data', ctx.data], cwd: dir, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} }), 0);
   await go();
   assert.deepEqual(server.requests.at(-1).body, { task: 'AB-99' });
+});
+
+test('a cd into a repo pinned to another workspace finishes the old run there and links the new one', async (t) => {
+  const { server, data, dir, ctx, go } = await setup(t);
+  const { main } = await import('../../scripts/eocrm.mjs');
+  const other = tmp('repo');
+  git(other, 'init', '-q', '-b', 'main');
+  useWorkspace({ data, cwd: other, workspace: 'globex' });
+  await handle('SessionStart', { session_id: 'sess-c7', cwd: dir }, ctx);
+  await go();
+  const first = loadRun(data, 'sess-c7').runId;
+  await handle('UserPromptSubmit', { session_id: 'sess-c7', cwd: other }, ctx);
+  await main({ argv: ['link', 'AB-7', '--session', 'sess-c7', '--data', data], cwd: other, env: ctx.env, out: () => {}, err: () => {}, spawnFlush: () => {} });
+  await go();
+  const seen = server.requests.filter((r) => r.method !== 'GET').map((r) => [r.workspace, r.method, r.path.endsWith(first) ? 'first' : r.path, r.body?.state ?? r.body?.client_run_id, r.body?.task]);
+  assert.ok(seen.some((r) => r.join() === ['acme', 'PATCH', 'first', 'finished', undefined].join()));
+  assert.ok(seen.some((r) => r.join() === ['globex', 'POST', '/v1/agent-runs', 'sess-c7.1', 'AB-7'].join()));
+  assert.notEqual(loadRun(data, 'sess-c7').runId, first);
 });
 
 test('a resume after its run file was pruned starts a new run, not the old one', async (t) => {

@@ -13,7 +13,7 @@ import { startFixtureServer } from '../support/fixture-server.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { userAgent } from '../../lib/api.mjs';
 
-const browse = (url) => { fetch(url).catch(() => {}); };
+const browse = (url) => { fetch(url).catch(() => fetch(url)).catch(() => {}); };
 
 async function freePorts(n) {
   const servers = await Promise.all(Array.from({ length: n }, () => new Promise((r) => { const s = createServer(); s.listen(0, '127.0.0.1', () => r(s)); })));
