@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -14,6 +14,7 @@ import { endpoints } from '../../lib/endpoints.mjs';
 import { createServer } from 'node:http';
 import { worktreeOf, loadRun, saveRun } from '../../lib/state.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
+import { handle, spawnFlush as realSpawnFlush } from '../../lib/run.mjs';
 
 const tmp = (p) => mkdtempSync(join(tmpdir(), `eocrm-${p}-`));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe' });
@@ -409,6 +410,58 @@ test('smoke-seed rejects a bad --repo or no sign-in with exit 2', async () => {
   assert.equal(s.calls.length, 0);
 });
 
+async function loginAs(t, args) {
+  const server = await startFixtureServer();
+  t.after(() => server.close());
+  const data = tmp('data');
+  const spawn = (cmd, a) => {
+    fetch(a.at(-1)).catch(() => {});
+    return Object.assign(new EventEmitter(), { unref() {} });
+  };
+  const store = credentialStore({ data, platform: 'none' });
+  const r = await cli(['login', '--data', data, ...args, 'acme'], { env: server.endpointsEnv, store, openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) });
+  assert.equal(r.code, 0);
+  return server.requests.find((q) => q.path === '/oauth/register').body.client_name;
+}
+
+test('codex login registers as Codex (eocrm plugin)', async (t) => {
+  assert.equal(await loginAs(t, ['--harness', 'codex']), 'Codex (eocrm plugin)');
+});
+
+test('claude login still registers as Claude Code (eocrm plugin)', async (t) => {
+  assert.equal(await loginAs(t, []), 'Claude Code (eocrm plugin)');
+});
+
+const TRUST = 'Hooks have not run here yet. In Codex, open /hooks and trust the eocrm hooks.';
+
+test('status reports hooks not trusted when no hook ran in this worktree', async () => {
+  const data = tmp('data');
+  const dir = repo();
+  account(data, { signedInAt: Date.now() });
+  const lines = async (...extra) => (await cli(['status', '--data', data, ...extra], { cwd: dir, store: credentialStore({ data, platform: 'none' }) })).out.split('\n');
+  assert.ok((await lines('--harness', 'codex')).includes(TRUST));
+  assert.ok(!(await lines()).includes(TRUST));
+  await handle('SessionEnd', { session_id: 's1', cwd: dir }, { data, harness: 'codex', now: () => 1, spawnFlush: () => {} });
+  assert.ok((await lines('--harness', 'codex')).includes(TRUST), 'a hook before sign-in does not count');
+});
+
+test('status is silent about trust once a hook ran', async () => {
+  const data = tmp('data');
+  const dir = repo();
+  account(data, { signedInAt: 1 });
+  await handle('SessionEnd', { session_id: 's1', cwd: join(dir, '.') }, { data, harness: 'codex', now: Date.now, spawnFlush: () => {} });
+  const { out } = await cli(['status', '--data', data, '--harness', 'codex'], { cwd: dir, store: credentialStore({ data, platform: 'none' }) });
+  assert.ok(!out.split('\n').includes(TRUST), out);
+});
+
+test('a skill run from a Codex install with an empty --data uses the Codex data dir and harness', async () => {
+  const home = tmp('home');
+  const script = join(home, 'plugins/cache/eocrm/eocrm/0.1.4/scripts/eocrm.mjs');
+  const r = await cli(['status', '--data', ''], { cwd: repo(), env: { CODEX_HOME: home }, script, store: { get: async () => null } });
+  assert.ok(r.out.split('\n').includes(TRUST), r.out);
+  assert.ok(existsSync(join(home, 'plugins/data/eocrm-eocrm')));
+});
+
 test('conventions --refresh refetches', async (t) => {
   let hits = 0;
   const srv = createServer((req, res) => {
@@ -434,4 +487,77 @@ test('conventions --refresh refetches', async (t) => {
   assert.equal(hits, 1);
   assert.equal(loadRun(data, 's1').conventions.n, 1);
   assert.ok(loadRun(data, 's1').conventionsAt > 0);
+});
+
+test('CLI requests carry the codex User-Agent under --harness codex', async (t) => {
+  const agents = [];
+  const srv = createServer((req, res) => {
+    agents.push(req.headers['user-agent']);
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ task_switch_check: true }));
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  t.after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const env = { EOCRM_ENDPOINTS: JSON.stringify({ issuer: base, api: `${base}/{workspace}/api` }) };
+  const data = tmp('data');
+  account(data);
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(endpoints({ region: 'eu', env }).key, { access_token: 'at', refresh_token: 'rt', client_id: 'c', expires_at: Date.now() + 3_600_000 });
+  const dir = repo();
+  saveRun(data, 's1', { startedAt: 1, workspace: 'acme', region: 'eu', worktreeKey: worktreeOf(dir).key });
+  for (const h of [[], ['--harness', 'codex']]) await cli(['conventions', '--data', data, '--session', 's1', '--refresh', ...h], { cwd: dir, env, store });
+  assert.deepEqual(agents.map((a) => a.split(' ').at(-1)), ['(claude-code)', '(codex)']);
+});
+
+test('a Codex skill without --data or --session uses the install\'s data dir and CODEX_THREAD_ID', async () => {
+  const home = tmp('home');
+  const data = join(home, 'plugins/data/eocrm-mkt');
+  mkdirSync(data, { recursive: true });
+  const dir = repo();
+  for (const sid of ['thread-1', 'other']) saveRun(data, sid, { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  const script = join(home, 'plugins/cache/mkt/eocrm/0.2.0/scripts/eocrm.mjs');
+  const r = await cli(['link', 'ABC-1'], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: () => {} });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+  assert.equal(loadRun(data, 'other').start?.task, undefined);
+  assert.ok(!existsSync(join(home, 'plugins/data/eocrm-eocrm')));
+  const flagged = tmp('data');
+  saveRun(flagged, 'mine', { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  await cli(['link', 'ABC-2', '--data', flagged, '--session', 'mine'], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: () => {} });
+  assert.equal(loadRun(flagged, 'mine').start.task, 'ABC-2');
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+});
+
+test('Codex link: flush keeps --harness codex; Claude inside Codex keeps its own session; a bad session writes nothing', async () => {
+  const home = tmp('home');
+  const data = join(home, 'plugins/data/eocrm-mkt');
+  mkdirSync(data, { recursive: true });
+  const dir = repo();
+  saveRun(data, 'thread-1', { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  const script = join(home, 'plugins/cache/mkt/eocrm/0.2.0/scripts/eocrm.mjs');
+  const argv = [];
+  const capture = (c) => realSpawnFlush({ ...c, spawn: (_, a) => (argv.push(a.slice(1)), { on() { return this; }, unref() {} }) });
+  assert.equal((await cli(['link', 'ABC-1'], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: capture })).code, 0);
+  assert.deepEqual(argv, [['flush', '--data', data, '--harness', 'codex']]);
+  const claude = await cli(['link', 'ABC-2', '--data', data], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1', CLAUDECODE: '1' }, script, spawnFlush: () => {} });
+  assert.match(claude.out, /no --session/);
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+  const bad = tmp('data');
+  const r = await cli(['link', 'ABC-3', '--data', bad], { cwd: dir, env: { CODEX_THREAD_ID: '../../etc/x' }, script, spawnFlush: () => {} });
+  assert.equal(r.code, 2, r.err);
+  assert.match(r.err, /invalid --session/);
+  assert.ok(!existsSync(join(bad, 'worktrees')));
+});
+
+test('a Codex skill command with --harness codex works even under an inherited CLAUDECODE', async () => {
+  const home = tmp('home');
+  const data = join(home, 'plugins/data/eocrm-mkt');
+  mkdirSync(data, { recursive: true });
+  const dir = repo();
+  saveRun(data, 'thread-1', { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  const script = join(home, 'plugins/cache/mkt/eocrm/0.2.0/scripts/eocrm.mjs');
+  const r = await cli(['link', 'ABC-1', '--harness', 'codex'], { cwd: dir, env: { CLAUDECODE: '1', CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: () => {} });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
 });

@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { dataDir } from '../lib/paths.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dataDir, cliHarness, codexData, installData } from '../lib/paths.mjs';
 import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { credentialStore, spawnWithStdin } from '../lib/credentials.mjs';
@@ -11,13 +11,14 @@ import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
 import { loadConventions } from '../lib/reconcile.mjs';
 import { enqueue } from '../lib/outbox.mjs';
 import { eventId } from '../lib/ids.mjs';
-import { worktreeOf, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
+import { worktreeOf, lastHookAt, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' } };
+const OPTIONS = { data: { type: 'string' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
 const CONVENTIONS_MS = 4000;
+const TRUST = 'Hooks have not run here yet. In Codex, open /hooks and trust the eocrm hooks.';
 const APPROVE = 'pairing requested: approve in Account → Agents within 15 minutes';
 
 class Usage extends Error {
@@ -31,9 +32,9 @@ function pairingLines(p) {
   return [p.refused ? `running standalone (${p.refused})` : 'running standalone'];
 }
 
-async function recheck({ data, env, store, workspace, region }) {
+async function recheck({ data, env, store, workspace, region, harness }) {
   try {
-    const result = await pairing(createClient({ endpoints: endpoints({ region, env }), workspace, store }));
+    const result = await pairing(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }));
     if (result.status === 'choose' || result.refused) return ['pairing requested'];
     recordPairing(data, workspace, result.status);
     return pairingLines(result);
@@ -56,9 +57,9 @@ const need = (v, name) => {
 };
 
 const commands = {
-  async login({ values, positionals: [workspace], env, cwd, out, data, store, open }) {
+  async login({ values, positionals: [workspace], env, cwd, out, data, store, open, harness }) {
     const region = values.region ?? 'eu';
-    const result = await login({ data, region, workspace, env, store, openBrowser: (u) => open(u, { print: out }) });
+    const result = await login({ data, region, workspace, env, store, harness, openBrowser: (u) => open(u, { print: out }) });
     const lines = [`signed in to ${result.workspace} (${region})`];
     if (result.storage === 'file') lines.push(`tokens stored in ${join(data, 'credentials.json')}: no keychain found`);
     lines.push(...pairingLines(result.pairing));
@@ -79,35 +80,39 @@ const commands = {
     if (!(workspace in (loadAccount(data).workspaces ?? {}))) out(`run /eocrm:login ${workspace}`);
   },
 
-  async pair({ positionals: [id], env, cwd, out, data, store }) {
+  async pair({ positionals: [id], env, cwd, out, data, store, harness }) {
     if (!id) throw new Usage('connection id required');
     const { workspace, region } = resolveWorkspace({ data, cwd });
     if (!workspace || !region) throw new Usage('workspace required: run /eocrm:login first');
-    const result = await requestPair(createClient({ endpoints: endpoints({ region, env }), workspace, store }), id);
+    const result = await requestPair(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }), id);
     recordPairing(data, workspace, result.status);
     pairingLines(result).forEach((l) => out(l));
     return result.status === 'standalone' ? 3 : 0;
   },
 
-  async status({ env, cwd, out, data, store }) {
+  async status({ env, cwd, out, data, store, harness }) {
     const account = loadAccount(data);
     const { workspace, region, source, pending } = resolveWorkspace({ data, cwd });
     const tokens = account.region ? await store.get(endpoints({ region: account.region, env }).key, { timeoutMs: 2500 }) : null;
     out(tokens?.access_token ? `signed in (${account.region})` : 'signed out: run /eocrm:login');
+    if (harness === 'codex') {
+      const ran = lastHookAt(data, worktreeOf(cwd).key);
+      if (ran === null || ran < (account.signedInAt ?? 0)) out(TRUST);
+    }
     if (!workspace) return;
     out(`workspace ${workspace} (${source})`);
     const known = account.workspaces?.[workspace];
     if (region !== account.region) out(`run /eocrm:login --region ${region} ${workspace}`);
     else if (!known) out(`run /eocrm:login ${workspace}`);
-    else if (known === 'requested') for (const l of await recheck({ data, env, store, workspace, region })) out(l);
+    else if (known === 'requested') for (const l of await recheck({ data, env, store, workspace, region, harness })) out(l);
     else out(`pairing ${known}`);
     if (pending) out(committedLine(pending));
   },
 
-  async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush }) {
+  async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush, harness }) {
     if (answer !== 'none' && !LINK_KEY.test(answer ?? '')) throw new Usage('usage: eocrm link <KEY|none>');
     const taskKey = answer === 'none' ? null : answer;
-    const { others } = await linkWorktree({ data, env, now: Date.now, spawnFlush }, cwd, taskKey, values.session);
+    const { others } = await linkWorktree({ data, env, now: Date.now, spawnFlush, harness }, cwd, taskKey, values.session);
     out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
     if (!values.session) out('Only the default for new sessions changed (no --session).');
     if (others.length) {
@@ -137,9 +142,9 @@ const commands = {
     out(`recorded ${kind}`);
   },
 
-  async conventions({ values, env, cwd, out, data, store }) {
+  async conventions({ values, env, cwd, out, data, store, harness }) {
     const run = liveRun(data, cwd, values.session);
-    const conventions = await loadConventions({}, run, { conventions: () => runClient({ data, env, store })(run).conventions() }, Date.now() + CONVENTIONS_MS, { refresh: values.refresh });
+    const conventions = await loadConventions({}, run, { conventions: () => runClient({ data, env, store, harness })(run).conventions() }, Date.now() + CONVENTIONS_MS, { refresh: values.refresh });
     if (!conventions) throw new Error('conventions unavailable: ask the member');
     if (conventions !== run.conventions) {
       await withLock(data, async () => {
@@ -217,6 +222,7 @@ export async function main({
   openBrowser: open = openBrowser,
   spawnFlush,
   gh = (args, stdin) => spawnWithStdin('gh', args, stdin, { timeoutMs: 30000 }),
+  script = fileURLToPath(import.meta.url),
 } = {}) {
   if (!(Number(String(version).split('.')[0]) >= 20)) {
     err('eocrm needs Node 20+ on PATH');
@@ -227,13 +233,16 @@ export async function main({
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
     if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout|smoke-seed --data <dir>');
+    const harness = cliHarness({ flag: values.harness, env, script });
+    if (harness === 'codex') values.session ||= env.CODEX_THREAD_ID;
+    if (values.session && !/^[\w-]+$/.test(values.session)) throw new Usage('invalid --session');
     let data;
     try {
-      data = dataDir({ argv, env, data: values.data });
+      data = dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : undefined });
     } catch (e) {
       throw new Usage(e.message);
     }
-    const code = await command({ values, positionals: rest, env, cwd, out, data, store: store ?? credentialStore({ data }), open, spawnFlush, gh });
+    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? credentialStore({ data }), open, spawnFlush, gh });
     return code ?? 0;
   } catch (e) {
     for (const line of e.lines ?? []) out(line);

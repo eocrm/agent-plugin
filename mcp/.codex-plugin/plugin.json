@@ -1,0 +1,9 @@
+{
+  "name": "eocrm-mcp",
+  "version": "0.2.0",
+  "description": "eocrm tools for Codex: tasks, contacts, deals, appointments and records in your eocrm workspaces, through the eocrm MCP server.",
+  "license": "Apache-2.0",
+  "author": { "name": "eocrm" },
+  "repository": "https://github.com/eocrm/agent-plugin",
+  "mcpServers": "./mcp.json"
+}

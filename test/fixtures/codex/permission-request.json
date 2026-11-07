@@ -1,0 +1,1 @@
+{ "session_id": "cx-1", "transcript_path": null, "cwd": "/w", "hook_event_name": "PermissionRequest", "model": "gpt-5-codex", "permission_mode": "default", "turn_id": "t1", "tool_name": "shell", "tool_input": { "command": ["bash", "-lc", "rm -rf build"] } }

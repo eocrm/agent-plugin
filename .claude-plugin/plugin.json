@@ -1,12 +1,12 @@
 {
   "name": "eocrm",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Reports Claude Code agent work (runs, commits, tests, PRs, plan steps) to eocrm.",
   "license": "Apache-2.0",
   "author": {
     "name": "eocrm"
   },
-  "repository": "https://github.com/eocrm/claude-plugin",
+  "repository": "https://github.com/eocrm/agent-plugin",
   "dependencies": [
     "eocrm-mcp"
   ]

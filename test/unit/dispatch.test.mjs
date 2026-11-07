@@ -769,3 +769,9 @@ test('it does not recount history after a tombstoned resume', async () => {
   const counted = readOutbox(data).filter((e) => e.event?.cache_read_tokens !== undefined).map((e) => e.event.input_tokens);
   assert.deepEqual(counted, [2]);
 });
+
+test('dispatch passes harness codex when the flag is given and claude by default', async () => {
+  const { parseArgs } = await import('../../lib/paths.mjs');
+  assert.deepEqual(parseArgs(['--harness', 'codex', 'Stop']), { event: 'Stop', harness: 'codex' });
+  assert.deepEqual(parseArgs(['Stop', '--data', '/d']), { event: 'Stop', harness: 'claude' });
+});

@@ -65,7 +65,8 @@ test('registers once, signs in with PKCE S256 and stores tokens under the endpoi
   assert.equal(saved.access_token, server.auth.access);
   assert.equal(saved.client_id, 'fixture-client');
   const account = JSON.parse(readFileSync(join(data, 'account.json'), 'utf8'));
-  assert.deepEqual({ ...account, workspaces: undefined }, { region: 'eu', issuer: server.url, clients: { [server.url]: 'fixture-client' }, keys: [key], workspace: 'acme', workspaces: undefined });
+  assert.deepEqual({ ...account, workspaces: undefined, signedInAt: undefined }, { region: 'eu', issuer: server.url, clients: { [server.url]: 'fixture-client' }, keys: [key], workspace: 'acme', workspaces: undefined, signedInAt: undefined });
+  assert.ok(account.signedInAt <= Date.now());
   assert.equal(saved.expires_at > Date.now() / 1000, true);
   assert.equal(account.workspaces.acme, 'requested');
   await assert.rejects(fetch(`http://127.0.0.1:${ports[0]}/start`), 'the callback server closes after one valid callback');
@@ -329,4 +330,12 @@ test('the login requests carry the plugin User-Agent', async (t) => {
   const ours = server.requests.filter((r) => r.path !== '/oauth/authorize');
   assert.ok(ours.some((r) => r.path === '/oauth/register') && ours.some((r) => r.path === '/oauth/token'));
   assert.deepEqual([...new Set(ours.map((r) => r.headers['user-agent']))], [userAgent()]);
+});
+
+test('a codex login sends the codex User-Agent on every request', async (t) => {
+  const { server, run } = await setup(t);
+  await run({ harness: 'codex' });
+  const ours = server.requests.filter((r) => r.path !== '/oauth/authorize');
+  assert.ok(ours.some((r) => r.path === '/oauth/register') && ours.some((r) => r.path === '/oauth/token') && ours.some((r) => r.path.startsWith('/v1/')));
+  assert.deepEqual([...new Set(ours.map((r) => r.headers['user-agent']))], [userAgent('codex')]);
 });
