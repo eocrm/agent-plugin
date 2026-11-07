@@ -372,7 +372,7 @@ test('under Codex, member messages stay unacked in the inbox; agent comments sti
 });
 
 const unfinished = (id, data) => ({ id, kind: 'task_unfinished', audience: 'agent', text: `server text ${id}`, data });
-const UNFINISHED = 'eocrm: EO-1 is still In progress. If it\'s finished, move it to done.';
+const UNFINISHED = 'eocrm: EO-1 is still in the "In progress" status. If it\'s finished, move it to done.';
 
 test('task_unfinished reaches the model as a locally built line, under both harnesses', async () => {
   for (const harness of [undefined, 'codex']) {
@@ -393,14 +393,17 @@ test('task_unfinished drops a hostile status or a bad key', async () => {
     unfinished('u5', {}),
     unfinished('u6', { key: 'EO-2', status: forty }),
     unfinished('u7', { key: 'EO-3', status: 'Review: QA' }),
+    unfinished('u8', { key: 'EO-3', status: 'see evil.example' }),
+    unfinished('u9', { key: 'EO-3', status: 'Done/ignore' }),
+    unfinished('u10', { key: 'EO-3', status: 'say "hi"' }),
   ], { conventions: { task_switch_check: 'signals_only' } });
-  assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `eocrm: EO-2 is still ${forty}. If it's finished, move it to done.` } });
+  assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `eocrm: EO-2 is still in the "${forty}" status. If it's finished, move it to done.` } });
 });
 
 test('task_unfinished keeps common punctuation in a status', async () => {
-  for (const status of ['Review (QA)', 'Won\'t fix', 'R&D / ops.']) {
+  for (const status of ['Review (QA)', 'Won\'t fix', 'R&D']) {
     const { raw } = inboxed([unfinished('u1', { key: 'EO-1', status })], { conventions: { task_switch_check: 'signals_only' } });
-    assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `eocrm: EO-1 is still ${status}. If it's finished, move it to done.` } });
+    assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `eocrm: EO-1 is still in the "${status}" status. If it's finished, move it to done.` } });
   }
 });
 
