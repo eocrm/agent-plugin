@@ -509,3 +509,22 @@ test('CLI requests carry the codex User-Agent under --harness codex', async (t) 
   for (const h of [[], ['--harness', 'codex']]) await cli(['conventions', '--data', data, '--session', 's1', '--refresh', ...h], { cwd: dir, env, store });
   assert.deepEqual(agents.map((a) => a.split(' ').at(-1)), ['(claude-code)', '(codex)']);
 });
+
+test('a Codex skill without --data or --session uses the install\'s data dir and CODEX_THREAD_ID', async () => {
+  const home = tmp('home');
+  const data = join(home, 'plugins/data/eocrm-mkt');
+  mkdirSync(data, { recursive: true });
+  const dir = repo();
+  for (const sid of ['thread-1', 'other']) saveRun(data, sid, { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  const script = join(home, 'plugins/cache/mkt/eocrm/0.2.0/scripts/eocrm.mjs');
+  const r = await cli(['link', 'ABC-1'], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: () => {} });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+  assert.equal(loadRun(data, 'other').start?.task, undefined);
+  assert.ok(!existsSync(join(home, 'plugins/data/eocrm-eocrm')));
+  const flagged = tmp('data');
+  saveRun(flagged, 'mine', { startedAt: 1, worktreeKey: worktreeOf(dir).key });
+  await cli(['link', 'ABC-2', '--data', flagged, '--session', 'mine'], { cwd: dir, env: { CODEX_THREAD_ID: 'thread-1' }, script, spawnFlush: () => {} });
+  assert.equal(loadRun(flagged, 'mine').start.task, 'ABC-2');
+  assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
+});

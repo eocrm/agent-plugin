@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, existsSync, statSync, chmodSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { dataDir, cliHarness, codexData } from '../../lib/paths.mjs';
+import { dataDir, cliHarness, codexData, installData } from '../../lib/paths.mjs';
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), 'eocrm-')), 'a', 'b');
 
@@ -62,4 +62,12 @@ test('the CLI harness: flag, then plugin env, then install path; codex data unde
   assert.equal(cliHarness({ flag: 'codex', env, script: claudeScript }), 'codex');
   assert.equal(codexData(env), join(home, '.codex/plugins/data/eocrm-eocrm'));
   assert.equal(codexData({}), join(homedir(), '.codex/plugins/data/eocrm-eocrm'));
+});
+
+test('installData maps a plugin cache script to its data dir; CODEX_THREAD_ID means codex', () => {
+  const home = join(tmpdir(), 'h', '.codex');
+  assert.equal(installData(join(home, 'plugins/cache/mkt/eocrm/0.2.0/scripts/eocrm.mjs')), join(home, 'plugins/data/eocrm-mkt'));
+  assert.equal(installData(join(tmpdir(), 'checkout/scripts/eocrm.mjs')), undefined);
+  assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't' }, script: join(tmpdir(), 'x/scripts/eocrm.mjs') }), 'codex');
+  assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't', CLAUDE_PLUGIN_DATA: '/d' }, script: '/x' }), 'claude');
 });

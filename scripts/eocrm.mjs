@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dataDir, cliHarness, codexData } from '../lib/paths.mjs';
+import { dataDir, cliHarness, codexData, installData } from '../lib/paths.mjs';
 import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { credentialStore, spawnWithStdin } from '../lib/credentials.mjs';
@@ -234,9 +234,10 @@ export async function main({
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
     if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout|smoke-seed --data <dir>');
     const harness = cliHarness({ flag: values.harness, env, script });
+    values.session ||= env.CODEX_THREAD_ID;
     let data;
     try {
-      data = dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? codexData(env) : undefined });
+      data = dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : undefined });
     } catch (e) {
       throw new Usage(e.message);
     }
