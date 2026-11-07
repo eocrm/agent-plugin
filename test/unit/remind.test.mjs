@@ -392,8 +392,16 @@ test('task_unfinished drops a hostile status or a bad key', async () => {
     unfinished('u4', { key: 'not a key', status: 'x' }),
     unfinished('u5', {}),
     unfinished('u6', { key: 'EO-2', status: forty }),
+    unfinished('u7', { key: 'EO-3', status: 'Review: QA' }),
   ], { conventions: { task_switch_check: 'signals_only' } });
   assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `eocrm: EO-2 is still ${forty}. If it's finished, move it to done.` } });
+});
+
+test('task_unfinished keeps common punctuation in a status', async () => {
+  for (const status of ['Review (QA)', 'Won\'t fix', 'R&D / ops.']) {
+    const { raw } = inboxed([unfinished('u1', { key: 'EO-1', status })], { conventions: { task_switch_check: 'signals_only' } });
+    assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `eocrm: EO-1 is still ${status}. If it's finished, move it to done.` } });
+  }
 });
 
 function repo(branch = 'main') {
