@@ -24,16 +24,18 @@ for (const name of SESSIONS) {
   });
 }
 
-const QUIET = (hook, o) => (hook === 'SessionStart' && Object.keys(o).join() === 'hookSpecificOutput' && Object.keys(o.hookSpecificOutput).join() === 'hookEventName,additionalContext')
+const CONTEXT = new Set(['SessionStart', 'UserPromptSubmit', 'PostToolUse']);
+const QUIET = (hook, o) => (CONTEXT.has(hook) && Object.keys(o).join() === 'hookSpecificOutput' && Object.keys(o.hookSpecificOutput).join() === 'hookEventName,additionalContext')
   || (hook === 'Stop' && Object.keys(o).join() === 'decision,reason' && o.decision === 'block');
 
 for (const name of SESSIONS) {
-  test(`${name}: Codex hooks stay within ${BUDGET} tokens and print only SessionStart context and the gate`, async (t) => {
-    const server = await startReplayServer();
+  test(`${name}: Codex hooks stay within ${BUDGET} tokens and print only context and the gate`, async (t) => {
+    const server = await startReplayServer({ task_switch_check: 'every_prompt' });
     t.after(() => server.close());
     const { injected, printed } = await replay(sessionFile(name), { server, data: signedIn(), harness: 'codex' });
     if (name === 'gate-rejection') assert.ok(printed.some(({ hook, stdout }) => hook === 'Stop' && JSON.parse(stdout).decision === 'block'), 'the gate ran under Codex hooks');
     for (const { hook, stdout } of printed) assert.ok(QUIET(hook, JSON.parse(stdout)), `${hook} printed ${stdout}`);
+    assert.ok(printed.some(({ hook }) => hook === 'UserPromptSubmit'), 'Remind ran under Codex hooks');
     const total = injected.reduce((s, { text }) => s + tokens(text), 0);
     assert.ok(total <= BUDGET, `${name}: ${total} > ${BUDGET}`);
   });
