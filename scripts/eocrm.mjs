@@ -112,8 +112,8 @@ const commands = {
   async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush, harness }) {
     if (answer !== 'none' && !LINK_KEY.test(answer ?? '')) throw new Usage('usage: eocrm link <KEY|none>');
     const taskKey = answer === 'none' ? null : answer;
-    const { others } = await linkWorktree({ data, env, now: Date.now, spawnFlush, harness }, cwd, taskKey, values.session);
-    out(taskKey ? `linked to ${taskKey}` : 'not linked to a task');
+    const { others, pending } = await linkWorktree({ data, env, now: Date.now, spawnFlush, harness }, cwd, taskKey, values.session);
+    out(`${taskKey ? `linked to ${taskKey}` : 'not linked to a task'}${pending ? ` (applies when work moves to ${pending})` : ''}`);
     if (!values.session) out('Only the default for new sessions changed (no --session).');
     if (others.length) {
       const tasks = [...new Set(others.map((o) => o.task ?? 'none'))].sort().join(', ');

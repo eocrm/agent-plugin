@@ -499,6 +499,28 @@ test('no merge reminder for a merge that did not happen, with no exit field', as
   assert.equal((await fire(...merge(cwd, 'git merge ok', { stdout: 'Fast-forward', stderr: '' })))?.additionalContext, MERGED);
 });
 
+test('no merge reminder from a merge older than the session or one still in progress', async () => {
+  const { fire, data, sid } = setup();
+  saveRun(data, sid, { startedAt: Date.now() - 60_000 });
+  const r = repo();
+  const { cwd } = r;
+  const old = (...args) => execFileSync('git', [...ID, ...args], { cwd, stdio: 'ignore', env: { ...process.env, GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z' } });
+  feature(r, 'old');
+  old('merge', '-q', 'old');
+  gitMerge(r, 'old');
+  assert.equal(await fire(...merge(cwd, 'git merge -q old', { stdout: '', stderr: '' })), null);
+  assert.equal(await fire(...merge(cwd, 'LANG=de_DE.UTF-8 git merge old', { stdout: 'Bereits aktuell.', stderr: '' })), null);
+  feature(r, 'c', 'c.txt', 'other');
+  writeFileSync(join(cwd, 'c.txt'), 'main');
+  r.g('add', 'c.txt');
+  r.g(...ID, 'commit', '-q', '-m', 'main');
+  feature(r, 'new');
+  gitMerge(r, 'new');
+  gitMerge(r, 'c');
+  assert.match(execFileSync('git', ['reflog', '-1', '--format=%gs'], { cwd, encoding: 'utf8' }), /^merge new/);
+  assert.equal(await fire(...merge(cwd, 'git merge c || true', { stdout: 'CONFLICT', stderr: '' })), null);
+});
+
 test('under Codex a shell git merge with a string response does not remind', async () => {
   const { fire } = setup();
   const r = repo();

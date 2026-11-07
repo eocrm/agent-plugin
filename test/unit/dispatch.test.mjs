@@ -849,20 +849,6 @@ test('a region change alone finishes the run', async () => {
   assert.deepEqual(retiredOf(data, s).map((e) => e.kind), ['finish']);
 });
 
-test('a link from a repo pinned to another workspace moves my run there, linked', async () => {
-  const data = signedIn();
-  const [a, b] = [repo('main'), repo('main')];
-  useWorkspace({ data, cwd: b, workspace: 'globex' });
-  const ctx = ctxFor(data);
-  const s = sid();
-  await ensureRun(ctx, input(s, a));
-  await linkWorktree(ctx, b, 'EO-8', s);
-  const run = loadRun(data, s);
-  assert.deepEqual([run.workspace, run.generation, run.start.task], ['globex', 1, 'EO-8']);
-  assert.deepEqual(retiredOf(data, s).map((e) => e.kind), ['start', 'finish']);
-  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task'), []);
-});
-
 test('a link from another workspace never starts or revives a run', async () => {
   const data = signedIn();
   const [a, b] = [repo('main'), repo('main')];
@@ -969,19 +955,6 @@ test('a hook from a subdirectory of the same worktree remembers its cwd', async 
   assert.deepEqual([loadRun(data, s).cwd, loadRun(data, s).generation], [sub, 0]);
 });
 
-test('a link from another repo keeps the run there when the same call\'s hook comes from mine', async () => {
-  const data = signedIn();
-  const [a, b] = [repo('main'), repo('main')];
-  useWorkspace({ data, cwd: b, workspace: 'globex' });
-  const ctx = ctxFor(data);
-  const s = sid();
-  await handle('SessionStart', input(s, a), ctx);
-  await linkWorktree(ctx, b, 'EO-8', s);
-  await handle('PostToolUse', { ...input(s, a), tool_name: 'Bash', tool_input: { command: 'cd ../b && eocrm link EO-8' } }, ctx);
-  const run = loadRun(data, s);
-  assert.deepEqual([run.workspace, run.start.task, run.generation], ['globex', 'EO-8', 1]);
-});
-
 test('a finish in flight while the run moves ends the old generation, not the new one', async () => {
   const data = signedIn();
   const [a, b] = [repo('main'), repo('main')];
@@ -1019,4 +992,65 @@ test('a hook from outside any tracked workspace remembers its cwd', async () => 
   saveRun(data, s, { startedAt: 1, workspace: 'acme', region: 'eu', worktreeKey: worktreeOf(a).key, cwd: a, lastHeartbeatAt: 1e12 });
   await handle('PostToolUse', { ...input(s, b), tool_name: 'Read', tool_input: {} }, ctx);
   assert.deepEqual([loadRun(data, s).cwd, loadRun(data, s).workspace], [b, 'acme']);
+});
+
+test('link from a subshell in another workspace leaves the run where its hooks are, and sends nothing there', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const s = sid();
+  await handle('SessionStart', input(s, a), ctx);
+  const lines = [];
+  assert.equal(await main({ argv: ['link', 'EO-8', '--session', s, '--data', data], cwd: b, env: ctx.env, out: (l) => lines.push(l), err: () => {}, spawnFlush: () => {} }), 0);
+  assert.equal(lines[0], 'linked to EO-8 (applies when work moves to globex)');
+  await handle('PostToolUse', { ...input(s, a), tool_name: 'Bash', tool_input: { command: 'cd ../b && eocrm link EO-8' } }, ctx);
+  await handle('SessionStart', input(s, a, { source: 'resume' }), ctx);
+  const run = loadRun(data, s);
+  assert.deepEqual([run.workspace, run.generation, run.start.task, run.linkedFor], ['acme', 0, undefined, 'eu globex']);
+  assert.deepEqual(retiredOf(data, s), []);
+  assert.deepEqual(readOutbox(data).filter((e) => e.kind === 'task'), []);
+  const seen = new Set();
+  const ok = { status: 200, body: {} };
+  await flush({ data, clientFor: (r) => (seen.add(r.workspace), { startRun: async () => ({ status: 201, body: { id: 'r1' } }), recordEvents: async () => ok, heartbeat: async () => ok, updateRun: async () => ok }) });
+  assert.deepEqual([...seen], ['acme']);
+});
+
+test('after a link for another workspace, a hook from that repo moves the run there, linked', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const s = sid();
+  await handle('SessionStart', input(s, a), ctx);
+  await linkWorktree(ctx, b, 'EO-8', s);
+  assert.equal(loadRun(data, s).workspace, 'acme');
+  await handle('UserPromptSubmit', input(s, b), ctx);
+  const run = loadRun(data, s);
+  assert.deepEqual([run.workspace, run.generation, run.start.task], ['globex', 1, 'EO-8']);
+});
+
+test('a prompt during a finish in flight keeps the resumed run open', async () => {
+  const data = signedIn();
+  const a = repo('main');
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  saveRun(data, s, { runId: 'r1' });
+  writeOutbox(data, []);
+  await handle('SessionEnd', input(s, a), ctx);
+  let resumed = false;
+  const ok = { status: 200, body: {} };
+  const clientFor = () => ({
+    updateRun: async (id, body) => {
+      if (body.state === 'finished' && !resumed) {
+        resumed = true;
+        await handle('UserPromptSubmit', input(s, a), ctx);
+      }
+      return ok;
+    },
+    startRun: async () => ({ status: 201, body: { id: 'r2' } }), recordEvents: async () => ok, heartbeat: async () => ok,
+  });
+  await flush({ data, clientFor });
+  assert.deepEqual([resumed, loadRun(data, s).ended, loadRun(data, s).generation], [true, false, 0]);
 });
