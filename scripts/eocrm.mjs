@@ -32,9 +32,9 @@ function pairingLines(p) {
   return [p.refused ? `running standalone (${p.refused})` : 'running standalone'];
 }
 
-async function recheck({ data, env, store, workspace, region }) {
+async function recheck({ data, env, store, workspace, region, harness }) {
   try {
-    const result = await pairing(createClient({ endpoints: endpoints({ region, env }), workspace, store }));
+    const result = await pairing(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }));
     if (result.status === 'choose' || result.refused) return ['pairing requested'];
     recordPairing(data, workspace, result.status);
     return pairingLines(result);
@@ -80,11 +80,11 @@ const commands = {
     if (!(workspace in (loadAccount(data).workspaces ?? {}))) out(`run /eocrm:login ${workspace}`);
   },
 
-  async pair({ positionals: [id], env, cwd, out, data, store }) {
+  async pair({ positionals: [id], env, cwd, out, data, store, harness }) {
     if (!id) throw new Usage('connection id required');
     const { workspace, region } = resolveWorkspace({ data, cwd });
     if (!workspace || !region) throw new Usage('workspace required: run /eocrm:login first');
-    const result = await requestPair(createClient({ endpoints: endpoints({ region, env }), workspace, store }), id);
+    const result = await requestPair(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }), id);
     recordPairing(data, workspace, result.status);
     pairingLines(result).forEach((l) => out(l));
     return result.status === 'standalone' ? 3 : 0;
@@ -104,7 +104,7 @@ const commands = {
     const known = account.workspaces?.[workspace];
     if (region !== account.region) out(`run /eocrm:login --region ${region} ${workspace}`);
     else if (!known) out(`run /eocrm:login ${workspace}`);
-    else if (known === 'requested') for (const l of await recheck({ data, env, store, workspace, region })) out(l);
+    else if (known === 'requested') for (const l of await recheck({ data, env, store, workspace, region, harness })) out(l);
     else out(`pairing ${known}`);
     if (pending) out(committedLine(pending));
   },
@@ -142,9 +142,9 @@ const commands = {
     out(`recorded ${kind}`);
   },
 
-  async conventions({ values, env, cwd, out, data, store }) {
+  async conventions({ values, env, cwd, out, data, store, harness }) {
     const run = liveRun(data, cwd, values.session);
-    const conventions = await loadConventions({}, run, { conventions: () => runClient({ data, env, store })(run).conventions() }, Date.now() + CONVENTIONS_MS, { refresh: values.refresh });
+    const conventions = await loadConventions({}, run, { conventions: () => runClient({ data, env, store, harness })(run).conventions() }, Date.now() + CONVENTIONS_MS, { refresh: values.refresh });
     if (!conventions) throw new Error('conventions unavailable: ask the member');
     if (conventions !== run.conventions) {
       await withLock(data, async () => {

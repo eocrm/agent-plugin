@@ -331,3 +331,11 @@ test('the login requests carry the plugin User-Agent', async (t) => {
   assert.ok(ours.some((r) => r.path === '/oauth/register') && ours.some((r) => r.path === '/oauth/token'));
   assert.deepEqual([...new Set(ours.map((r) => r.headers['user-agent']))], [userAgent()]);
 });
+
+test('a codex login sends the codex User-Agent on every request', async (t) => {
+  const { server, run } = await setup(t);
+  await run({ harness: 'codex' });
+  const ours = server.requests.filter((r) => r.path !== '/oauth/authorize');
+  assert.ok(ours.some((r) => r.path === '/oauth/register') && ours.some((r) => r.path === '/oauth/token') && ours.some((r) => r.path.startsWith('/v1/')));
+  assert.deepEqual([...new Set(ours.map((r) => r.headers['user-agent']))], [userAgent('codex')]);
+});

@@ -34,6 +34,13 @@ test('Remind entries are synchronous with a 5 s timeout', () => {
   for (const name of ['Edit', 'mcp__plugin_eocrm-mcp_eocrm__tasks_get', 'mcp__github__tasks_create']) assert.ok(!matcher.test(name), name);
 });
 
+test('codex Remind entries match Claude\'s events, matcher, sync and timeout', () => {
+  const rows = (file, name) => Object.entries(json(file).hooks).flatMap(([event, groups]) => groups.flatMap((g) => g.hooks.filter(name).map((h) => [event, g.matcher ?? null, h.async, h.timeout])));
+  const codex = rows('hooks/codex.json', (h) => h.command.endsWith(' Remind'));
+  assert.ok(codex.length > 0);
+  assert.deepEqual(codex, rows('hooks/hooks.json', (h) => h.args[1] === 'Remind'));
+});
+
 test('no top-level bin directory', () => {
   assert.equal(existsSync(new URL('bin', root)), false);
 });
@@ -49,7 +56,7 @@ test('codex hooks call dispatch with --harness codex for every event', () => {
   const { hooks } = json('hooks/codex.json');
   assert.deepEqual(Object.keys(hooks), ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'PostModelRequest', 'Stop', 'SessionEnd']);
   for (const [event, groups] of Object.entries(hooks)) {
-    for (const g of groups) for (const h of g.hooks) assert.equal(h.command, `node "$PLUGIN_ROOT/hooks/dispatch.mjs" --harness codex ${event}`);
+    for (const g of groups) for (const h of g.hooks) assert.match(h.command, new RegExp(`^node "\\$PLUGIN_ROOT/hooks/dispatch\\.mjs" --harness codex (${event}|Remind)$`));
   }
   assert.equal(hooks.SessionStart[0].matcher, 'startup|resume|clear|compact|fork');
   assert.equal(hooks.SessionStart[0].hooks[0].async, false);

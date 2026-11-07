@@ -488,3 +488,24 @@ test('conventions --refresh refetches', async (t) => {
   assert.equal(loadRun(data, 's1').conventions.n, 1);
   assert.ok(loadRun(data, 's1').conventionsAt > 0);
 });
+
+test('CLI requests carry the codex User-Agent under --harness codex', async (t) => {
+  const agents = [];
+  const srv = createServer((req, res) => {
+    agents.push(req.headers['user-agent']);
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ task_switch_check: true }));
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  t.after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const env = { EOCRM_ENDPOINTS: JSON.stringify({ issuer: base, api: `${base}/{workspace}/api` }) };
+  const data = tmp('data');
+  account(data);
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(endpoints({ region: 'eu', env }).key, { access_token: 'at', refresh_token: 'rt', client_id: 'c', expires_at: Date.now() + 3_600_000 });
+  const dir = repo();
+  saveRun(data, 's1', { startedAt: 1, workspace: 'acme', region: 'eu', worktreeKey: worktreeOf(dir).key });
+  for (const h of [[], ['--harness', 'codex']]) await cli(['conventions', '--data', data, '--session', 's1', '--refresh', ...h], { cwd: dir, env, store });
+  assert.deepEqual(agents.map((a) => a.split(' ').at(-1)), ['(claude-code)', '(codex)']);
+});

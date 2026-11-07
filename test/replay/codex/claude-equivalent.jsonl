@@ -1,6 +1,7 @@
 {"hook": "SessionStart", "input": {"model": "claude-opus-5-5", "source": "startup"}, "git": [["checkout", "-q", "-b", "feat/AB-5-thing"]]}
 {"hook": "UserPromptSubmit", "input": {"prompt": "Add the thing."}}
 {"hook": "PostToolUse", "input": {"tool_name": "Bash", "tool_input": {"command": "git add -A && git commit -m \"feat: thing\""}, "tool_response": {"stdout": "[feat/AB-5-thing 1a2b3c4] feat: thing", "stderr": "", "interrupted": false}, "tool_use_id": "c1"}, "git": [["add", "-A"], ["commit", "-q", "-m", "feat: thing"]], "fs": {"src/thing.mjs": "export const t = 1;\n"}}
+{"hook": "PostToolUse", "input": {"tool_name": "Bash", "tool_input": {"command": "npm test"}, "tool_response": {"stdout": "# pass 3", "stderr": "", "interrupted": false}, "tool_use_id": "c5"}}
 {"hook": "PostToolUse", "input": {"tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "Write it", "status": "completed", "activeForm": "Writing"}, {"content": "Ship it", "status": "pending", "activeForm": "Shipping"}]}, "tool_response": {}, "tool_use_id": "c3"}}
 {"hook": "Notification", "input": {"notification_type": "permission_prompt", "title": "Permission needed", "message": "Claude needs your permission to use Bash: rm -rf build"}}
 {"hook": "PostToolUse", "input": {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}, "tool_response": {"stdout": "", "stderr": "", "interrupted": false}, "tool_use_id": "c4"}}

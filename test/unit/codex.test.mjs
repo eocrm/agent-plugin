@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { codexEvents, addModelUsage } from '../../lib/codex.mjs';
 import { testRun, isCommit } from '../../lib/detect.mjs';
-import { handle } from '../../lib/run.mjs';
+import { handle, spawnFlush } from '../../lib/run.mjs';
+import { parseArgs } from '../../lib/paths.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
 import { eventId } from '../../lib/ids.mjs';
@@ -75,7 +76,37 @@ test('maps shell output to the detector shape', () => {
     assert.equal(testRun({ ...only('PostToolUse', shell('npm test', { [field]: '# pass 2', exit_code: 0 })), hook_event_name: 'PostToolUse' }).result_line, '# pass 2');
   }
   const str = testRun({ ...only('PostToolUse', shell('npm test', 'tests 2 passed')), hook_event_name: 'PostToolUse' });
-  assert.deepEqual([str.result_line, str.exit_code], ['tests 2 passed', 0]);
+  assert.deepEqual([str.result_line, str.exit_code], ['tests 2 passed', null]);
+  assert.equal(testRun({ ...only('PostToolUse', shell('npm test', { output: '# pass 1' })), hook_event_name: 'PostToolUse' }).exit_code, null);
+});
+
+test('real Codex Bash: string command and output, exit unknown', () => {
+  const real = fixture('real-bash');
+  const input = only('PostToolUse', { ...real, tool_input: { command: 'npm test' }, tool_response: '# pass 3\n' });
+  assert.deepEqual(input.tool_response, { stdout: '# pass 3\n', stderr: '', exit: null });
+  const r = testRun(input);
+  assert.deepEqual([r.command, r.result_line, r.exit_code], ['npm test', '# pass 3', null]);
+  assert.equal(only('PostToolUse', real).tool_input.command, real.tool_input.command);
+});
+
+test('real Codex apply_patch: paths from tool_input.command', () => {
+  const input = only('PostToolUse', fixture('real-apply-patch'));
+  assert.equal(input.tool_name, 'Write');
+  assert.deepEqual(input.tool_input.file_paths, ['/w/notes.txt']);
+});
+
+test('real Codex token_usage: input excludes cached, cache writes counted', () => {
+  const u = fixture('real-post-model-request');
+  assert.deepEqual(addModelUsage({}, u).codexUsage['gpt-6.1-sol'], { input_tokens: 15378 - 12288, output_tokens: 242, cache_read_tokens: 12288, cache_write_tokens: 0 });
+  const w = addModelUsage({}, { ...u, token_usage: { ...u.token_usage, input_tokens: 5, cache_write_input_tokens: 7 } }).codexUsage['gpt-6.1-sol'];
+  assert.deepEqual([w.input_tokens, w.cache_write_tokens], [0, 7]);
+});
+
+test('Remind maps to itself with the tool normalised', () => {
+  const [r] = codexEvents('Remind', { ...fixture('real-bash'), prompt: 'p' });
+  assert.equal(r.event, 'Remind');
+  assert.equal(r.input.tool_name, 'Bash');
+  assert.equal(r.input.prompt, undefined);
 });
 
 test('apply_patch paths are parsed from add, update and move lines', () => {
@@ -141,7 +172,7 @@ function usageSetup(harness = 'codex') {
   const usage = () => events().filter((e) => e.type === 'usage' && e.input_tokens !== undefined);
   return { data, fire, model, events, usage, spawned };
 }
-const U = { input_tokens: 10, output_tokens: 5, reasoning_output_tokens: 2, cached_input_tokens: 100 };
+const U = { input_tokens: 110, output_tokens: 5, reasoning_output_tokens: 2, cached_input_tokens: 100 };
 const shape = (events) => events.map(({ type, kind, phase }) => [type, kind ?? phase ?? null]);
 
 test('sums PostModelRequest usage per model', async () => {
@@ -257,4 +288,14 @@ test('SessionEnd sends usage left over after the last Stop', async () => {
   const kinds = readOutbox(data).filter((e) => e.kind === 'finish' || e.event?.input_tokens === 4).map((e) => e.kind);
   assert.deepEqual(kinds, ['event', 'finish']);
   assert.deepEqual(loadRun(data, 's').codexUsage, {});
+});
+
+test('the detached flush keeps the codex harness', () => {
+  const argv = (harness) => {
+    let a;
+    spawnFlush({ data: '/d', env: {}, harness, spawn: (_, args) => ((a = args), { on() { return this; }, unref() {} }) });
+    return a.slice(1);
+  };
+  assert.deepEqual(parseArgs(argv('codex')), { event: 'flush', harness: 'codex' });
+  assert.deepEqual(argv('claude'), ['flush', '--data', '/d']);
 });

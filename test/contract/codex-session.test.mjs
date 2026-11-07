@@ -21,7 +21,7 @@ test('a Codex session produces the same run events as its Claude equivalent', as
   assert.deepEqual(shared(codex), shared(claude));
   const ended = (r) => r.log.some((x) => x.method === 'PATCH' && x.path.startsWith('/v1/agent-runs/'));
   assert.ok(ended(await run('session', 'codex')) && ended(await run('claude-equivalent', 'claude')));
-  for (const t of ['commit', 'plan', 'waiting:permission', 'resumed']) assert.ok(codex.some((k) => k.startsWith(t)), t);
+  for (const t of ['commit', 'test_run', 'plan', 'waiting:permission', 'resumed']) assert.ok(codex.some((k) => k.startsWith(t)), t);
 });
 
 test('a Codex session sends usage per model and an idle waiting after its turn', async () => {
@@ -30,5 +30,6 @@ test('a Codex session sends usage per model and an idle waiting after its turn',
   const usage = events.filter((e) => e.type === 'usage' && e.input_tokens !== undefined);
   assert.deepEqual(usage.map((e) => [e.model, e.input_tokens, e.output_tokens]).sort(), [['gpt-5-codex', 10, 5], ['gpt-5-mini', 20, 5]]);
   assert.ok(events.some((e) => e.type === 'waiting' && e.kind === 'idle'));
+  assert.deepEqual(events.filter((e) => e.type === 'test_run').map((e) => [e.result_line, e.exit_code]), [['# pass 3', null]]);
   assert.deepEqual(outputs, []);
 });
