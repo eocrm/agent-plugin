@@ -534,16 +534,26 @@ test('a merge made after a recent resume reminds; one older than the resume does
   assert.equal((await fire(...merge(r.cwd, 'git merge now')))?.additionalContext, MERGED);
 });
 
-test('a merge in another worktree than the run\'s does not remind', async () => {
+test('a merge in an unrelated repository does not remind', async () => {
   const { fire, data, sid } = setup();
   const [mine, other] = [repo(), repo()];
-  saveRun(data, sid, { worktreeKey: worktreeOf(mine.cwd).key });
+  saveRun(data, sid, { worktreeKey: worktreeOf(mine.cwd).key, cwd: mine.cwd });
   feature(other, 'feat');
   gitMerge(other, 'feat');
   assert.equal(await fire(...merge(other.cwd)), null);
-  feature(mine, 'feat');
-  gitMerge(mine, 'feat');
-  assert.equal((await fire(...merge(mine.cwd)))?.additionalContext, MERGED);
+});
+
+test('a merge from the main checkout of the run\'s own worktree reminds', async () => {
+  const { fire, data, sid } = setup();
+  const r = repo();
+  const wt = join(r.cwd, '.worktrees', 'feat');
+  r.g('worktree', 'add', '-q', wt, '-b', 'feat');
+  writeFileSync(join(wt, 'f.txt'), 'f');
+  execFileSync('git', ['add', 'f.txt'], { cwd: wt, stdio: 'ignore' });
+  execFileSync('git', [...ID, 'commit', '-q', '-m', 'f'], { cwd: wt, stdio: 'ignore' });
+  saveRun(data, sid, { worktreeKey: worktreeOf(wt).key, cwd: wt });
+  gitMerge(r, 'feat');
+  assert.equal((await fire(...merge(r.cwd, `cd ${r.cwd} && git merge feat`)))?.additionalContext, MERGED);
 });
 
 test('under Codex a shell git merge with a string response does not remind', async () => {
