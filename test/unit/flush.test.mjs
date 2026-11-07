@@ -185,6 +185,14 @@ test('a task_unfinished message keeps its key and status', async (t) => {
   assert.deepEqual(loadRun(data, SID).inbox, [{ id: 'u1', kind: 'task_unfinished', audience: 'agent', text: 'eocrm: u1', data: { key: 'EO-1', status: 'In progress' } }]);
 });
 
+test('a task_unfinished message with no data, null data or no status is kept without a status', async (t) => {
+  const ms = [msg('u1', { kind: 'task_unfinished', audience: 'agent' }), msg('u2', { kind: 'task_unfinished', audience: 'agent', data: null }), msg('u3', { kind: 'task_unfinished', audience: 'agent', data: { key: 'EO-1' } }), msg('u4', { kind: 'task_unfinished', audience: 'agent', data: { key: 'EO-1', status: 7 } })];
+  const { data, go } = setup(t, [{ status: 200, body: { messages: ms } }]);
+  await beat(data, go);
+  assert.deepEqual(loadRun(data, SID).inbox.map((m) => m.data), [{ key: '', status: '' }, { key: '', status: '' }, { key: 'EO-1', status: '' }, { key: 'EO-1', status: '' }]);
+  assert.equal(readOutbox(data).length, 0);
+});
+
 test('a task_unfinished status over 40 characters is kept empty, not cut', async (t) => {
   const m = msg('u1', { kind: 'task_unfinished', audience: 'agent', data: { key: 'EO-1', status: 'a'.repeat(41) } });
   const { data, go } = setup(t, [{ status: 200, body: { messages: [m] } }]);

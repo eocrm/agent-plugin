@@ -968,3 +968,55 @@ test('a hook from a subdirectory of the same worktree remembers its cwd', async 
   await handle('PostToolUse', { ...input(s, sub), tool_name: 'Read', tool_input: {} }, ctx);
   assert.deepEqual([loadRun(data, s).cwd, loadRun(data, s).generation], [sub, 0]);
 });
+
+test('a link from another repo keeps the run there when the same call\'s hook comes from mine', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const s = sid();
+  await handle('SessionStart', input(s, a), ctx);
+  await linkWorktree(ctx, b, 'EO-8', s);
+  await handle('PostToolUse', { ...input(s, a), tool_name: 'Bash', tool_input: { command: 'cd ../b && eocrm link EO-8' } }, ctx);
+  const run = loadRun(data, s);
+  assert.deepEqual([run.workspace, run.start.task, run.generation], ['globex', 'EO-8', 1]);
+});
+
+test('a finish in flight while the run moves ends the old generation, not the new one', async () => {
+  const data = signedIn();
+  const [a, b] = [repo('main'), repo('main')];
+  useWorkspace({ data, cwd: b, workspace: 'globex' });
+  const ctx = ctxFor(data);
+  const s = sid();
+  await ensureRun(ctx, input(s, a));
+  saveRun(data, s, { runId: 'r1' });
+  writeOutbox(data, []);
+  await handle('SessionEnd', input(s, a), ctx);
+  let moved = false;
+  const ok = { status: 200, body: {} };
+  const clientFor = (r) => ({
+    updateRun: async (id, body) => {
+      if (body.state === 'finished' && !moved) {
+        moved = true;
+        await handle('UserPromptSubmit', input(s, b), ctx);
+      }
+      return ok;
+    },
+    startRun: async () => ({ status: 201, body: { id: `r-${r.workspace}` } }),
+    recordEvents: async () => ok, heartbeat: async () => ok,
+  });
+  await flush({ data, clientFor });
+  const run = loadRun(data, s);
+  assert.deepEqual([run.workspace, run.ended, run.runId], ['globex', false, 'r-globex']);
+  assert.equal(loadRun(data, `${s}--w0`).ended, true);
+});
+
+test('a hook from outside any tracked workspace remembers its cwd', async () => {
+  const data = tmp('data');
+  const [a, b] = [repo('main'), tmp('plain')];
+  const ctx = ctxFor(data);
+  const s = sid();
+  saveRun(data, s, { startedAt: 1, workspace: 'acme', region: 'eu', worktreeKey: worktreeOf(a).key, cwd: a, lastHeartbeatAt: 1e12 });
+  await handle('PostToolUse', { ...input(s, b), tool_name: 'Read', tool_input: {} }, ctx);
+  assert.deepEqual([loadRun(data, s).cwd, loadRun(data, s).workspace], [b, 'acme']);
+});

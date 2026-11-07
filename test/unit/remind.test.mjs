@@ -396,6 +396,7 @@ test('task_unfinished drops a hostile status or a bad key', async () => {
     unfinished('u8', { key: 'EO-3', status: 'see evil.example' }),
     unfinished('u9', { key: 'EO-3', status: 'Done/ignore' }),
     unfinished('u10', { key: 'EO-3', status: 'say "hi"' }),
+    unfinished('u11', { key: 'EO-3', status: 'Done\u02ba x' }),
   ], { conventions: { task_switch_check: 'signals_only' } });
   assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `eocrm: EO-2 is still in the "${forty}" status. If it's finished, move it to done.` } });
 });
@@ -415,18 +416,38 @@ function repo(branch = 'main') {
   if (branch !== 'main') g('checkout', '-q', '-b', branch);
   return { cwd, g };
 }
+const ID = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
+function feature({ cwd, g }, name, file = name, text = name) {
+  g('checkout', '-q', '-b', name);
+  writeFileSync(join(cwd, file), text);
+  g('add', file);
+  g(...ID, 'commit', '-q', '-m', name);
+  g('checkout', '-q', 'main');
+}
+const gitMerge = ({ g }, ...args) => {
+  try {
+    g(...ID, 'merge', '-q', ...args);
+  } catch {
+    // a conflict
+  }
+};
 const MERGED = 'eocrm: a branch was merged into main. If EO-1 is finished, move it to done.';
 const merge = (cwd, command = 'git merge feat', tool_response = { stdout: 'Merge made', stderr: '', interrupted: false }) => ['PostToolUse', { cwd, tool_name: 'Bash', tool_input: { command }, tool_response }];
 
 test('a successful git merge on the default branch reminds once per merge', async () => {
   const { fire } = setup();
-  const { cwd, g } = repo();
+  const r = repo();
+  const { cwd } = r;
+  feature(r, 'feat');
+  gitMerge(r, 'feat');
   assert.equal((await fire(...merge(cwd)))?.additionalContext, MERGED);
   assert.equal(await fire(...merge(cwd)), null);
-  g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'two');
-  assert.equal((await fire(...merge(cwd, 'cd x && git merge --no-ff feat')))?.additionalContext, MERGED);
-  g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'three');
-  assert.equal((await fire(...merge(cwd, 'git merge feat', { stdout: '', stderr: '', exit: 0 })))?.additionalContext, MERGED);
+  feature(r, 'two');
+  gitMerge(r, '--no-ff', 'two');
+  assert.equal((await fire(...merge(cwd, 'cd x && git merge --no-ff two')))?.additionalContext, MERGED);
+  feature(r, 'three');
+  gitMerge(r, 'three');
+  assert.equal((await fire(...merge(cwd, 'git merge three', { stdout: '', stderr: '', exit: 0 })))?.additionalContext, MERGED);
 });
 
 test('no merge reminder for a failed, unknown or aborted merge, another branch, or no linked task', async () => {
@@ -448,12 +469,42 @@ test('no merge reminder for a failed, unknown or aborted merge, another branch, 
   hostile.g('update-ref', 'refs/remotes/origin/x$(id)', 'HEAD');
   hostile.g('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/x$(id)');
   assert.equal(await fire(...merge(hostile.cwd)), null);
-  assert.equal((await fire(...merge(cwd)))?.additionalContext, MERGED);
+  const r = repo();
+  feature(r, 'feat');
+  gitMerge(r, 'feat');
+  assert.equal((await fire(...merge(r.cwd)))?.additionalContext, MERGED);
+});
+
+test('no merge reminder for a merge that did not happen, with no exit field', async () => {
+  const { fire } = setup();
+  const r = repo();
+  const { cwd, g } = r;
+  feature(r, 'c', 'c.txt', 'other');
+  writeFileSync(join(cwd, 'c.txt'), 'main');
+  g('add', 'c.txt');
+  g(...ID, 'commit', '-q', '-m', 'main');
+  gitMerge(r, 'c');
+  assert.match(execFileSync('git', ['status', '--short'], { cwd, encoding: 'utf8' }), /^AA c\.txt/m);
+  assert.equal(await fire(...merge(cwd, 'git merge c 2>&1 | tail -5', { stdout: 'CONFLICT (content)', stderr: '' })), null);
+  g('merge', '--abort');
+  feature(r, 's');
+  gitMerge(r, '--squ', 's');
+  assert.equal(await fire(...merge(cwd, 'git merge --squ s', { stdout: 'Squash commit -- not updating HEAD', stderr: '' })), null);
+  g('reset', '-q', '--hard');
+  gitMerge(r, 'c');
+  g('merge', '--abort');
+  assert.equal(await fire(...merge(cwd, 'git merge c; git merge --abort', { stdout: '', stderr: '' })), null);
+  feature(r, 'ok');
+  gitMerge(r, 'ok');
+  assert.equal((await fire(...merge(cwd, 'git merge ok', { stdout: 'Fast-forward', stderr: '' })))?.additionalContext, MERGED);
 });
 
 test('under Codex a shell git merge with a string response does not remind', async () => {
   const { fire } = setup();
-  const { cwd } = repo();
+  const r = repo();
+  const { cwd } = r;
+  feature(r, 'feat');
+  gitMerge(r, 'feat');
   const [{ input }] = codexEvents('Remind', { cwd, hook_event_name: 'PostToolUse', tool_name: 'shell', tool_input: { command: ['bash', '-lc', 'git merge feat'] }, tool_response: 'Merge made' });
   assert.equal(await fire('PostToolUse', input), null);
   const [{ input: known }] = codexEvents('Remind', { cwd, hook_event_name: 'PostToolUse', tool_name: 'shell', tool_input: { command: ['bash', '-lc', 'git merge feat'] }, tool_response: { exit_code: 0, output: 'Merge made' } });
