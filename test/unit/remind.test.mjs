@@ -67,9 +67,10 @@ test('tasks_create reminds; move_stage on the linked key does not', async () => 
   assert.equal(await fire(...tool('update', { key: 'EO-1' })), null);
   assert.equal((await fire(...tool('create', { title: 't' })))?.additionalContext, linkedLine('EO-1'));
   assert.equal(await fire(...tool('create', { title: 'u' })), null);
-  assert.equal((await fire(...tool('update', { id: 'EO-7' })))?.additionalContext, linkedLine('EO-1'));
-  assert.equal(await fire(...tool('move_stage', { id: 'EO-7' })), null);
-  assert.equal((await fire(...tool('move_stage', { id: 'EO-8' })))?.additionalContext, linkedLine('EO-1'));
+  assert.equal(await fire(...tool('update', { id: 'EO-7' })), null);
+  assert.equal(await fire(...tool('update', { id: 'EO-9' })), null);
+  assert.equal((await fire(...tool('move_stage', { id: 'EO-7' })))?.additionalContext, linkedLine('EO-1'));
+  assert.equal(await fire(...tool('move_stage', { id: 'EO-8' })), null);
   const unlinked = setup({ task: null });
   assert.equal(await unlinked.fire(...tool('create')), null);
 });
@@ -108,8 +109,8 @@ test('a ULID or lower-case key of the linked task does not remind', async () => 
   const { fire } = setup();
   assert.equal(await fire(...tool('update', { id: '01J9ZQ4X7W8V6T5S4R3Q2P1N0M' })), null);
   assert.equal(await fire(...tool('move_stage', { key: 'eo-1' })), null);
-  assert.equal((await fire(...tool('update', { id: 'eo-7' })))?.additionalContext, linkedLine('EO-1'));
-  assert.equal(await fire(...tool('update', { id: 'EO-7' })), null);
+  assert.equal((await fire(...tool('move_stage', { id: 'eo-7' })))?.additionalContext, linkedLine('EO-1'));
+  assert.equal(await fire(...tool('move_stage', { id: 'EO-7' })), null);
 });
 
 test('a non-string id does not remind', async () => {

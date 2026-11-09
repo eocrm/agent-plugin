@@ -70,7 +70,7 @@ test('hooks.json declares exactly the planned hooks', () => {
     ['PreToolUse', 'PreToolUse', 'Agent|Task', true, null],
     ['PostToolUse', 'PostToolUse', 'Bash|Write|Edit|MultiEdit|TodoWrite|TaskCreate|TaskUpdate|Agent|Task', true, null],
     ['PostToolUse', 'Resume', '*', true, null],
-    ['PostToolUse', 'Remind', 'Bash|mcp__.*eocrm.*__tasks_(create|update|move_stage)', false, 5],
+    ['PostToolUse', 'Remind', 'Bash|mcp__.*eocrm.*__tasks_(create|move_stage)', false, 5],
     ['PostToolUseFailure', 'PostToolUseFailure', 'Bash', true, null],
     ['Notification', 'Notification', 'permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input', true, null],
     ['Stop', 'Stop', null, false, 30],
