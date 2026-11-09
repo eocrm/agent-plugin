@@ -92,7 +92,7 @@
         ]
       },
       {
-        "matcher": "Bash|mcp__.*eocrm.*__tasks_(create|update|move_stage)",
+        "matcher": "Bash|mcp__.*eocrm.*__tasks_(create|move_stage)",
         "hooks": [
           {
             "type": "command",
