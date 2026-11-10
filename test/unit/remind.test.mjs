@@ -277,7 +277,7 @@ test('outdated prints once per session', async () => {
   const outdated = { status: 426, body: { code: 'plugin_outdated', minimum: '9.0.0', latest: '9.1.0' } };
   const go = flushing(data, sid, [outdated, outdated]);
   await go();
-  const line = `eocrm: plugin ${VERSION} is below the minimum 9.0.0, so tracking is paused. Run /plugin marketplace update eocrm.`;
+  const line = `eocrm: plugin ${VERSION} is below the minimum 9.0.0, so tracking is paused. Run /plugin marketplace update eocrm (Codex: codex plugin marketplace upgrade eocrm).`;
   assert.deepEqual(await raw('UserPromptSubmit'), { systemMessage: line });
   saveRun(data, sid, { outdated: null });
   await go();
@@ -292,7 +292,7 @@ test('module_disabled and signed-out map to notices once', async () => {
   const out = { status: 401, body: { message: 'Unauthenticated.' } };
   const go = flushing(data, sid, [off, off, { status: 403, body: { code: 'forbidden' } }, out, out]);
   for (let i = 0; i < 5; i++) await go();
-  assert.deepEqual(await raw('UserPromptSubmit'), { systemMessage: 'eocrm: Agent work is off for this workspace.\neocrm: you\'re signed out of eocrm; run /eocrm:login.' });
+  assert.deepEqual(await raw('UserPromptSubmit'), { systemMessage: 'eocrm: Agent work is off for this workspace.\neocrm: you\'re signed out of eocrm; run /eocrm:login (Codex: the login skill).' });
   for (let i = 0; i < 2; i++) await go();
   assert.equal(await raw('UserPromptSubmit'), null);
 });
@@ -363,13 +363,14 @@ test('comment bodies are cut to 2000 characters before cleaning, and deep nestin
   assert.equal((await raw('UserPromptSubmit')).hookSpecificOutput.additionalContext, framed(''));
 });
 
-test('under Codex, member messages stay unacked in the inbox; agent comments still reach the model', async () => {
-  const { data, sid, ctx, raw, stop } = inboxed([note('m1'), note('a1', 'agent')], { conventions: { task_switch_check: 'signals_only' } });
+test('under Codex, member messages print as systemMessage and are acked, at Stop and at a prompt', async () => {
+  const { data, sid, ctx, raw, stop } = inboxed([note('m1')], { conventions: { task_switch_check: 'signals_only' } });
   ctx.harness = 'codex';
-  assert.deepEqual(await stop(), null);
-  assert.deepEqual(await raw('UserPromptSubmit'), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: framed('a1') } });
-  assert.deepEqual(loadRun(data, sid).inbox.map((m) => m.id), ['m1']);
-  assert.deepEqual(loadRun(data, sid).ackPending ?? [], ['a1']);
+  assert.deepEqual(await stop(), { systemMessage: 'eocrm: m1' });
+  saveRun(data, sid, { inbox: [note('m2'), note('a1', 'agent')] });
+  assert.deepEqual(await raw('UserPromptSubmit'), { systemMessage: 'eocrm: m2', hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: framed('a1') } });
+  assert.deepEqual(loadRun(data, sid).inbox, []);
+  assert.deepEqual(loadRun(data, sid).ackPending, ['m1', 'm2', 'a1']);
 });
 
 const unfinished = (id, data) => ({ id, kind: 'task_unfinished', audience: 'agent', text: `server text ${id}`, data });

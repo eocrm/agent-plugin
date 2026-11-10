@@ -15,7 +15,7 @@ import { writeJsonAtomic } from '../../lib/state.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 
-const SIGNED_OUT = { stdout: JSON.stringify({ systemMessage: 'eocrm: you\'re signed out of eocrm; run /eocrm:login.' }) };
+const SIGNED_OUT = { stdout: JSON.stringify({ systemMessage: 'eocrm: you\'re signed out of eocrm; run /eocrm:login (Codex: the login skill).' }) };
 
 const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe' });

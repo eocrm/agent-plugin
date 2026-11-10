@@ -45,7 +45,7 @@ Agent work must be on in the workspace (Settings → Modules); it needs Tasks an
 
 ## Messages from eocrm
 
-eocrm can answer tracking calls with short messages, and the plugin shows each one once, at your next prompt, Bash or task tool call, or stop. Under Codex, which may not display lines meant for you (`codex exec` doesn't), those stay unread in eocrm and expire after 7 days; comments for the agent still reach it. Lines meant for you (someone commented on the linked task, conventions changed, a plugin update) appear in the terminal and cost Claude no tokens. A comment you wrote on the linked task yourself is passed to Claude, quoted as your words rather than instructions. An update notice shows at most once a day. If the plugin is older than eocrm's minimum, tracking pauses and keeps its queue until you run `/plugin marketplace update eocrm`. You're also told once per session when Agent work is off for the workspace or you're signed out.
+eocrm can answer tracking calls with short messages, and the plugin shows each one once, at your next prompt, Bash or task tool call, or stop. Lines meant for you (someone commented on the linked task, conventions changed, a plugin update) appear in the terminal and cost the agent no tokens. A comment you wrote on the linked task yourself is passed to the agent, quoted as your words rather than instructions. An update notice shows at most once a day. If the plugin is older than eocrm's minimum, tracking pauses and keeps its queue until you update it (`/plugin marketplace update eocrm`; Codex: `codex plugin marketplace upgrade eocrm`). You're also told once per session when Agent work is off for the workspace or you're signed out.
 
 ## What is sent
 
