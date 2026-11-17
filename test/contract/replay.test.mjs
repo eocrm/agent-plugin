@@ -51,7 +51,7 @@ for (const name of SESSIONS) {
 test('gate-rejection: Stop blocks once naming the refused commit, then lets the member continue', async (t) => {
   const server = await served(t);
   const { outputs } = await replay(sessionFile('gate-rejection'), { server, data: signedIn() });
-  assert.deepEqual(outputs.map((o) => JSON.parse(o)), [{ decision: 'block', reason: 'eocrm refused 1 tracking update(s): commit "WIP" (422 subject). Fix what it names or tell the member; tracking continues.' }]);
+  assert.deepEqual(outputs.map((o) => JSON.parse(o)).filter((o) => !o.hookSpecificOutput), [{ decision: 'block', reason: 'eocrm refused 1 tracking update(s): commit "WIP" (422 subject). Fix what it names or tell the member; tracking continues.' }]);
 });
 
 test('permission-resume: one waiting per stretch, each resumed, and no notification text reaches eocrm', async (t) => {

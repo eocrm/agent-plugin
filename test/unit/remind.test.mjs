@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { remind, linkedLine, promptLine } from '../../lib/remind.mjs';
-import { handle, LINK_ASK } from '../../lib/run.mjs';
+import { handle, LINK_ASK, TEST_HINT } from '../../lib/run.mjs';
 import { loadRun, saveRun, withLock, worktreeOf } from '../../lib/state.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { stopGate } from '../../lib/gate.mjs';
@@ -190,12 +190,12 @@ test('linked resume adds the linked line', async () => {
   await main({ argv: ['link', 'AB-3', '--data', data], cwd: dir, env: {}, out: () => {}, err: () => {} });
   const ctx = { data, env: { EOCRM_ENDPOINTS: UNREACHABLE }, now: () => 1_000_000, spawnFlush: () => {}, reconcile: async () => ({}) };
   const context = async (source) => JSON.parse((await handle('SessionStart', { session_id: `ss-${source}`, cwd: dir, source }, ctx)).stdout ?? 'null')?.hookSpecificOutput?.additionalContext;
-  for (const source of ['startup', 'resume', 'clear']) assert.equal(await context(source), linkedLine('AB-3'));
-  for (const source of ['compact', 'fork']) assert.equal(await context(source), undefined);
+  for (const source of ['startup', 'resume', 'clear']) assert.equal(await context(source), `${linkedLine('AB-3')}\n${TEST_HINT}`);
+  for (const source of ['compact', 'fork']) assert.equal(await context(source), TEST_HINT);
   const unlinked = tmp('repo');
   execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: unlinked });
   const ask = await handle('SessionStart', { session_id: 'ss-unlinked', cwd: unlinked, source: 'startup' }, ctx);
-  assert.equal(JSON.parse(ask.stdout).hookSpecificOutput.additionalContext, LINK_ASK);
+  assert.equal(JSON.parse(ask.stdout).hookSpecificOutput.additionalContext, `${LINK_ASK}\n${TEST_HINT}`);
 });
 
 const note = (id, audience = 'member', kind = 'task_comment') => ({ id, kind, audience, text: `eocrm: ${id}` });

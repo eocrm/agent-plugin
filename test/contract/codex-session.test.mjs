@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { replay, startReplayServer, signedIn } from '../support/replay.mjs';
+import { TEST_HINT } from '../../lib/run.mjs';
 
 const file = (n) => new URL(`../replay/codex/${n}.jsonl`, import.meta.url).pathname;
 const kinds = (log) => log.flatMap((r) => r.body?.events ?? []).map((e) => `${e.type}${e.kind ? `:${e.kind}` : ''}${e.phase ? `:${e.phase}` : ''}`);
@@ -31,5 +32,5 @@ test('a Codex session sends usage per model and an idle waiting after its turn',
   assert.deepEqual(usage.map((e) => [e.model, e.input_tokens, e.output_tokens]).sort(), [['gpt-5-codex', 10, 5], ['gpt-5-mini', 20, 5]]);
   assert.ok(events.some((e) => e.type === 'waiting' && e.kind === 'idle'));
   assert.deepEqual(events.filter((e) => e.type === 'test_run').map((e) => [e.result_line, e.exit_code]), [['# pass 3', null]]);
-  assert.deepEqual(outputs, []);
+  assert.deepEqual(outputs.map((o) => JSON.parse(o).hookSpecificOutput.additionalContext), [TEST_HINT]);
 });

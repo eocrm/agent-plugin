@@ -22,7 +22,8 @@
           "id": "model-AFkSvubuRUPOxEBLWgK5vL-0-0",
           "type": "usage",
           "occurred_at": "<time>",
-          "model": "claude-opus-5-5"
+          "model": "claude-opus-5-5",
+          "task_key": null
         }
       ]
     }
@@ -36,7 +37,8 @@
           "id": "turn:0Xjnfec0y8JOELUlCcnXnX",
           "type": "turn",
           "phase": "started",
-          "occurred_at": "<time>"
+          "occurred_at": "<time>",
+          "task_key": null
         }
       ]
     }
@@ -54,7 +56,8 @@
           "id": "turn:2w5iGg_9HqXS3TdU-VMiIb",
           "type": "turn",
           "phase": "ended",
-          "occurred_at": "<time>"
+          "occurred_at": "<time>",
+          "task_key": null
         }
       ]
     }
@@ -68,7 +71,8 @@
           "id": "turn:ibc3z9wI5ZoHG-LTGtgeX4",
           "type": "turn",
           "phase": "started",
-          "occurred_at": "<time>"
+          "occurred_at": "<time>",
+          "task_key": null
         }
       ]
     }
@@ -90,7 +94,8 @@
           "type": "ruling",
           "occurred_at": "<time>",
           "what": "Keep the README short",
-          "why": "Details live in docs/"
+          "why": "Details live in docs/",
+          "task_key": "AB-7"
         }
       ]
     }
@@ -104,7 +109,8 @@
           "id": "turn:WAY8-kBSpkbo7oyyFk01-X",
           "type": "turn",
           "phase": "ended",
-          "occurred_at": "<time>"
+          "occurred_at": "<time>",
+          "task_key": "AB-7"
         }
       ]
     }
