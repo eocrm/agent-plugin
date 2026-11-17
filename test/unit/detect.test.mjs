@@ -130,6 +130,9 @@ test('sddStep: started before, finished after, only with a ledger', () => {
   assert.equal(sddStep({ ...agent('PreToolUse'), tool_input: {} }, true), null);
   const bg = { ...agent('PostToolUse'), tool_input: { description: 'bg', run_in_background: true } };
   assert.equal(sddStep(bg, true), null);
+  const launched = { ...agent('PostToolUse'), tool_response: { isAsync: true, status: 'async_launched', agentId: 'a1' } };
+  assert.equal(sddStep(launched, true), null);
+  for (const tool_response of [{ isAsync: true }, { status: 'async_launched' }]) assert.equal(sddStep({ ...launched, tool_response }, true), null);
   assert.deepEqual(sddStep({ ...bg, hook_event_name: 'PreToolUse' }, true), { phase: 'started', label: 'bg' });
 });
 
@@ -335,6 +338,16 @@ test('Agent dispatch queues started and finished steps only while a ledger exist
   await fire('SubagentStop', { agent_id: 'a2', agent_transcript_path: join(subs, 'agent-a2.jsonl'), agent_type: 'general-purpose' });
   await fire('SubagentStop', { agent_id: 'a1', agent_transcript_path: '', agent_type: 'general-purpose' });
   assert.deepEqual(events(data, s, 'step').map((e) => [e.phase, e.label, e.id]), [['finished', 'bg', eventId('step', 'toolu_8finished')]]);
+  writeOutbox(data, []);
+  writeFileSync(join(subs, 'agent-a3.meta.json'), '{not json');
+  for (const agent_id of ['a3', 'a4']) assert.deepEqual(await fire('SubagentStop', { agent_id, agent_transcript_path: '' }), {});
+  assert.deepEqual(events(data, s, 'step'), []);
+  const before = loadRun(data, s);
+  const other = branchRepo();
+  await fire('SubagentStop', { agent_id: 'a1', agent_transcript_path: '', cwd: other });
+  const after = loadRun(data, s);
+  assert.deepEqual([after.cwd, after.worktreeKey, after.generation, after.clientRunId], [before.cwd, before.worktreeKey, before.generation, before.clientRunId]);
+  assert.deepEqual(events(data, s, 'step').map((e) => e.phase), ['finished']);
 });
 
 test('an ended run queues no detected events', async () => {
