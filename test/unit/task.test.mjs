@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { taskFor } from '../../lib/detect.mjs';
+import { cdTarget, taskFor } from '../../lib/detect.mjs';
 import { handle } from '../../lib/run.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
 import { saveWorktree, saveRun, worktreeOf } from '../../lib/state.mjs';
@@ -20,6 +20,8 @@ function repo(branch, name) {
   return dir;
 }
 
+// A path as git-bash spells it: C:\x\y → /c/x/y.
+const sh = (p) => (process.platform === 'win32' ? p.replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`).replaceAll('\\', '/') : p);
 const link = (data, dir, taskKey) => saveWorktree(data, worktreeOf(dir).key, { root: dir, taskKey });
 const bash = (cwd, command, extra = {}) => ({ session_id: 's', cwd, tool_name: 'Bash', tool_input: { command }, ...extra });
 const resolveTask = (data, input, run = {}, ctx = {}) => taskFor({ data, ...ctx }, input)(run);
@@ -36,14 +38,23 @@ test('level 1: a leading cd picks the worktree the command ran in', () => {
   const here = repo('main');
   const there = repo('main');
   link(data, there, 'EO-7');
-  assert.equal(resolveTask(data, bash(here, `cd ${there} && make test`)), 'EO-7');
-  assert.equal(resolveTask(data, bash(here, `cd "${there}"; make test`)), 'EO-7');
+  assert.equal(resolveTask(data, bash(here, `cd ${sh(there)} && make test`)), 'EO-7');
+  assert.equal(resolveTask(data, bash(here, `cd "${sh(there)}"; make test`)), 'EO-7');
 });
 
 test('level 2: cd /x/eocrm-b1-eo92 && make test → the branch key EO-92', () => {
   const data = tmp('data');
   const wt = repo('b1/EO-92-fix', 'eocrm-b1-eo92');
-  assert.equal(resolveTask(data, bash(tmp('elsewhere'), `cd ${wt} && make test`), { start: { task: 'EO-3' } }), 'EO-92');
+  assert.equal(resolveTask(data, bash(tmp('elsewhere'), `cd ${sh(wt)} && make test`), { start: { task: 'EO-3' } }), 'EO-92');
+});
+
+test('a git-bash drive path resolves against a Windows cwd; POSIX paths are untouched', () => {
+  assert.equal(cdTarget('D:\\a\\w', '/c/Users/x/eocrm-EO-9'), 'C:\\Users\\x\\eocrm-EO-9');
+  assert.equal(cdTarget('D:\\a\\w', '/c'), 'C:\\');
+  assert.equal(cdTarget('D:\\a\\w', 'C:/Users/x'), 'C:\\Users\\x');
+  assert.equal(cdTarget('D:\\a\\w', 'sub'), 'D:\\a\\w\\sub');
+  assert.equal(cdTarget('D:\\a\\w', '/cx/y'), 'D:\\cx\\y');
+  assert.equal(cdTarget('/w', '/c/x'), '/c/x');
 });
 
 test('level 2: a relative cd resolves against the hook cwd', () => {
@@ -130,7 +141,7 @@ test('a commit after a leading cd is read from that worktree', async () => {
   git(sub, 'commit', '-q', '--allow-empty', '-m', 'in sub');
   const ctx = { data, env: { EOCRM_ENDPOINTS: JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' }) }, now: () => 1e12, spawnFlush: () => {}, reconcile: async () => ({ enqueued: 0 }) };
   saveRun(data, 'sess', { startedAt: 1, generation: 0, clientRunId: 'c', runId: 'r1', lastHeartbeatAt: 1e12, workspace: 'acme', region: 'eu', worktreeKey: worktreeOf(main).key, cwd: main });
-  await handle('PostToolUse', { session_id: 'sess', cwd: main, transcript_path: join(main, 'none.jsonl'), hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: `cd ${sub} && git commit -m x` }, tool_response: { stdout: '', stderr: '' } }, ctx);
+  await handle('PostToolUse', { session_id: 'sess', cwd: main, transcript_path: join(main, 'none.jsonl'), hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: `cd ${sh(sub)} && git commit -m x` }, tool_response: { stdout: '', stderr: '' } }, ctx);
   const commits = readOutbox(data).filter((e) => e.event?.type === 'commit').map((e) => [e.event.subject, e.event.task_key]);
   assert.deepEqual(commits, [['in sub', 'EO-92']]);
 });
@@ -151,7 +162,7 @@ test('every queued event carries task_key; a subagent call in another worktree g
   const fire = (event, extra) => handle(event, { session_id: 'sess', cwd: main, transcript_path: join(main, 'none.jsonl'), hook_event_name: event, ...extra }, ctx);
   await fire('UserPromptSubmit', {});
   await fire('PostToolUse', { cwd: sub, tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'make test', description: 'test: unit' }, tool_response: { stdout: '3 passed', stderr: '' } });
-  await fire('PostToolUse', { tool_name: 'Bash', tool_use_id: 't2', tool_input: { command: `cd ${sub} && make test`, description: 'test: unit' }, tool_response: { stdout: '3 passed', stderr: '' } });
+  await fire('PostToolUse', { tool_name: 'Bash', tool_use_id: 't2', tool_input: { command: `cd ${sh(sub)} && make test`, description: 'test: unit' }, tool_response: { stdout: '3 passed', stderr: '' } });
   const events = readOutbox(data).filter((e) => e.kind === 'event').map((e) => e.event);
   assert.deepEqual(events.map((e) => [e.type, e.task_key]), [['turn', 'EO-3'], ['test_run', 'EO-92'], ['test_run', 'EO-92']]);
 });
