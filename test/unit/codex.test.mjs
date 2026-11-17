@@ -115,6 +115,11 @@ test('apply_patch paths are parsed from add, update and move lines', () => {
   assert.deepEqual(input.tool_input.file_paths, ['/w/src/new.js', '/w/src/old.js', '/w/src/moved.js']);
 });
 
+test('apply_patch paths follow the cwd shape, not the host', () => {
+  const input = only('PostToolUse', { ...fixture('apply-patch'), cwd: 'C:\\w' });
+  assert.deepEqual(input.tool_input.file_paths, ['C:\\w\\src\\new.js', 'C:\\w\\src\\old.js', 'C:\\w\\src\\moved.js']);
+});
+
 test('update_plan becomes todos', () => {
   const input = only('PostToolUse', fixture('update-plan'));
   assert.equal(input.tool_name, 'TodoWrite');
