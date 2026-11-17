@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "eocrm",
-    "version": "0.24.0"
+    "version": "0.29.4"
   },
   "paths": {
     "/v1/agent-runs": {
@@ -333,7 +333,7 @@
       },
       "get": {
         "operationId": "agentRun.events.index",
-        "description": "Oldest first, 100 per page, without `waiting`, `resumed` and `turn` signals. Pass `next_cursor` back as `cursor`.",
+        "description": "Oldest first, 100 per page, without `waiting`, `resumed` and `turn` signals; `task` narrows to one task's events. Pass `next_cursor` back as `cursor`.",
         "summary": "List a run's events",
         "tags": [
           "AgentRun"
@@ -353,6 +353,14 @@
             "schema": {
               "type": "string",
               "maxLength": 200
+            }
+          },
+          {
+            "name": "task",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
             }
           }
         ],
@@ -770,7 +778,7 @@
         "properties": {
           "events": {
             "type": "array",
-            "description": "At most 100. Fields depend on `type`: step {phase, label, plan_key}, commit {sha, repo, subject},\ntest_run {command, result_line, exit_code}, review_finding {severity, summary, outcome},\nruling {what, why, cost_if_wrong}, pull_request {action, url, repo, number},\nusage {model, input_tokens, output_tokens, cost_usd, wall_ms}, plan {source, path, items: [{key, text}], at most 200},\nwaiting {kind: permission|question|idle}, resumed {}, turn {phase: started|ended}. Overlong text is truncated, secrets redacted, other keys dropped.",
+            "description": "At most 100. Fields depend on `type`: step {phase, label, plan_key, restored}, commit {sha, repo, subject},\ntest_run {command, label, result_line, exit_code}, review_finding {severity, summary, outcome},\nruling {what, why, cost_if_wrong}, pull_request {action, url, repo, number},\nusage {model, input_tokens, output_tokens, cost_usd, wall_ms}, plan {source, path, items: [{key, text}], at most 200, restored},\nwaiting {kind: permission|question|idle}, resumed {}, turn {phase: started|ended}. Overlong text is truncated, secrets redacted, other keys dropped.",
             "items": {
               "type": "object",
               "properties": {
@@ -799,6 +807,14 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "task_key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The task this event belongs to, when not the run's; an unknown key files it under no task.",
+                  "maxLength": 64
+                },
                 "label": {
                   "type": [
                     "string",
@@ -824,6 +840,12 @@
                     "null"
                   ],
                   "pattern": "^[A-Za-z0-9._:-]{1,100}$"
+                },
+                "restored": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
                 },
                 "repo": {
                   "type": [
@@ -1583,13 +1605,20 @@
           "payload": {
             "type": "object",
             "additionalProperties": {}
+          },
+          "task_key": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "id",
           "type",
           "occurred_at",
-          "payload"
+          "payload",
+          "task_key"
         ],
         "title": "AgentRunEventData"
       },
@@ -1635,7 +1664,7 @@
         }
       },
       "AuthorizationException": {
-        "description": "An authorization gate on this route refused the request. Which gates run varies by route: one resolving a tenant refuses a tenant that is not active; one additionally requiring membership refuses a caller holding no grant in it; a control-plane route refuses a caller holding no operator grant for this region; a saved-views route refuses a caller with no authorized scope for the request host — no grant in the tenant it resolves to, or no control-plane grant where it resolves to none; a route requiring a permission refuses a caller whose roles do not include it; and every one of them refuses an impersonation session reaching a tenant other than the one it was authorized for. An operation carrying none of those gates is still refused by the pin: an impersonation session that resolves no tenant may reach the impersonated member's own self-service surface and nothing else; and a route closed to impersonation refuses every impersonation session. A route accepting API keys refuses a key request with `module_disabled` while the workspace has API keys turned off.",
+        "description": "An authorization gate on this route refused the request. Which gates run varies by route: one resolving a tenant refuses a tenant that is not active; one additionally requiring membership refuses a caller holding no grant in it; a control-plane route refuses a caller holding no operator grant for this region; a saved-views route refuses a caller with no authorized scope for the request host — no grant in the tenant it resolves to, or no control-plane grant where it resolves to none; a route requiring a permission refuses a caller whose roles do not include it; a workspace requiring two-factor authentication refuses a member with no confirmed factor once their grace period has ended, with `code` `two_factor_required` and a `setup_url`; and every one of them refuses an impersonation session reaching a tenant other than the one it was authorized for. An operation carrying none of those gates is still refused by the pin: an impersonation session that resolves no tenant may reach the impersonated member's own self-service surface and nothing else; and a route closed to impersonation refuses every impersonation session. A route accepting API keys refuses a key request with `module_disabled` while the workspace has API keys turned off.",
         "content": {
           "application/json": {
             "schema": {

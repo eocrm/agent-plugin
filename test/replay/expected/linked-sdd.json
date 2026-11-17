@@ -22,7 +22,8 @@
           "id": "model-AFkSvubuRUPOxEBLWgK5vL-0-0",
           "type": "usage",
           "occurred_at": "<time>",
-          "model": "claude-opus-5-5"
+          "model": "claude-opus-5-5",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -47,7 +48,8 @@
               "key": "task-2",
               "text": "2. Wire widget"
             }
-          ]
+          ],
+          "task_key": "AB-12"
         }
       ]
     }
@@ -68,7 +70,8 @@
           "id": "turn:74aAWH1UNKhD4UtN6hO40-",
           "type": "turn",
           "phase": "started",
-          "occurred_at": "<time>"
+          "occurred_at": "<time>",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -83,7 +86,8 @@
           "type": "step",
           "occurred_at": "<time>",
           "phase": "started",
-          "label": "Implement Task 1"
+          "label": "Implement Task 1",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -99,7 +103,8 @@
           "occurred_at": "<time>",
           "sha": "ecb29c72e21fc0fc39646f31e6ba266c1db63275",
           "subject": "feat: add widget",
-          "repo": "o/r"
+          "repo": "o/r",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -114,7 +119,8 @@
           "type": "step",
           "occurred_at": "<time>",
           "phase": "finished",
-          "label": "Implement Task 1"
+          "label": "Implement Task 1",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -134,7 +140,8 @@
           "occurred_at": "<time>",
           "phase": "finished",
           "label": "1. Add widget",
-          "plan_key": "task-1"
+          "plan_key": "task-1",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -156,7 +163,8 @@
           "type": "step",
           "occurred_at": "<time>",
           "phase": "started",
-          "label": "Implement Task 2"
+          "label": "Implement Task 2",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -172,7 +180,8 @@
           "occurred_at": "<time>",
           "sha": "1f244ed69e207487cf75714a1a7e79a08b725335",
           "subject": "feat: wire widget",
-          "repo": "o/r"
+          "repo": "o/r",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -187,7 +196,8 @@
           "type": "step",
           "occurred_at": "<time>",
           "phase": "finished",
-          "label": "Implement Task 2"
+          "label": "Implement Task 2",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -203,14 +213,16 @@
           "occurred_at": "<time>",
           "phase": "finished",
           "label": "2. Wire widget",
-          "plan_key": "task-2"
+          "plan_key": "task-2",
+          "task_key": "AB-12"
         },
         {
           "id": "step:XQS_c-rZ6G7wyO3r3i-H0_",
           "type": "step",
           "occurred_at": "<time>",
           "phase": "finished",
-          "label": "Task 2 review round 1: rename helper"
+          "label": "Task 2 review round 1: rename helper",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -227,7 +239,8 @@
           "command": "make test",
           "label": "Backend tests",
           "result_line": "Tests:  42 passed (97 assertions)",
-          "exit_code": 0
+          "exit_code": 0,
+          "task_key": "AB-12"
         }
       ]
     }
@@ -244,7 +257,8 @@
           "action": "opened",
           "url": "https://github.com/o/r/pull/7",
           "number": 7,
-          "repo": "o/r"
+          "repo": "o/r",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -261,7 +275,8 @@
           "action": "merged",
           "url": "https://github.com/o/r/pull/7",
           "number": 7,
-          "repo": "o/r"
+          "repo": "o/r",
+          "task_key": "AB-12"
         }
       ]
     }
@@ -275,7 +290,8 @@
           "id": "turn:Ma4ib-teLO5ACtpl4Olr6e",
           "type": "turn",
           "phase": "ended",
-          "occurred_at": "<time>"
+          "occurred_at": "<time>",
+          "task_key": "AB-12"
         }
       ]
     }
