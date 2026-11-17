@@ -225,6 +225,7 @@
           "type": "test_run",
           "occurred_at": "<time>",
           "command": "make test",
+          "label": "Backend tests",
           "result_line": "Tests:  42 passed (97 assertions)",
           "exit_code": 0
         }

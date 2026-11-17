@@ -65,27 +65,44 @@ test('unwraps a shell with extra flags', () => {
   assert.equal(only('PostToolUse', shell(['bash', '--rcfile', 'x'])).tool_input.command, 'bash --rcfile x');
 });
 
+const MARK = ' # eocrm:test';
+const codexRun = (command, response) => testRun({ ...only('PostToolUse', shell(command, response)), hook_event_name: 'PostToolUse' });
+
+test('a trailing # eocrm:test marks a Codex run: marker stripped, label is the first command line', () => {
+  const r = codexRun(`npm test -- a\nnpm run lint${MARK}`, { output: 'running\n# pass 3\n# fail 1\n', exit_code: 1 });
+  assert.deepEqual(r, { command: 'npm test -- a\nnpm run lint', label: 'npm test -- a', result_line: '# fail 1', exit_code: 1 });
+  assert.equal(only('PostToolUse', shell(`npm test${MARK}\n`)).tool_input.command, 'npm test');
+  assert.equal(only('PostToolUse', shell(['bash', '-lc', `npm test${MARK}`])).tool_input.command, 'npm test');
+});
+
+test('Codex runs without the marker, or with it anywhere but the end, are not test runs', () => {
+  assert.equal(codexRun('npm test', '# pass 1'), null);
+  assert.equal(codexRun('make test-down', 'ok'), null);
+  assert.equal(codexRun('echo "# eocrm:test"; npm test', '# pass 1'), null);
+  assert.equal(codexRun('# eocrm:test\nnpm test', '# pass 1'), null);
+  assert.equal(only('PostToolUse', shell('echo hi # eocrm:testing')).tool_input.command, 'echo hi # eocrm:testing');
+});
+
 test('maps shell output to the detector shape', () => {
   const r = testRun({ ...only('PostToolUse', fixture('post-tool-use-shell')), hook_event_name: 'PostToolUse' });
-  assert.equal(r.command, 'npm test');
-  assert.equal(r.result_line, '# fail 1');
-  assert.equal(r.exit_code, 1);
-  const s = testRun({ ...only('PostToolUse', shell('npm test', { stdout: 'ok 1\n# pass 1', exitCode: 0 })), hook_event_name: 'PostToolUse' });
+  assert.equal(r, null);
+  const s = codexRun(`npm test${MARK}`, { stdout: 'ok 1\n# pass 1', exitCode: 0 });
   assert.deepEqual([s.result_line, s.exit_code], ['# pass 1', 0]);
   for (const field of ['aggregated_output', 'formatted_output']) {
-    assert.equal(testRun({ ...only('PostToolUse', shell('npm test', { [field]: '# pass 2', exit_code: 0 })), hook_event_name: 'PostToolUse' }).result_line, '# pass 2');
+    assert.equal(codexRun(`npm test${MARK}`, { [field]: '# pass 2', exit_code: 0 }).result_line, '# pass 2');
   }
-  const str = testRun({ ...only('PostToolUse', shell('npm test', 'tests 2 passed')), hook_event_name: 'PostToolUse' });
+  const str = codexRun(`npm test${MARK}`, 'tests 2 passed');
   assert.deepEqual([str.result_line, str.exit_code], ['tests 2 passed', null]);
-  assert.equal(testRun({ ...only('PostToolUse', shell('npm test', { output: '# pass 1' })), hook_event_name: 'PostToolUse' }).exit_code, null);
+  assert.equal(codexRun(`npm test${MARK}`, { output: '# pass 1' }).exit_code, null);
+  assert.equal(codexRun(`npm test${MARK}`, 'built\ndone').result_line, null);
 });
 
 test('real Codex Bash: string command and output, exit unknown', () => {
   const real = fixture('real-bash');
-  const input = only('PostToolUse', { ...real, tool_input: { command: 'npm test' }, tool_response: '# pass 3\n' });
+  const input = only('PostToolUse', { ...real, tool_input: { command: `npm test${MARK}` }, tool_response: '# pass 3\n' });
   assert.deepEqual(input.tool_response, { stdout: '# pass 3\n', stderr: '', exit: null });
   const r = testRun(input);
-  assert.deepEqual([r.command, r.result_line, r.exit_code], ['npm test', '# pass 3', null]);
+  assert.deepEqual([r.command, r.label, r.result_line, r.exit_code], ['npm test', 'npm test', '# pass 3', null]);
   assert.equal(only('PostToolUse', real).tool_input.command, real.tool_input.command);
 });
 
