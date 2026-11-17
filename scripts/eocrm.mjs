@@ -11,6 +11,7 @@ import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
 import { loadConventions } from '../lib/reconcile.mjs';
 import { enqueue } from '../lib/outbox.mjs';
 import { eventId } from '../lib/ids.mjs';
+import { taskFor } from '../lib/detect.mjs';
 import { worktreeOf, lastHookAt, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
 
 const OPTIONS = { data: { type: 'string' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' } };
@@ -137,7 +138,7 @@ const commands = {
       key = `${fields.severity}\0${fields.summary}\0${fields.outcome ?? ""}`;
     } else throw new Usage('usage: eocrm record ruling|finding');
     const run = liveRun(data, cwd, v.session);
-    const queued = await enqueue(data, { kind: 'event', sessionId: run.sessionId, event: { id: eventId(type, key), type, occurred_at: new Date().toISOString(), ...fields } });
+    const queued = await enqueue(data, { kind: 'event', sessionId: run.sessionId, event: { id: eventId(type, key), type, occurred_at: new Date().toISOString(), ...fields, task_key: taskFor({ data }, { cwd, session_id: run.sessionId })(run) } });
     if (!queued) throw Object.assign(new Error(`${kind} not recorded: the local queue is unavailable`), { exitCode: 1 });
     out(`recorded ${kind}`);
   },

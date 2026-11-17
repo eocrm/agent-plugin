@@ -137,9 +137,9 @@ export async function startFixtureServer({ responses = {}, messages = [] } = {})
       const run = runs.get(id);
       if (!run) return noRun;
       let accepted = 0;
-      for (const { id: eventId, type, occurred_at, ...payload } of body.events) {
+      for (const { id: eventId, type, occurred_at, task_key = null, ...payload } of body.events) {
         if (run.events.some((e) => e.id === eventId)) continue;
-        run.events.push({ id: eventId, type, occurred_at: occurred_at ?? now(), payload });
+        run.events.push({ id: eventId, type, occurred_at: occurred_at ?? now(), payload, task_key });
         accepted += 1;
       }
       return { status: 200, body: { accepted, duplicates: body.events.length - accepted, dropped: 0, ...(messages.length ? { messages: messages.splice(0) } : {}) } };

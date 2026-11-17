@@ -4,7 +4,7 @@ import { appendFileSync, mkdtempSync, realpathSync, utimesSync, writeFileSync } 
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { handle, runClient } from '../../lib/run.mjs';
+import { handle, runClient, TEST_HINT } from '../../lib/run.mjs';
 import { flush, fingerprint } from '../../lib/flush.mjs';
 import { loadRun } from '../../lib/state.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
@@ -36,7 +36,7 @@ async function setup(t, responses) {
 test('start, events, finish: exactly GET conventions, POST runs, POST events, PATCH finished', async (t) => {
   const { server, dir, transcript, ctx, calls, go } = await setup(t);
   const input = { session_id: 'sess-c1', cwd: dir, transcript_path: transcript };
-  assert.deepEqual(await handle('SessionStart', { ...input, source: 'startup' }, ctx), {});
+  assert.deepEqual(await handle('SessionStart', { ...input, source: 'startup' }, ctx), { stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: TEST_HINT } }) });
   await handle('SessionEnd', { ...input, reason: 'other' }, ctx);
   const result = await go();
   assert.deepEqual(result, { sent: 3, rejected: [], retryable: false, signedOut: false });

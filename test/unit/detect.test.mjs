@@ -19,54 +19,53 @@ const SECRET = 'ghp_FAKEfakeFAKEfakeFAKEfakeFAKEfake0000';
 const bash = (command, stdout = '', extra = {}) => ({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command }, tool_response: { stdout, stderr: '', interrupted: false, isImage: false }, tool_use_id: 'toolu_1', ...extra });
 const failed = (command, error) => ({ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command }, tool_use_id: 'toolu_2', error, is_interrupt: false });
 
-test('npm test: the last summary line, exit 0', () => {
+const marked = (command, stdout = '', description = 'test: Unit tests', extra = {}) => bash(command, stdout, { tool_input: { command, description }, ...extra });
+
+test('a test: description marks a run; label is the description without the prefix', () => {
   const out = ' RUN  v3\n\n ✓ a.test.js (3)\n\n Tests  3 passed (3)\n   Start at  10:00:00\n Duration  1.2s\n';
-  assert.deepEqual(testRun(bash('npm test', out)), { command: 'npm test', result_line: 'Tests  3 passed (3)', exit_code: 0 });
+  assert.deepEqual(testRun(marked('npm test', out, 'test:  Backend tests for EO-92 ')), { command: 'npm test', label: 'Backend tests for EO-92', result_line: 'Tests  3 passed (3)', exit_code: 0 });
+  assert.equal(testRun(marked('./check.sh', 'ok', 'test: x')).label, 'x');
+});
+
+test('unmarked commands are never test runs, whatever they run', () => {
+  for (const c of ['make test', 'make test-down', 'npm test', 'pytest']) {
+    assert.equal(testRun(bash(c, 'ok')), null, c);
+    assert.equal(testRun(marked(c, 'ok', 'Run the tests')), null, c);
+    assert.equal(testRun(marked(c, 'ok', 'run test: now')), null, c);
+    assert.equal(testRun(marked(c, 'ok', null)), null, c);
+    assert.equal(testRun(marked(c, 'ok', 'test:')), null, c);
+  }
 });
 
 test('a failure parses its exit code and reads output after the Exit code line', () => {
-  assert.deepEqual(testRun(failed('make test', 'Exit code 1\nFAIL x\n2 failed, 5 passed\n')), { command: 'make test', result_line: '2 failed, 5 passed', exit_code: 1 });
-  assert.deepEqual(testRun(failed('pytest', 'Exit code 2\n')), { command: 'pytest', result_line: '', exit_code: 2 });
-  assert.equal(testRun(failed('pytest', 'Command timed out after 2m')), null);
-  assert.equal(testRun({ ...failed('pytest', 'Exit code 1\n'), is_interrupt: true }), null);
+  const fail = (command, error) => ({ ...failed(command, error), tool_input: { command, description: 'test: t' } });
+  assert.deepEqual(testRun(fail('make test', 'Exit code 1\nFAIL x\n2 failed, 5 passed\n')), { command: 'make test', label: 't', result_line: '2 failed, 5 passed', exit_code: 1 });
+  assert.equal(testRun(fail('pytest', 'Exit code 2\n')).exit_code, 2);
+  assert.equal(testRun(fail('pytest', 'Command timed out after 2m')), null);
+  assert.equal(testRun({ ...fail('pytest', 'Exit code 1\n'), is_interrupt: true }), null);
 });
 
-test('no summary match falls back to the last non-empty line; ANSI colour and CRLF are stripped', () => {
-  assert.equal(testRun(bash('go test ./...', 'building\r\ndone\r\n\r\n')).result_line, 'done');
-  assert.equal(testRun(bash('npx vitest run', '\x1b[32m 4 passed\x1b[39m\nbye\n')).result_line, '4 passed');
-  assert.equal(testRun(bash('jest', '', { tool_response: { stdout: '', stderr: 'Tests: 1 failed\n' } })).result_line, 'Tests: 1 failed');
+test('result_line is the last summary-shaped line, null when none matches; ANSI colour and CRLF are stripped', () => {
+  assert.equal(testRun(marked('make test', 'building\r\ndone\r\n\r\n')).result_line, null);
+  assert.equal(testRun(marked('make test', '')).result_line, null);
+  assert.equal(testRun(marked('x', '\x1b[32m 4 passed\x1b[39m\nbye\n')).result_line, '4 passed');
+  assert.equal(testRun(marked('x', '', undefined, { tool_response: { stdout: '', stderr: 'Tests: 1 failed\n' } })).result_line, 'Tests: 1 failed');
 });
 
-test('the command matcher', () => {
-  for (const c of ['make test FILTER=x', 'make e2e', 'npm run test', 'pnpm test', 'yarn test', 'npx playwright test', 'vendor/bin/pest', 'cargo test', 'go test ./...', 'node --test test/unit', 'dotnet test', './gradlew test', 'git commit -m "fix" && make test']) {
-    assert.ok(testRun(bash(c, 'ok')), c);
-  }
-  for (const c of ['curl -u me:pw https://x', 'make testing', 'npm install', 'git commit -m "add tests"', 'echo latest']) assert.equal(testRun(bash(c, 'ok')), null, c);
+test('background, interrupted and non-Bash calls are not test runs', () => {
+  assert.equal(testRun(marked('npm test', 'ok', undefined, { tool_input: { command: 'npm test', description: 'test: t', run_in_background: true } })), null);
+  assert.equal(testRun(marked('npm test', 'ok', undefined, { tool_response: { stdout: 'ok', interrupted: true } })), null);
+  assert.equal(testRun({ ...marked('npm test', 'ok'), tool_name: 'Write' }), null);
 });
 
-test('test runs are matched by the command word of each segment, never inside quoted text', () => {
-  for (const c of ['CI=1 npm test', 'sudo -E make test', 'time pytest -q', 'env -i FOO=1 cargo test', './vendor/bin/pest', '"C:\\tools\\vitest.cmd" run', 'cd api && make test FILTER=X', 'make test | tail -5', '(go test ./...)']) {
-    assert.ok(testRun(bash(c, 'ok')), c);
-  }
-  for (const c of ['git commit -m "make test"', "echo 'npm test'", 'npm i -D vitest', 'cat jest.config.js', 'grep vitest package.json', 'git commit -m "fix" -m "run make test"']) {
-    assert.equal(testRun(bash(c, 'ok')), null, c);
-  }
+test('test command, label and result line are scrubbed and capped', () => {
+  const got = testRun(marked(`TOKEN=${SECRET} npm test ${'x'.repeat(600)}`, `1 passed ${SECRET}\n`, `test: ${SECRET} ${'z'.repeat(600)}`));
+  assert.doesNotMatch(JSON.stringify(got), /ghp_/);
+  assert.ok(got.command.length <= 500 && got.result_line.length <= 500 && got.label.length <= 500);
 });
 
 test('segments split on unquoted operators and keep quoted words whole', () => {
   assert.deepEqual(segments(`a "b; c" 'd|e' f\\ g && h;i|j\nk`), [['a', 'b; c', 'd|e', 'f g'], ['h'], ['i'], ['j'], ['k']]);
-});
-
-test('background, interrupted and non-Bash calls are not test runs', () => {
-  assert.equal(testRun(bash('npm test', 'ok', { tool_input: { command: 'npm test', run_in_background: true } })), null);
-  assert.equal(testRun(bash('npm test', 'ok', { tool_response: { stdout: 'ok', interrupted: true } })), null);
-  assert.equal(testRun({ ...bash('npm test', 'ok'), tool_name: 'Write' }), null);
-});
-
-test('test command and result line are scrubbed and capped', () => {
-  const got = testRun(bash(`TOKEN=${SECRET} npm test ${'x'.repeat(600)}`, `1 passed ${SECRET}\n`));
-  assert.doesNotMatch(JSON.stringify(got), /ghp_/);
-  assert.ok(got.command.length <= 500 && got.result_line.length <= 500);
 });
 
 test('isCommit', () => {
@@ -130,7 +129,11 @@ test('sddStep: started before, finished after, only with a ledger', () => {
   assert.equal(sddStep({ ...agent('PreToolUse'), tool_name: 'Bash' }, true), null);
   assert.equal(sddStep({ ...agent('PreToolUse'), tool_input: {} }, true), null);
   const bg = { ...agent('PostToolUse'), tool_input: { description: 'bg', run_in_background: true } };
-  assert.deepEqual(sddStep(bg, true), { phase: 'started', label: 'bg' });
+  assert.equal(sddStep(bg, true), null);
+  const launched = { ...agent('PostToolUse'), tool_response: { isAsync: true, status: 'async_launched', agentId: 'a1' } };
+  assert.equal(sddStep(launched, true), null);
+  for (const tool_response of [{ isAsync: true }, { status: 'async_launched' }]) assert.equal(sddStep({ ...launched, tool_response }, true), null);
+  assert.deepEqual(sddStep({ ...bg, hook_event_name: 'PreToolUse' }, true), { phase: 'started', label: 'bg' });
 });
 
 test('ledgerPresent looks for .superpowers/sdd/*/progress.md', () => {
@@ -175,7 +178,7 @@ test('a commit hook queues each new branch commit once', async () => {
   const { ctx, s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
   const spawned = ctx.spawned;
-  await fire('PostToolUse', bash('git commit -m "fix" && make test', '3 passed'));
+  await fire('PostToolUse', marked('git commit -m "fix" && make test', '3 passed'));
   const commits = events(data, s, 'commit');
   assert.deepEqual(commits.map((c) => [c.subject, c.repo]), [['one [redacted]', 'o/r'], ['two', 'o/r']]);
   assert.equal(commits[1].id, eventId('commit', git(dir, 'rev-parse', 'HEAD')));
@@ -186,6 +189,18 @@ test('a commit hook queues each new branch commit once', async () => {
   writeOutbox(data, []);
   await fire('PostToolUse', bash('git commit -m again', ''));
   assert.equal(events(data, s, 'commit').length, 0);
+});
+
+test('a cd into the directory the hook already reports still detects the commit', async () => {
+  const data = signedIn();
+  const dir = branchRepo();
+  const sub = join(dir, 'sub');
+  mkdirSync(sub);
+  const { s, fire } = session(data, sub);
+  await fire('SessionStart', { source: 'startup' });
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'one');
+  await fire('PostToolUse', bash('cd sub && git commit -m one', ''));
+  assert.deepEqual(events(data, s, 'commit').map((c) => c.subject), ['one']);
 });
 
 test('an amend is a new sha, so it is reported as a new commit', async () => {
@@ -207,7 +222,7 @@ test('a failed Bash call that committed still reports the commit and a failing t
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'one');
   const { s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
-  await fire('PostToolUseFailure', failed('git commit -m one && npm test', 'Exit code 1\n1 failed\n'));
+  await fire('PostToolUseFailure', { ...failed('git commit -m one && npm test', 'Exit code 1\n1 failed\n'), tool_input: { command: 'git commit -m one && npm test', description: 'test: t' } });
   assert.equal(events(data, s, 'commit').length, 1);
   assert.deepEqual(events(data, s, 'test_run').map((t) => [t.exit_code, t.result_line]), [[1, '1 failed']]);
 });
@@ -217,8 +232,8 @@ test('test-run ids are unique per tool use and per run generation', async () => 
   const dir = branchRepo();
   const { s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
-  await fire('PostToolUse', bash('npm test', '1 passed', { tool_use_id: 'a' }));
-  await fire('PostToolUse', bash('npm test', '1 passed', { tool_use_id: 'b' }));
+  await fire('PostToolUse', marked('npm test', '1 passed', undefined, { tool_use_id: 'a' }));
+  await fire('PostToolUse', marked('npm test', '1 passed', undefined, { tool_use_id: 'b' }));
   const ids = events(data, s, 'test_run').map((t) => t.id);
   assert.equal(new Set(ids).size, 2);
   const gen1 = eventId('test_run', `${loadRun(data, s).clientRunId}:a`);
@@ -227,7 +242,7 @@ test('test-run ids are unique per tool use and per run generation', async () => 
   writeOutbox(data, []);
   await fire('UserPromptSubmit');
   assert.equal(loadRun(data, s).generation, 1);
-  await fire('PostToolUse', bash('npm test', '1 passed', { tool_use_id: 'a' }));
+  await fire('PostToolUse', marked('npm test', '1 passed', undefined, { tool_use_id: 'a' }));
   assert.ok(!ids.includes(events(data, s, 'test_run').at(-1).id));
 });
 
@@ -275,7 +290,7 @@ test('hook git and gh work shares one 8 s budget, however many calls hang', asyn
       throw new Error('timed out');
     },
   };
-  await fire('PostToolUse', bash('git commit -m x && gh pr merge 9 -d && npm test', '1 passed'));
+  await fire('PostToolUse', marked('git commit -m x && gh pr merge 9 -d && npm test', '1 passed'));
   assert.ok(calls.length >= 2, JSON.stringify(calls));
   assert.ok(clock <= 8000, `${clock} ms over ${calls.length} calls`);
   assert.equal(events(data, s, 'test_run').length, 1);
@@ -324,8 +339,27 @@ test('Agent dispatch queues started and finished steps only while a ledger exist
   writeOutbox(data, []);
   const bg = { tool_name: 'Agent', tool_input: { description: 'bg', run_in_background: true }, tool_use_id: 'toolu_8' };
   await fire('PreToolUse', bg);
-  await fire('PostToolUse', { ...bg, tool_response: {} });
   assert.deepEqual(events(data, s, 'step').map((e) => e.phase), ['started']);
+  writeOutbox(data, []);
+  await fire('PostToolUse', { ...bg, tool_response: {} });
+  assert.deepEqual(events(data, s, 'step'), []);
+  const subs = join(dir, 'none', 'subagents');
+  mkdirSync(subs, { recursive: true });
+  writeFileSync(join(subs, 'agent-a1.meta.json'), JSON.stringify({ description: 'bg', toolUseId: 'toolu_8', requestShape: 'background' }));
+  writeFileSync(join(subs, 'agent-a2.meta.json'), JSON.stringify({ description: 'Task 2: outbox', toolUseId: 'toolu_7', requestShape: 'foreground' }));
+  await fire('SubagentStop', { agent_id: 'a2', agent_transcript_path: join(subs, 'agent-a2.jsonl'), agent_type: 'general-purpose' });
+  await fire('SubagentStop', { agent_id: 'a1', agent_transcript_path: '', agent_type: 'general-purpose' });
+  assert.deepEqual(events(data, s, 'step').map((e) => [e.phase, e.label, e.id]), [['finished', 'bg', eventId('step', 'toolu_8finished')]]);
+  writeOutbox(data, []);
+  writeFileSync(join(subs, 'agent-a3.meta.json'), '{not json');
+  for (const agent_id of ['a3', 'a4']) assert.deepEqual(await fire('SubagentStop', { agent_id, agent_transcript_path: '' }), {});
+  assert.deepEqual(events(data, s, 'step'), []);
+  const before = loadRun(data, s);
+  const other = branchRepo();
+  await fire('SubagentStop', { agent_id: 'a1', agent_transcript_path: '', cwd: other });
+  const after = loadRun(data, s);
+  assert.deepEqual([after.cwd, after.worktreeKey, after.generation, after.clientRunId], [before.cwd, before.worktreeKey, before.generation, before.clientRunId]);
+  assert.deepEqual(events(data, s, 'step').map((e) => e.phase), ['finished']);
 });
 
 test('an ended run queues no detected events', async () => {
@@ -336,6 +370,6 @@ test('an ended run queues no detected events', async () => {
   await fire('SessionStart', { source: 'startup' });
   writeOutbox(data, []);
   await fire('SessionEnd');
-  await fire('PostToolUse', bash('git commit -m one && npm test', '1 passed'));
+  await fire('PostToolUse', marked('git commit -m one && npm test', '1 passed'));
   assert.deepEqual(readOutbox(data).filter((e) => e.sessionId === s && e.kind === 'event'), []);
 });

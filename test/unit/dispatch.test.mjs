@@ -5,13 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { handle, linkContext, ensureRun, linkWorktree, LINK_ASK } from '../../lib/run.mjs';
+import { handle, linkContext, ensureRun, linkWorktree, LINK_ASK, TEST_HINT } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
 import { git as stateGit, loadRun, saveRun, loadWorktree, saveWorktree, worktreeOf } from '../../lib/state.mjs';
 import { repoSlug } from '../../lib/git.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 import { flush } from '../../lib/flush.mjs';
 import { committedLine, useWorkspace } from '../../lib/workspace.mjs';
+
+const context = (...lines) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: [...lines, TEST_HINT].join('\n') } });
 
 const DISPATCH = fileURLToPath(new URL('../../hooks/dispatch.mjs', import.meta.url));
 const UNREACHABLE = JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' });
@@ -74,6 +76,7 @@ test('hooks.json declares exactly the planned hooks', () => {
     ['PostToolUseFailure', 'PostToolUseFailure', 'Bash', true, null],
     ['Notification', 'Notification', 'permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input', true, null],
     ['Stop', 'Stop', null, false, 30],
+    ['SubagentStop', 'SubagentStop', null, true, null],
     ['SessionEnd', 'SessionEnd', null, false, null],
   ]);
 });
@@ -92,21 +95,21 @@ test('an unwritable --data exits 0 with empty stdout', () => {
   assert.deepEqual([r.status, r.stdout, r.stderr], [0, '', '']);
 });
 
-test('git missing from PATH exits 0 with empty stdout and starts without a branch', () => {
+test('git missing from PATH exits 0 with the SessionStart hint and starts without a branch', () => {
   const data = signedIn();
   const s = sid();
   const r = hook('SessionStart', JSON.stringify(input(s, repo('main'))), { data, env: { PATH: tmp('nogit') } });
-  assert.deepEqual([r.status, r.stdout, r.stderr], [0, '', '']);
+  assert.deepEqual([r.status, r.stdout, r.stderr], [0, context(), '']);
   assert.equal(loadRun(data, s).start.branch, undefined);
   assert.deepEqual(kinds(data, s), ['start']);
 });
 
-test('SessionStart on a keyed branch prints nothing and starts with branch, worktree and repo, no task', () => {
+test('SessionStart on a keyed branch prints the hint and starts with branch, worktree and repo, no task', () => {
   const data = signedIn();
   const s = sid();
   const dir = repo('feat/AB-12-x', 'https://user:ghp_FAKEfakeFAKEfakeFAKEfake00@github.com/o/r.git');
   const r = hook('SessionStart', JSON.stringify(input(s, dir, { source: 'startup' })), { data });
-  assert.deepEqual([r.status, r.stdout], [0, '']);
+  assert.deepEqual([r.status, r.stdout], [0, context()]);
   const { start, clientRunId, generation } = loadRun(data, s);
   assert.deepEqual(start, { branch: 'feat/AB-12-x', worktree: worktreeOf(dir).root.split(/[\\/]/).at(-1), repo: 'o/r' });
   assert.deepEqual([clientRunId, generation], [s, 0]);
@@ -116,7 +119,7 @@ test('SessionStart on main with no link asks once in hookSpecificOutput', () => 
   const data = signedIn();
   const r = hook('SessionStart', JSON.stringify(input(sid(), repo('main'))), { data });
   assert.equal(r.status, 0);
-  assert.deepEqual(JSON.parse(r.stdout), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: LINK_ASK } });
+  assert.deepEqual(JSON.parse(r.stdout), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `${LINK_ASK}\n${TEST_HINT}` } });
   assert.equal(LINK_ASK, 'eocrm: this session isn\'t linked to a task. Ask the member once which task key it is for (or "none"), then use the eocrm link-run skill.');
 });
 
@@ -135,8 +138,8 @@ test('a committed workspace that differs is raised once, as one line', async () 
   writeFileSync(join(dir, '.claude', 'eocrm.json'), JSON.stringify({ workspace: 'other', region: 'eu' }));
   const ctx = ctxFor(data);
   const first = await handle('SessionStart', input(sid(), dir), ctx);
-  assert.deepEqual(JSON.parse(first.stdout), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: committedLine({ workspace: 'other', region: 'eu' }) } });
-  assert.deepEqual(await handle('SessionStart', input(sid(), dir), ctx), {});
+  assert.deepEqual(JSON.parse(first.stdout), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `${committedLine({ workspace: 'other', region: 'eu' })}\n${TEST_HINT}` } });
+  assert.deepEqual(await handle('SessionStart', input(sid(), dir), ctx), { stdout: context() });
 });
 
 test('signed out: nothing queued and nothing printed', () => {
@@ -146,14 +149,14 @@ test('signed out: nothing queued and nothing printed', () => {
   assert.deepEqual(readOutbox(data), []);
 });
 
-test('after link none the next session prints nothing', async () => {
+test('after link none the next session prints the hint', async () => {
   const data = signedIn();
   const dir = repo('main');
   const out = [];
   assert.equal(await main({ argv: ['link', 'none', '--data', data], cwd: dir, env: {}, out: (l) => out.push(l), err: () => {} }), 0);
   assert.deepEqual(out, ['not linked to a task', 'Only the default for new sessions changed (no --session).']);
   const r = hook('SessionStart', JSON.stringify(input(sid(), dir)), { data });
-  assert.deepEqual([r.status, r.stdout], [0, '']);
+  assert.deepEqual([r.status, r.stdout], [0, context()]);
 });
 
 test('link KEY saves the answer and queues a task update for the live run only', async () => {
@@ -338,7 +341,7 @@ test('a linked worktree starts with its task', async () => {
   const dir = repo('main');
   await main({ argv: ['link', 'AB-3', '--data', data], cwd: dir, env: {}, out: () => {}, err: () => {} });
   const s = sid();
-  assert.deepEqual(await handle('SessionStart', input(s, dir), ctxFor(data)), {});
+  assert.deepEqual(await handle('SessionStart', input(s, dir), ctxFor(data)), { stdout: context() });
   assert.equal(loadRun(data, s).start.task, 'AB-3');
 });
 
@@ -616,7 +619,7 @@ test('SessionStart gives up on a held lock within its budget', () => {
   mkdirSync(join(data, '.lock'));
   const r = hook('SessionStart', JSON.stringify(input(sid(), repo('main'))), { data });
   assert.equal(r.status, 0);
-  assert.deepEqual(JSON.parse(r.stdout), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: LINK_ASK } });
+  assert.deepEqual(JSON.parse(r.stdout), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `${LINK_ASK}\n${TEST_HINT}` } });
   assert.ok(r.ms < 3000, `${r.ms} ms`);
 });
 
@@ -750,7 +753,7 @@ test('SessionStart keeps an 8 s overall deadline when the lock is held after ens
     mkdirSync(join(data, '.lock'));
   };
   const started = Date.now();
-  assert.deepEqual(await handle('SessionStart', input(sid(), dir, { source: 'startup' }), ctx), {});
+  assert.deepEqual(await handle('SessionStart', input(sid(), dir, { source: 'startup' }), ctx), { stdout: context() });
   const took = Date.now() - started;
   assert.ok(took < 8500, `took ${took} ms`);
 });

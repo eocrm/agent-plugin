@@ -311,6 +311,58 @@ test('a resumed, ended session starts a run that gets none of the earlier run\'s
   assert.deepEqual(readOutbox(data).filter((e) => e.sessionId === s && e.event?.type === 'commit'), []);
 });
 
+function resumable(opts) {
+  const t = setup(opts);
+  writeFileSync(join(t.data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  const hctx = { ...t.ctx, env: {}, spawnFlush: () => {} };
+  const s = `${t.sid}-h`;
+  const fire = (event, extra) => handle(event, { session_id: s, cwd: t.dir, hook_event_name: event, ...extra }, hctx);
+  const sent = () => readOutbox(t.data).filter((e) => e.sessionId === s && e.kind === 'event').map((e) => e.event);
+  const ack = () => saveRun(t.data, s, { acked: Object.fromEntries(sent().map((e) => [e.id, true])) });
+  const resume = async ({ acked = true } = {}) => {
+    if (acked) ack();
+    await fire('SessionEnd');
+    writeOutbox(t.data, []);
+    await fire('SessionStart', { source: 'resume' });
+  };
+  return { ...t, s, fire, sent, resume };
+}
+
+test('a resumed session does not re-send an unchanged plan, its ticks or its review rounds', async () => {
+  const { fire, sent, resume } = resumable();
+  await fire('SessionStart', { source: 'startup' });
+  assert.deepEqual(kinds(sent()).filter((k) => k !== 'commit'), ['plan', 'tick:task-1', 'tick:task-2', 'step:Task 3 review round 1: nit']);
+  assert.ok(sent().every((e) => e.restored === undefined));
+  await resume();
+  assert.deepEqual(kinds(sent()), []);
+});
+
+test('a resumed session re-sends a changed plan marked restored, without old review rounds', async () => {
+  const { dir, data, s, fire, sent, resume } = resumable();
+  await fire('SessionStart', { source: 'startup' });
+  writeFileSync(join(dir, '.superpowers/sdd/p/progress.md'), `# SDD ledger — plan: ${PLAN}\nTask 1: complete\nTask 2: complete\nTask 3: fix round 1/5 (nit)\nTask 3: complete\n`);
+  await resume();
+  assert.equal(loadRun(data, s).generation, 1);
+  assert.deepEqual(sent().map((e) => [kinds([e])[0], e.restored ?? false]), [['plan', true], ['tick:task-1', true], ['tick:task-2', true], ['tick:task-3', false]]);
+});
+
+test('a resumed session re-sends a plan and rounds the earlier run never got acked', async () => {
+  const { fire, sent, resume } = resumable();
+  await fire('SessionStart', { source: 'startup' });
+  await resume({ acked: false });
+  assert.deepEqual(kinds(sent()), ['plan', 'tick:task-1', 'tick:task-2', 'step:Task 3 review round 1: nit']);
+  assert.ok(sent().every((e) => e.restored === undefined));
+});
+
+test('a session resumed in another workspace sends its plan there', async () => {
+  const { data, fire, sent, resume } = resumable();
+  await fire('SessionStart', { source: 'startup' });
+  writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'beta', workspaces: { beta: 'standalone' } }));
+  await resume();
+  assert.deepEqual(kinds(sent()), ['plan', 'tick:task-1', 'tick:task-2', 'step:Task 3 review round 1: nit']);
+  assert.ok(sent().every((e) => e.restored === undefined));
+});
+
 test('a reconcile whose git budget ran out keeps the active plan path', async () => {
   const { data, sid, ctx } = setup({ ledger: null });
   saveRun(data, sid, { planPath: PLAN });
