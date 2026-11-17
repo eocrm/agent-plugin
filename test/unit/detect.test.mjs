@@ -191,6 +191,18 @@ test('a commit hook queues each new branch commit once', async () => {
   assert.equal(events(data, s, 'commit').length, 0);
 });
 
+test('a cd into the directory the hook already reports still detects the commit', async () => {
+  const data = signedIn();
+  const dir = branchRepo();
+  const sub = join(dir, 'sub');
+  mkdirSync(sub);
+  const { s, fire } = session(data, sub);
+  await fire('SessionStart', { source: 'startup' });
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'one');
+  await fire('PostToolUse', bash('cd sub && git commit -m one', ''));
+  assert.deepEqual(events(data, s, 'commit').map((c) => c.subject), ['one']);
+});
+
 test('an amend is a new sha, so it is reported as a new commit', async () => {
   const data = signedIn();
   const dir = branchRepo();

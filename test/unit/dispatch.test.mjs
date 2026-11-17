@@ -95,7 +95,7 @@ test('an unwritable --data exits 0 with empty stdout', () => {
   assert.deepEqual([r.status, r.stdout, r.stderr], [0, '', '']);
 });
 
-test('git missing from PATH exits 0 with empty stdout and starts without a branch', () => {
+test('git missing from PATH exits 0 with the SessionStart hint and starts without a branch', () => {
   const data = signedIn();
   const s = sid();
   const r = hook('SessionStart', JSON.stringify(input(s, repo('main'))), { data, env: { PATH: tmp('nogit') } });
@@ -104,7 +104,7 @@ test('git missing from PATH exits 0 with empty stdout and starts without a branc
   assert.deepEqual(kinds(data, s), ['start']);
 });
 
-test('SessionStart on a keyed branch prints nothing and starts with branch, worktree and repo, no task', () => {
+test('SessionStart on a keyed branch prints the hint and starts with branch, worktree and repo, no task', () => {
   const data = signedIn();
   const s = sid();
   const dir = repo('feat/AB-12-x', 'https://user:ghp_FAKEfakeFAKEfakeFAKEfake00@github.com/o/r.git');
@@ -149,7 +149,7 @@ test('signed out: nothing queued and nothing printed', () => {
   assert.deepEqual(readOutbox(data), []);
 });
 
-test('after link none the next session prints nothing', async () => {
+test('after link none the next session prints the hint', async () => {
   const data = signedIn();
   const dir = repo('main');
   const out = [];
