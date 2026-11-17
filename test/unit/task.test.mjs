@@ -69,7 +69,7 @@ test('a cd to a path that does not exist skips the worktree levels', () => {
   assert.equal(resolveTask(data, bash(here, 'cd /nonexistent/eocrm-EO-9 && make test'), { start: { task: 'EO-3' } }), 'EO-3');
 });
 
-test('git answers are cached per session: a second resolution for the same path runs no git', () => {
+test('the worktree is cached per session, the branch is not: no git on the second call, a git switch changes the key', () => {
   const data = tmp('data');
   const wt = repo('EO-92-fix');
   let calls = 0;
@@ -79,6 +79,60 @@ test('git answers are cached per session: a second resolution for the same path 
   const first = calls;
   assert.equal(resolveTask(data, bash(wt, 'make test'), {}, ctx), 'EO-92');
   assert.equal(calls, first);
+  git(wt, 'switch', '-q', '-c', 'EO-93-next');
+  assert.equal(resolveTask(data, bash(wt, 'make test'), {}, ctx), 'EO-93');
+  assert.equal(calls, first);
+  git(wt, 'switch', '-q', '--detach');
+  assert.equal(resolveTask(data, bash(wt, 'make test'), { start: { task: 'EO-3' } }, ctx), 'EO-3');
+});
+
+test('a failed git lookup is not cached', () => {
+  const data = tmp('data');
+  const wt = repo('EO-92-fix');
+  let fail = true;
+  const ctx = { git: { exec: (cmd, args, opts) => { if (fail) throw new Error('timeout'); return execFileSync(cmd, args, opts); } } };
+  assert.equal(resolveTask(data, bash(wt, 'make test'), {}, ctx), null);
+  fail = false;
+  assert.equal(resolveTask(data, bash(wt, 'make test'), {}, ctx), 'EO-92');
+});
+
+test('cd - and a bare cd leave the directory unknown: the worktree levels are skipped', () => {
+  const data = tmp('data');
+  const here = repo('EO-5-x');
+  link(data, here, 'EO-5');
+  for (const c of ['cd - && make test', 'cd && make test', 'cd; make test']) {
+    assert.equal(resolveTask(data, bash(here, c), { start: { task: 'EO-3' } }), 'EO-3', c);
+    assert.equal(resolveTask(data, bash(here, c)), null, c);
+  }
+});
+
+test('pruning a run removes its paths cache', async () => {
+  const { runsOf } = await import('../../lib/run.mjs');
+  const { utimesSync, existsSync } = await import('node:fs');
+  const data = tmp('data');
+  resolveTask(data, { ...bash(repo('EO-1-x'), 'true'), session_id: 'old' });
+  const paths = join(data, 'paths', 'old.json');
+  assert.ok(existsSync(paths));
+  saveRun(data, 'old', { startedAt: 1, ended: true, worktreeKey: 'k' });
+  const at = Date.now();
+  utimesSync(join(data, 'runs', 'old.json'), new Date(at - 8 * 86400e3), new Date(at - 8 * 86400e3));
+  runsOf(data, 'k', { sid: 'now', at, busy: new Set() });
+  assert.equal(existsSync(join(data, 'runs', 'old.json')), false);
+  assert.equal(existsSync(paths), false);
+});
+
+test('a commit after a leading cd is read from that worktree', async () => {
+  const data = tmp('data');
+  writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  const main = repo('main');
+  const sub = repo('main', 'eocrm-b1-eo92');
+  git(sub, 'switch', '-q', '-c', 'EO-92-fix');
+  git(sub, 'commit', '-q', '--allow-empty', '-m', 'in sub');
+  const ctx = { data, env: { EOCRM_ENDPOINTS: JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' }) }, now: () => 1e12, spawnFlush: () => {}, reconcile: async () => ({ enqueued: 0 }) };
+  saveRun(data, 'sess', { startedAt: 1, generation: 0, clientRunId: 'c', runId: 'r1', lastHeartbeatAt: 1e12, workspace: 'acme', region: 'eu', worktreeKey: worktreeOf(main).key, cwd: main });
+  await handle('PostToolUse', { session_id: 'sess', cwd: main, transcript_path: join(main, 'none.jsonl'), hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: `cd ${sub} && git commit -m x` }, tool_response: { stdout: '', stderr: '' } }, ctx);
+  const commits = readOutbox(data).filter((e) => e.event?.type === 'commit').map((e) => [e.event.subject, e.event.task_key]);
+  assert.deepEqual(commits, [['in sub', 'EO-92']]);
 });
 
 test('Codex workdir names the directory a shell call ran in', () => {
