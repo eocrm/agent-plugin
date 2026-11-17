@@ -1,9 +1,10 @@
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { replay, startReplayServer, signedIn } from '../support/replay.mjs';
 import { TEST_HINT } from '../../lib/run.mjs';
 
-const file = (n) => new URL(`../replay/codex/${n}.jsonl`, import.meta.url).pathname;
+const file = (n) => fileURLToPath(new URL(`../replay/codex/${n}.jsonl`, import.meta.url));
 const kinds = (log) => log.flatMap((r) => r.body?.events ?? []).map((e) => `${e.type}${e.kind ? `:${e.kind}` : ''}${e.phase ? `:${e.phase}` : ''}`);
 
 async function run(name, harness) {
