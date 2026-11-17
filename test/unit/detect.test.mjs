@@ -129,7 +129,8 @@ test('sddStep: started before, finished after, only with a ledger', () => {
   assert.equal(sddStep({ ...agent('PreToolUse'), tool_name: 'Bash' }, true), null);
   assert.equal(sddStep({ ...agent('PreToolUse'), tool_input: {} }, true), null);
   const bg = { ...agent('PostToolUse'), tool_input: { description: 'bg', run_in_background: true } };
-  assert.deepEqual(sddStep(bg, true), { phase: 'started', label: 'bg' });
+  assert.equal(sddStep(bg, true), null);
+  assert.deepEqual(sddStep({ ...bg, hook_event_name: 'PreToolUse' }, true), { phase: 'started', label: 'bg' });
 });
 
 test('ledgerPresent looks for .superpowers/sdd/*/progress.md', () => {
@@ -323,8 +324,17 @@ test('Agent dispatch queues started and finished steps only while a ledger exist
   writeOutbox(data, []);
   const bg = { tool_name: 'Agent', tool_input: { description: 'bg', run_in_background: true }, tool_use_id: 'toolu_8' };
   await fire('PreToolUse', bg);
-  await fire('PostToolUse', { ...bg, tool_response: {} });
   assert.deepEqual(events(data, s, 'step').map((e) => e.phase), ['started']);
+  writeOutbox(data, []);
+  await fire('PostToolUse', { ...bg, tool_response: {} });
+  assert.deepEqual(events(data, s, 'step'), []);
+  const subs = join(dir, 'none', 'subagents');
+  mkdirSync(subs, { recursive: true });
+  writeFileSync(join(subs, 'agent-a1.meta.json'), JSON.stringify({ description: 'bg', toolUseId: 'toolu_8', requestShape: 'background' }));
+  writeFileSync(join(subs, 'agent-a2.meta.json'), JSON.stringify({ description: 'Task 2: outbox', toolUseId: 'toolu_7', requestShape: 'foreground' }));
+  await fire('SubagentStop', { agent_id: 'a2', agent_transcript_path: join(subs, 'agent-a2.jsonl'), agent_type: 'general-purpose' });
+  await fire('SubagentStop', { agent_id: 'a1', agent_transcript_path: '', agent_type: 'general-purpose' });
+  assert.deepEqual(events(data, s, 'step').map((e) => [e.phase, e.label, e.id]), [['finished', 'bg', eventId('step', 'toolu_8finished')]]);
 });
 
 test('an ended run queues no detected events', async () => {

@@ -76,6 +76,7 @@ test('hooks.json declares exactly the planned hooks', () => {
     ['PostToolUseFailure', 'PostToolUseFailure', 'Bash', true, null],
     ['Notification', 'Notification', 'permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input', true, null],
     ['Stop', 'Stop', null, false, 30],
+    ['SubagentStop', 'SubagentStop', null, true, null],
     ['SessionEnd', 'SessionEnd', null, false, null],
   ]);
 });

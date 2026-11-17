@@ -311,6 +311,40 @@ test('a resumed, ended session starts a run that gets none of the earlier run\'s
   assert.deepEqual(readOutbox(data).filter((e) => e.sessionId === s && e.event?.type === 'commit'), []);
 });
 
+function resumable(opts) {
+  const t = setup(opts);
+  writeFileSync(join(t.data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  const hctx = { ...t.ctx, env: {}, spawnFlush: () => {} };
+  const s = `${t.sid}-h`;
+  const fire = (event, extra) => handle(event, { session_id: s, cwd: t.dir, hook_event_name: event, ...extra }, hctx);
+  const sent = () => readOutbox(t.data).filter((e) => e.sessionId === s && e.kind === 'event').map((e) => e.event);
+  const resume = async () => {
+    await fire('SessionEnd');
+    writeOutbox(t.data, []);
+    await fire('SessionStart', { source: 'resume' });
+  };
+  return { ...t, s, fire, sent, resume };
+}
+
+test('a resumed session does not re-send an unchanged plan, its ticks or its review rounds', async () => {
+  const { fire, sent, resume } = resumable();
+  await fire('SessionStart', { source: 'startup' });
+  assert.deepEqual(kinds(sent()).filter((k) => k !== 'commit'), ['plan', 'tick:task-1', 'tick:task-2', 'step:Task 3 review round 1: nit']);
+  assert.ok(sent().every((e) => e.restored === undefined));
+  await resume();
+  assert.deepEqual(kinds(sent()), []);
+});
+
+test('a resumed session re-sends a changed plan marked restored, without old review rounds', async () => {
+  const { dir, data, s, fire, sent, resume } = resumable();
+  await fire('SessionStart', { source: 'startup' });
+  writeFileSync(join(dir, '.superpowers/sdd/p/progress.md'), `# SDD ledger — plan: ${PLAN}\nTask 1: complete\nTask 2: complete\nTask 3: fix round 1/5 (nit)\nTask 3: complete\n`);
+  await resume();
+  assert.equal(loadRun(data, s).generation, 1);
+  assert.deepEqual(kinds(sent()), ['plan', 'tick:task-1', 'tick:task-2', 'tick:task-3']);
+  assert.ok(sent().every((e) => e.restored === true));
+});
+
 test('a reconcile whose git budget ran out keeps the active plan path', async () => {
   const { data, sid, ctx } = setup({ ledger: null });
   saveRun(data, sid, { planPath: PLAN });

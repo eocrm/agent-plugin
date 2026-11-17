@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { handle } from '../../lib/run.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
@@ -121,4 +122,26 @@ test('usage event ids differ after a shrink restart', async () => {
   const ids = events().filter((e) => e.type === 'usage' && e.cache_read_tokens !== undefined).map((e) => e.id);
   assert.equal(ids.length, 2);
   assert.notEqual(ids[0], ids[1]);
+});
+
+test('a turn sends one usage event per model and task, each subagent tagged by its own directory', async () => {
+  const { data, fire, events } = setup({ turns: 1, start: { task: 'AB-9' } });
+  const repo = (branch) => {
+    const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'eocrm-usage-repo-')));
+    execFileSync('git', ['init', '-q', '-b', branch], { cwd: dir });
+    return dir;
+  };
+  const one = repo('feat/AB-1-x');
+  const two = repo('feat/AB-2-y');
+  const subs = join(data, 'none', 'subagents');
+  mkdirSync(subs, { recursive: true });
+  const row = (id, model, cwd, n) => `${JSON.stringify({ type: 'assistant', ...(cwd ? { cwd } : {}), message: { id, model, usage: { input_tokens: n, output_tokens: 1 } } })}\n`;
+  writeFileSync(join(subs, 'agent-1.jsonl'), row('m1', 'a', one, 1));
+  writeFileSync(join(subs, 'agent-2.jsonl'), row('m2', 'a', one, 2));
+  writeFileSync(join(subs, 'agent-3.jsonl'), row('m3', 'a', two, 4) + row('m4', 'b', two, 8));
+  writeFileSync(join(subs, 'agent-4.jsonl'), row('m5', 'b', null, 16));
+  await fire('Stop');
+  const usage = events().filter((e) => e.type === 'usage' && e.input_tokens !== undefined);
+  assert.deepEqual(usage.map((e) => [e.model, e.task_key, e.input_tokens]).sort(), [['a', 'AB-1', 3], ['a', 'AB-2', 4], ['b', 'AB-2', 8], ['b', 'AB-9', 16]]);
+  assert.equal(new Set(usage.map((e) => e.id)).size, 4);
 });
