@@ -67,6 +67,12 @@ test('codex hooks call dispatch with --harness codex for every event', () => {
   assert.equal(hooks.PreToolUse[0].hooks[0].async, true);
 });
 
+test('every codex hook has its own eocrm label for /hooks', () => {
+  const labels = Object.values(json('hooks/codex.json').hooks).flatMap((groups) => groups.flatMap((g) => g.hooks.map((h) => h.statusMessage)));
+  assert.equal(labels.length, new Set(labels).size);
+  for (const label of labels) assert.match(label, /^eocrm: \S/);
+});
+
 test('claude hooks file is unchanged', () => {
   assert.deepEqual(json('hooks/hooks.json'), json('test/fixtures/claude-hooks.json'));
 });
