@@ -106,7 +106,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex Stop",
-            "statusMessage": "eocrm: record the turn end",
+            "statusMessage": "eocrm: turn-end check",
             "async": false
           }
         ]
