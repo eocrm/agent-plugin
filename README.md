@@ -25,7 +25,7 @@ codex plugin add eocrm@eocrm         # agent work
 codex plugin add eocrm-mcp@eocrm     # tools
 ```
 
-Then open `/hooks` in Codex and trust the eocrm hooks (Codex runs none until you do; `status` says so while no hook has run in the repo), and sign in with the `login` skill. Node 20+ must be on the PATH of the Codex desktop app too. Codex uses its own skill texts (`codex-skills/`), which find the plugin's data and session without Claude Code's variables.
+Then open `/hooks` in Codex and trust the eocrm hooks, listed under `eocrm: …` names (Codex runs none until you do, and asks again after an update changes them; `status` says so while no hook has run in the repo), and sign in with the `login` skill. Node 20+ must be on the PATH of the Codex desktop app too. Codex uses its own skill texts (`codex-skills/`), which find the plugin's data and session without Claude Code's variables.
 
 Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
 

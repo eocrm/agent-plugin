@@ -7,6 +7,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex SessionStart",
+            "statusMessage": "eocrm: start or resume the run",
             "async": false,
             "timeout": 10
           }
@@ -19,6 +20,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex UserPromptSubmit",
+            "statusMessage": "eocrm: record the prompt",
             "async": true
           }
         ]
@@ -28,6 +30,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex Remind",
+            "statusMessage": "eocrm: task-link reminder",
             "async": false,
             "timeout": 5
           }
@@ -41,6 +44,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex PreToolUse",
+            "statusMessage": "eocrm: record the tool call",
             "async": true
           }
         ]
@@ -53,6 +57,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex PostToolUse",
+            "statusMessage": "eocrm: record the tool result",
             "async": true
           }
         ]
@@ -63,6 +68,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex Remind",
+            "statusMessage": "eocrm: task-update reminder",
             "async": false,
             "timeout": 5
           }
@@ -75,6 +81,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex PermissionRequest",
+            "statusMessage": "eocrm: record the permission request",
             "async": true
           }
         ]
@@ -86,6 +93,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex PostModelRequest",
+            "statusMessage": "eocrm: record model usage",
             "async": false,
             "timeout": 5
           }
@@ -98,6 +106,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex Stop",
+            "statusMessage": "eocrm: record the turn end",
             "async": false
           }
         ]
@@ -109,6 +118,7 @@
           {
             "type": "command",
             "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex SessionEnd",
+            "statusMessage": "eocrm: end the run",
             "async": false,
             "timeout": 3
           }
