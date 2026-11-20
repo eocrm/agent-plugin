@@ -178,12 +178,18 @@ test('sync ends a commit-bounded run idle past IDLE_MS; an explicit run stays', 
   initRepo(data, dir);
   let now = 1_000_000;
   const ctx = ctxOf(data, { now: () => now });
-  await startRun(ctx, dir, 'aider');
-  await startRun(ctx, dir, 'roo', { explicit: true });
-  now += IDLE_MS + 1;
-  await sync(ctx, dir);
   const key = worktreeOf(dir).key;
-  assert.deepEqual([loadRun(data, sessionOf(key, 'aider')).ended, loadRun(data, sessionOf(key, 'roo')).ended], [true, false]);
+  await startRun(ctx, dir, 'aider');
+  now += IDLE_MS - 1;
+  await sync(ctx, dir);
+  assert.equal(loadRun(data, sessionOf(key, 'aider')).ended, false);
+  now += 2;
+  await sync(ctx, dir);
+  assert.equal(loadRun(data, sessionOf(key, 'aider')).ended, true);
+  await startRun(ctx, dir, 'roo', { explicit: true });
+  now += 10 * IDLE_MS;
+  await sync(ctx, dir);
+  assert.equal(loadRun(data, sessionOf(key, 'roo')).ended, false);
 });
 
 test('a live Claude Code session in the worktree keeps the CLI quiet until the session ends', async () => {
