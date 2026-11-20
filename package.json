@@ -4,9 +4,10 @@
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "eocrm": "scripts/eocrm.mjs"
+    "eocrm": "scripts/cli.mjs"
   },
   "files": [
+    "scripts/cli.mjs",
     "scripts/eocrm.mjs",
     "hooks/dispatch.mjs",
     "lib/",

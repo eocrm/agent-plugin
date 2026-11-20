@@ -1,11 +1,10 @@
-#!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dataDir, cliHarness, cliData, codexData, installData } from '../lib/paths.mjs';
 import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
-import { credentialStore, spawnWithStdin } from '../lib/credentials.mjs';
+import { storeFor, spawnWithStdin } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, pairing, plain } from '../lib/login.mjs';
 import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine } from '../lib/workspace.mjs';
 import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
@@ -60,6 +59,7 @@ const need = (v, name) => {
 
 const commands = {
   async login({ values, positionals: [workspace], env, cwd, out, data, store, open, harness }) {
+    if (values.device && harness !== 'cli') throw new Usage('--device is for the eocrm CLI (npx @eocrm/cli login --device)');
     const region = values.region ?? 'eu';
     const result = await login({ data, region, workspace, env, store, harness, device: values.device, print: out, openBrowser: (u) => open(u, { print: out }) });
     const lines = [`signed in to ${result.workspace} (${region})`];
@@ -225,6 +225,7 @@ export async function main({
   spawnFlush,
   gh = (args, stdin) => spawnWithStdin('gh', args, stdin, { timeoutMs: 30000 }),
   script = fileURLToPath(import.meta.url),
+  harness: forced,
 } = {}) {
   if (!(Number(String(version).split('.')[0]) >= 20)) {
     err('eocrm needs Node 20+ on PATH');
@@ -235,16 +236,19 @@ export async function main({
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
     if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout|smoke-seed --data <dir>');
-    const harness = cliHarness({ flag: values.harness, env, script });
+    const harness = forced ?? cliHarness({ flag: values.harness, env, script });
     if (harness === 'codex') values.session ||= env.CODEX_THREAD_ID;
     if (values.session && !/^[\w-]+$/.test(values.session)) throw new Usage('invalid --session');
     let data;
     try {
-      data = dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : harness === 'cli' ? cliData(env) : undefined });
+      // The CLI ignores plugin data env, so its sign-in never lands in a plugin's dir.
+      data = harness === 'cli'
+        ? dataDir({ argv: [], env: {}, data: values.data || cliData(env) })
+        : dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : undefined });
     } catch (e) {
       throw new Usage(e.message);
     }
-    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? credentialStore({ data, service: harness === 'cli' ? 'eocrm-cli' : undefined }), open, spawnFlush, gh });
+    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? storeFor(data, harness), open, spawnFlush, gh });
     return code ?? 0;
   } catch (e) {
     for (const line of e.lines ?? []) out(line);
