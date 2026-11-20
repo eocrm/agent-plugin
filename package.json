@@ -2,6 +2,10 @@
   "name": "@eocrm/cli",
   "version": "0.4.0",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eocrm/agent-plugin.git"
+  },
   "type": "module",
   "bin": {
     "eocrm": "scripts/cli.mjs"

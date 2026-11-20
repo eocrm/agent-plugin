@@ -98,7 +98,7 @@ This copies the new version and repoints the hooks; `status` warns when the hook
 
 ### Privacy
 
-The CLI sends the same metadata as the plugin (see "What is sent"): branch, repo, task key, plan items, commit sha and subject, PR links, run boundaries; never prompts, replies or file contents, scrubbed for secrets. OpenSpec import sends titles, the Why text and plan items; the repo is identified by a hash, never its remote URL.
+The CLI sends the same metadata as the plugin (see "What is sent"): branch, repo, task key, plan items, commit sha and subject, PR links, run boundaries; never prompts, replies or file contents, scrubbed for secrets. OpenSpec import sends titles, the Why text and plan items; OpenSpec import identifies the repo by a hash; run and PR events carry the repository's owner/name, never its remote URL.
 
 ## Pair with your tools connection
 

@@ -109,7 +109,7 @@ const commands = {
     if (values.device && harness !== 'cli') throw new Usage('--device is for the eocrm CLI (npx @eocrm/cli login --device)');
     const region = values.region ?? 'eu';
     const result = await login({ data, region, workspace, env, store, harness, device: values.device, sleep, print: out, openBrowser: (u) => open(u, { print: out }) });
-    const lines = [`signed in to ${result.workspace} (${region})`, who(loadAccount(data), result.workspace)];
+    const lines = [`${who(loadAccount(data), result.workspace)} (${region})`];
     if (result.storage === 'file') lines.push(`tokens stored in ${join(data, 'credentials.json')}: no keychain found`);
     lines.push(...pairingLines(result.pairing));
     const { pending } = resolveWorkspace({ data, cwd });
@@ -151,8 +151,8 @@ const commands = {
     if (harness === 'cli') await cliStatus({ cwd, out, data, env, store, harness, spawnFlush });
     if (!workspace) return;
     out(`workspace ${workspace} (${source})`);
-    if (tokens?.access_token && account.issuer) out(who(account, workspace));
     const known = account.workspaces?.[workspace];
+    if (tokens?.access_token && account.issuer && region === account.region && known) out(who(account, workspace));
     if (region !== account.region) out(`run ${cmd(harness, 'login')} --region ${region} ${workspace}`);
     else if (!known) out(`run ${cmd(harness, 'login')} ${workspace}`);
     else if (known === 'requested') for (const l of await recheck({ data, env, store, workspace, region, harness })) out(l);

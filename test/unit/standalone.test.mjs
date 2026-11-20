@@ -255,7 +255,7 @@ test('eocrm login --device signs the CLI in to the XDG data dir as eocrm CLI', a
   const code = await main({ argv: ['login', '--device', 'acme'], env, cwd: tmpdir(), out: (l) => out.push(l), err: (l) => err.push(l), harness: 'cli', store, openBrowser: () => assert.fail('no browser for --device') });
   assert.equal(code, 0, err.join('\n'));
   assert.ok(out.some((l) => l.includes('BCDFGHJK')), out.join('\n'));
-  assert.ok(out.includes('signed in to acme (eu)'), out.join('\n'));
+  assert.ok(out.some((l) => /^Signed in at \S+ — reporting to acme \(eu\)$/.test(l)), out.join('\n'));
   assert.ok(existsSync(join(data, 'account.json')));
   assert.equal(JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).workspace, 'acme');
   assert.ok(!calls.some((c) => c.key === 'POST /oauth/register'));
@@ -275,6 +275,6 @@ test('device login prints the signed-in host and workspace, and no token text', 
   const code = await main({ argv: ['login', '--device', '--data', data, 'acme'], harness: 'cli', cwd: data, env: {}, store: credentialStore({ data, platform: 'none' }), out: (l) => out.push(l), err: (l) => out.push(l), sleep: async () => {} });
   const text = out.join('\n');
   assert.equal(code, 0, text);
-  assert.match(text, /^Signed in at id\.eu\.eocrm\.io — reporting to acme$/m);
+  assert.match(text, /^Signed in at id\.eu\.eocrm\.io — reporting to acme \(eu\)$/m);
   for (const secret of ['secret-access', 'secret-refresh']) assert.ok(!text.includes(secret), secret);
 });
