@@ -1,9 +1,13 @@
-# eocrm plugins for Claude Code and Codex
+# eocrm for coding agents
 
-Two plugins in one catalogue, for Claude Code and for Codex:
+Track your coding agents' work in eocrm: runs, commits, plan steps and pull requests, against the task they belong to. Pick the setup that matches your tool:
 
-- **`eocrm-mcp`**: eocrm tools only. Claude can read and change tasks, contacts, deals, appointments and records in your workspaces through the eocrm MCP server. No hooks and no tracking.
-- **`eocrm`**: agent work. It reports Claude Code and Codex runs, plan steps, commits, test runs, PRs and review findings to your eocrm workspace. In Claude Code it installs `eocrm-mcp` too; in Codex, add `eocrm-mcp` yourself.
+- **Any agent (Cline, Roo Code, Cursor, opencode, Aider, …): the `@eocrm/cli` package.** It reports through git hooks, so it needs no model tokens and no editor plugin. `npx @eocrm/cli init` in your repo. See [Use with any agent (CLI)](#use-with-any-agent-cli).
+- **Claude Code or Codex: the plugins below**, installed from this repo's catalogue:
+  - **`eocrm-mcp`**: eocrm tools only. Claude can read and change tasks, contacts, deals, appointments and records in your workspaces through the eocrm MCP server. No hooks and no tracking.
+  - **`eocrm`**: agent work. It reports Claude Code and Codex runs, plan steps, commits, test runs, PRs and review findings to your eocrm workspace. In Claude Code it installs `eocrm-mcp` too; in Codex, add `eocrm-mcp` yourself.
+
+Teams that plan with [OpenSpec](https://github.com/Fission-AI/OpenSpec) get each change's `tasks.md` as a live eocrm checklist with either setup ([OpenSpec](#openspec)).
 
 ## Install (Claude Code)
 
