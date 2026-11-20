@@ -6,7 +6,7 @@ import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { storeFor, spawnWithStdin } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, pairing, plain } from '../lib/login.mjs';
-import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine, command as cmd, repoEntry, updateRepo } from '../lib/workspace.mjs';
+import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine, command as cmd, repoEntry, updateRepo, cloneEntry, updateClone } from '../lib/workspace.mjs';
 import { AGENTS } from '../lib/cli/attribute.mjs';
 import { hooksDir, hooksScope, install, installCopy, installed, launcherTarget, uninstall } from '../lib/cli/hooks.mjs';
 import { agentFor, endStale, liveRuns, pluginLive, queuePr, runHook, startRun, stopRuns, sync } from '../lib/cli/run.mjs';
@@ -63,7 +63,7 @@ const need = (v, name) => {
 };
 
 function missingHooks(data, cwd) {
-  const entry = repoEntry(data, cwd);
+  const entry = cloneEntry(data, cwd);
   if (!entry.initialized) return [];
   const have = installed(cwd);
   return (entry.hooks ?? []).filter((h) => !have.includes(h));
@@ -74,10 +74,10 @@ const warnMissing = (data, cwd, out) => {
   if (missing.length) out(`eocrm hooks missing from ${missing.join(', ')} (a hook manager rewrote them?): run eocrm init again`);
 };
 
-async function cliStatus({ cwd, out, data, env, store, harness }) {
+async function cliStatus({ cwd, out, data, env, store, harness, spawnFlush }) {
   const ctx = { data, env, store, harness, now: Date.now };
   const entry = repoEntry(data, cwd);
-  if (!entry.initialized) out('not set up in this repository: run eocrm init');
+  if (!cloneEntry(data, cwd).initialized) out('not set up in this repository: run eocrm init');
   else {
     const hooks = installed(cwd);
     out(hooks.length ? `hooks ${hooks.join(', ')}` : 'hooks not installed: run eocrm init');
@@ -89,7 +89,8 @@ async function cliStatus({ cwd, out, data, env, store, harness }) {
     out(LIVE);
     return;
   }
-  for (const r of await endStale(ctx, cwd)) out(`run ${r.agent} ended: idle or on another branch`);
+  const ended = await endStale(ctx, cwd);
+  for (const r of ended) out(`run ${r.agent} ended: idle or on another branch`);
   const runs = liveRuns(data, cwd);
   for (const r of runs) {
     out(`run ${r.agent}${r.explicit ? ' (started)' : ''}${r.start?.task ? ` on ${r.start.task}` : ''}`);
@@ -97,7 +98,7 @@ async function cliStatus({ cwd, out, data, env, store, harness }) {
     const pr = await queuePr(ctx, cwd, r).catch(() => null);
     if (pr) out(`pull request #${pr.number} ${pr.action}`);
   }
-  if (runs.length) realSpawnFlush(ctx);
+  if (runs.length || ended.length) (spawnFlush ?? realSpawnFlush)(ctx);
 }
 
 const commands = {
@@ -135,7 +136,7 @@ const commands = {
     return result.status === 'standalone' ? 3 : 0;
   },
 
-  async status({ env, cwd, out, data, store, harness }) {
+  async status({ env, cwd, out, data, store, harness, spawnFlush }) {
     const account = loadAccount(data);
     const { workspace, region, source, pending } = resolveWorkspace({ data, cwd });
     const tokens = account.region ? await store.get(endpoints({ region: account.region, env }).key, { timeoutMs: 2500 }) : null;
@@ -144,7 +145,7 @@ const commands = {
       const ran = lastHookAt(data, worktreeOf(cwd).key);
       if (ran === null || ran < (account.signedInAt ?? 0)) out(TRUST);
     }
-    if (harness === 'cli') await cliStatus({ cwd, out, data, env, store, harness });
+    if (harness === 'cli') await cliStatus({ cwd, out, data, env, store, harness, spawnFlush });
     if (!workspace) return;
     out(`workspace ${workspace} (${source})`);
     const known = account.workspaces?.[workspace];
@@ -216,7 +217,8 @@ const commands = {
     if (workspace) useWorkspace({ data, cwd, workspace });
     const launcher = installCopy(data);
     const { done, skipped, lefthook } = install(cwd, { launcher, data });
-    updateRepo(data, cwd, { initialized: true, hooks: done, ...(values.agent !== undefined ? { agent: values.agent === 'none' ? null : values.agent } : {}) });
+    updateClone(data, cwd, { initialized: true, hooks: done });
+    if (values.agent !== undefined) updateRepo(data, cwd, { agent: values.agent === 'none' ? null : values.agent });
     out(`git hooks in ${dir}: ${done.join(', ') || 'none'}`);
     if (lefthook) out(`lefthook: commands added to ${lefthook}`);
     for (const why of skipped) out(`skipped ${why}`);
@@ -227,7 +229,7 @@ const commands = {
   async uninstall({ data, cwd, out, harness }) {
     if (harness !== 'cli') throw new Usage(CLI_ONLY('uninstall'));
     const { dir, removed } = uninstall(cwd);
-    if (repoEntry(data, cwd).initialized) updateRepo(data, cwd, { initialized: false, hooks: [] });
+    if (cloneEntry(data, cwd).initialized) updateClone(data, cwd, { initialized: false, hooks: [] });
     out(removed.length ? `removed eocrm from ${removed.join(', ')} in ${dir}` : 'no eocrm hooks here');
   },
 

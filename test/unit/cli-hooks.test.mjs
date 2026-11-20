@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync as runSync } from 'node:child_process';
 import { AGENTS, agentOf, detectAgent } from '../../lib/cli/attribute.mjs';
 import { hookLine, install, installCopy, installed, uninstall, launcherOf, launcherTarget } from '../../lib/cli/hooks.mjs';
-import { IDLE_MS, runHook, sessionOf, startRun, sync } from '../../lib/cli/run.mjs';
+import { HOOK_MS, IDLE_MS, runHook, sessionOf, startRun, sync } from '../../lib/cli/run.mjs';
 import { prStatus } from '../../lib/git.mjs';
 import { handle, runClient } from '../../lib/run.mjs';
 import { outdatedNotice } from '../../lib/flush.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
-import { LIVE_MS, liveDirOf, liveSession, loadRun, loadWorktree, saveRun, worktreeOf } from '../../lib/state.mjs';
-import { updateRepo } from '../../lib/workspace.mjs';
+import { LIVE_MS, LockTimeout, liveDirOf, liveSession, loadRun, loadWorktree, saveRun, worktreeOf } from '../../lib/state.mjs';
+import { updateClone, updateRepo } from '../../lib/workspace.mjs';
 import { VERSION } from '../../lib/api.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 
@@ -34,7 +34,10 @@ function cliData() {
 }
 
 const ctxOf = (data, extra = {}) => ({ data, env: {}, harness: 'cli', now: Date.now, spawnSync: () => {}, spawnFlush: () => {}, store: { get: async () => null, update: async () => null }, clientFor: () => ({ conventions: async () => null, listEvents: async () => null }), prStatus: () => null, ...extra });
-const initRepo = (data, dir, extra = {}) => updateRepo(data, dir, { initialized: true, hooks: ['post-commit', 'pre-push', 'post-checkout'], ...extra });
+const initRepo = (data, dir, extra = {}) => {
+  updateClone(data, dir, { initialized: true, hooks: ['post-commit', 'pre-push', 'post-checkout'] });
+  if (Object.keys(extra).length) updateRepo(data, dir, extra);
+};
 const commitHook = async (ctx, dir) => {
   const result = await runHook(ctx, 'post-commit', dir);
   await sync(ctx, dir);
@@ -531,4 +534,119 @@ test('post-checkout to another branch spawns the sync that ends the old branch\'
   assert.equal(await runHook(ctx, 'post-checkout', dir, ['a', 'b', '0']), 'quiet');
   assert.equal(await runHook(ctx, 'post-checkout', dir, ['a', 'b', '1']), 'queued');
   assert.deepEqual(spawned, ['sync']);
+});
+
+test('the hook process exits within its budget: a held lock with a live mark, and a git that hangs', () => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
+  mkdirSync(liveDirOf(dir), { recursive: true });
+  writeFileSync(join(liveDirOf(dir), 'cc1'), String(Date.now()));
+  mkdirSync(join(data, '.lock'));
+  writeFileSync(join(data, '.lock', 'owner'), 'someone');
+  const cli = join(process.cwd(), 'scripts', 'cli.mjs');
+  const hook = (env) => {
+    const started = Date.now();
+    runSync(process.execPath, [cli, 'hook', 'post-commit', '--data', data], { cwd: dir, env: { ...ENV, ...env }, stdio: 'ignore' });
+    return Date.now() - started;
+  };
+  assert.ok(hook({}) <= HOOK_MS + 1000);
+  const bin = tmp('slow-git');
+  const real = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\nsleep 30 </dev/null >/dev/null 2>&1\nexec '${real}' "$@"\n`, { mode: 0o755 });
+  const slow = hook({ PATH: `${bin}:${process.env.PATH}` });
+  assert.ok(slow <= HOOK_MS + 1000, `took ${slow} ms`);
+});
+
+test('a lock timeout mid-drain puts the unprocessed commits back in the queue', async () => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
+  const ctx = ctxOf(data, { env: { CURSOR_AGENT: '1' } });
+  git(dir, ['commit', '-q', '--allow-empty', '-m', 'two']);
+  const first = git(dir, ['rev-parse', 'HEAD']).trim();
+  await runHook(ctx, 'post-commit', dir);
+  git(dir, ['commit', '-q', '--allow-empty', '-m', 'three']);
+  const second = git(dir, ['rev-parse', 'HEAD']).trim();
+  await runHook(ctx, 'post-commit', dir);
+  let calls = 0;
+  await sync({ ...ctx, startRun: async (...args) => {
+    if (++calls === 2) throw new LockTimeout(data);
+    return startRun(...args);
+  } }, dir);
+  assert.deepEqual(commitEvents(data).map((e) => e.event.sha), [first]);
+  await sync(ctx, dir);
+  assert.deepEqual(commitEvents(data).map((e) => e.event.sha), [first, second]);
+});
+
+test('the init gate is per clone: uninstall in one clone leaves another tracking; a never-initialised clone of the same remote stays quiet', async () => {
+  const remote = tmp('remote');
+  git(remote, ['init', '-q', '--bare']);
+  const clone = () => {
+    const dir = repo();
+    git(dir, ['remote', 'add', 'origin', `https://github.com/acme/widgets.git`]);
+    return dir;
+  };
+  const [a, b, c] = [clone(), clone(), clone()];
+  const xdg = tmp('xdg');
+  const data = join(xdg, 'eocrm');
+  mkdirSync(data);
+  writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  const run = (argv, cwd) => main({ argv, cwd, env: { XDG_DATA_HOME: xdg }, out: () => {}, err: () => {}, store: { get: async () => ({ access_token: 'at' }) }, harness: 'cli' });
+  assert.equal(await run(['init', '--agent', 'aider'], a), 0);
+  assert.equal(await run(['init'], b), 0);
+  assert.equal(await run(['uninstall'], a), 0);
+  const ctx = ctxOf(data);
+  assert.equal(await runHook(ctx, 'post-commit', a), 'not initialized');
+  assert.equal(await runHook(ctx, 'post-commit', b), 'queued');
+  assert.equal(await runHook(ctx, 'post-commit', c), 'not initialized');
+});
+
+test('info/exclude is restored byte for byte: no trailing newline, or a file eocrm created', () => {
+  for (const before of ['# mine', null]) {
+    const dir = repo();
+    writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit: {}\n');
+    const exclude = join(dir, '.git', 'info', 'exclude');
+    if (before === null) rmSync(exclude);
+    else writeFileSync(exclude, before);
+    install(dir, fakeLauncher());
+    assert.equal(git(dir, ['check-ignore', 'lefthook-local.yml']).trim(), 'lefthook-local.yml');
+    uninstall(dir);
+    assert.equal(existsSync(exclude) ? readFileSync(exclude, 'utf8') : null, before);
+  }
+});
+
+test('uninstall finds lefthook-local.yml after lefthook.yml is gone; linked worktrees keep a shared exclude entry until the last one uninstalls', () => {
+  const dir = repo();
+  writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit: {}\n');
+  git(dir, ['add', 'lefthook.yml']);
+  git(dir, ['commit', '-q', '-m', 'lefthook']);
+  const linked = join(tmp('wt'), 'linked');
+  git(dir, ['worktree', 'add', '-q', '-b', 'side', linked]);
+  const exclude = join(dir, '.git', 'info', 'exclude');
+  const before = readFileSync(exclude, 'utf8');
+  install(dir, fakeLauncher());
+  install(linked, fakeLauncher());
+  uninstall(linked);
+  assert.equal(existsSync(join(linked, 'lefthook-local.yml')), false);
+  assert.notEqual(readFileSync(exclude, 'utf8'), before);
+  rmSync(join(dir, 'lefthook.yml'));
+  uninstall(dir);
+  assert.equal(existsSync(join(dir, 'lefthook-local.yml')), false);
+  assert.equal(readFileSync(exclude, 'utf8'), before);
+});
+
+test('status sends the finish of runs it ended as idle', async () => {
+  const dir = repo();
+  const xdg = tmp('xdg');
+  const data = join(xdg, 'eocrm');
+  mkdirSync(data);
+  writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  initRepo(data, dir);
+  await startRun(ctxOf(data, { now: () => Date.now() - IDLE_MS - 1 }), dir, 'aider');
+  const flushes = [];
+  const out = [];
+  await main({ argv: ['status'], cwd: dir, env: { XDG_DATA_HOME: xdg }, out: (l) => out.push(l), err: () => {}, store: { get: async () => ({ access_token: 'at' }) }, spawnFlush: () => flushes.push(1), harness: 'cli' });
+  assert.match(out.join('\n'), /run aider ended: idle/);
+  assert.equal(flushes.length, 1);
 });
