@@ -218,6 +218,17 @@ test('idle and branch-switch ends are stamped at the last commit plus IDLE_MS, n
   assert.equal(finishOf('cline').endedAt, undefined);
 });
 
+test('a hook input cannot stamp a run end: only the CLI sets endedAt', async () => {
+  const dir = repo();
+  const data = cliData();
+  const ctx = { data, env: {}, now: Date.now, spawnFlush: () => {}, reconcile: async () => ({ enqueued: 0 }) };
+  await handle('SessionStart', { session_id: 'se1', cwd: dir, source: 'startup' }, ctx);
+  await handle('SessionEnd', { session_id: 'se1', cwd: dir, endedAt: '2020-01-01T00:00:00.000Z' }, ctx);
+  const fin = readOutbox(data).find((e) => e.kind === 'finish' && e.sessionId === 'se1');
+  assert.ok(fin);
+  assert.equal(fin.endedAt, undefined);
+});
+
 test('a live Claude Code session in the worktree keeps the CLI quiet until the session ends', async () => {
   const dir = repo();
   const data = cliData();

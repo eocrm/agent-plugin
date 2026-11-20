@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseOpenSpec, parseMarkdown, activePlan } from '../../lib/plans.mjs';
+import { parseOpenSpec, parseMarkdown, activePlan, MAX_ITEMS } from '../../lib/plans.mjs';
 import { reconcile } from '../../lib/reconcile.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
@@ -125,12 +125,12 @@ test('activePlan: an archived change reports its plan complete under the origina
 });
 
 let n = 0;
-function reconciling(dir, { repos } = {}) {
+function reconciling(dir, { repos, env } = {}) {
   const data = tmp('data');
   if (repos) updateRepo(data, dir, repos);
   const sid = `os-${process.pid}-${++n}`;
   const client = { conventions: async () => ({ status: 200, body: { plan_import: true } }), listEvents: async () => ({ status: 200, body: { items: [], next_cursor: null } }) };
-  const ctx = { data, cwd: dir, now: () => 1_000_000, clientFor: () => client };
+  const ctx = { data, cwd: dir, now: () => 1_000_000, clientFor: () => client, ...(env ? { env } : {}) };
   saveRun(data, sid, { startedAt: 1, runId: 'r1', clientRunId: sid, workspace: 'acme', region: 'eu', start: {} });
   const go = () => reconcile(ctx, loadRun(data, sid));
   const queued = () => readOutbox(data).filter((e) => e.sessionId === sid);
@@ -149,12 +149,12 @@ test('a plugin session reconciles an OpenSpec change as an openspec plan with nu
   assert.deepEqual(events.filter((e) => e.plan_key).map((e) => e.plan_key), ['1.1']);
 });
 
-const taskOf = async (dir, opts) => {
+async function taskOf(dir, opts) {
   const { go, queued } = reconciling(dir, opts);
   await go();
   const plan = queued().find((e) => e.event?.type === 'plan');
   return { event: plan.event.task_key, run: queued().filter((e) => e.kind === 'task').map((e) => e.task) };
-};
+}
 
 test('linking: branch key, then the proposal comment, then the per-remote mapping', async () => {
   const dir = repo();
@@ -166,6 +166,30 @@ test('linking: branch key, then the proposal comment, then the per-remote mappin
   assert.deepEqual(await taskOf(dir, { repos }), { event: 'AB-7', run: ['AB-7'] });
   git(dir, 'checkout', '-q', '-b', 'AB-1-x');
   assert.deepEqual(await taskOf(dir, { repos }), { event: 'AB-1', run: [] });
+});
+
+test('a plugin session links through the mapping the CLI wrote in its own data dir, reading it only', async () => {
+  const dir = repo();
+  put(dir, TASKS('foo'), '- [ ] 1.1 a\n');
+  const xdg = tmp('xdg');
+  const cli = join(xdg, 'eocrm');
+  updateRepo(cli, dir, { openspec: { foo: 'AB-4' } });
+  const before = readFileSync(join(cli, 'repos.json'), 'utf8');
+  assert.deepEqual(await taskOf(dir, { env: { XDG_DATA_HOME: xdg } }), { event: 'AB-4', run: ['AB-4'] });
+  assert.deepEqual(await taskOf(dir, { env: { XDG_DATA_HOME: xdg }, repos: { openspec: { foo: 'AB-8' } } }), { event: 'AB-8', run: ['AB-8'] });
+  assert.equal(readFileSync(join(cli, 'repos.json'), 'utf8'), before);
+});
+
+test('a branch with a superpowers plan and an OpenSpec change reports the newer one', () => {
+  const dir = repo();
+  put(dir, 'docs/superpowers/plans/p.md', '### Task 1: A\n- [ ] s\n');
+  put(dir, TASKS('foo'), '- [ ] 1.1 a\n');
+  const at = (rel, y) => utimesSync(join(dir, rel), new Date(y, 0, 1), new Date(y, 0, 1));
+  at('docs/superpowers/plans/p.md', 2020);
+  at(TASKS('foo'), 2021);
+  assert.equal(activePlan(dir, {}).source, 'openspec');
+  at('docs/superpowers/plans/p.md', 2022);
+  assert.equal(activePlan(dir, {}).source, 'superpowers');
 });
 
 async function importer(t, { responses } = {}) {
@@ -262,7 +286,16 @@ test('symlinks leading outside the repo are never read: tasks.md, proposal.md, a
   rmSync(join(dir, 'openspec/changes/add-list-command/proposal.md'));
   symlinkSync(join(outside, 'secret/proposal.md'), join(dir, 'openspec/changes/add-list-command/proposal.md'));
   symlinkSync(join(outside, 'secret'), join(dir, 'openspec/changes/linked-dir'));
-  assert.equal((await cli('openspec', 'import', '--space', 'EO')).code, 0);
+  put(dir, '.env', '- [ ] 1.1 SECRET-IN-REPO\n');
+  mkdirSync(join(dir, 'openspec/changes/linked-env'));
+  symlinkSync(join(dir, '.env'), join(dir, TASKS('linked-env')));
+  const r = await cli('openspec', 'import', '--space', 'EO');
+  assert.equal(r.code, 1);
+  for (const id of ['linked-dir', 'linked-env', 'linked-file']) assert.ok(r.out.includes(`${id}: unreadable, skipped`), id);
+  const again = await cli('openspec', 'import', '--space', 'EO');
+  assert.equal(again.code, 1);
+  assert.ok(again.out.includes('nothing else to import'));
+  assert.ok(!again.out.some((l) => /every open change is linked/.test(l)));
   const sent = JSON.stringify(imports().map((q) => q.body));
   assert.doesNotMatch(sent, /SECRET/);
   assert.equal(imports().find((q) => q.body.plan.path === TASKS('add-list-command')).body.title, 'add-list-command');
@@ -271,10 +304,25 @@ test('symlinks leading outside the repo are never read: tasks.md, proposal.md, a
   const linked = repo();
   mkdirSync(join(linked, 'openspec'));
   symlinkSync(join(outside, 'changes'), join(linked, 'openspec/changes'), 'dir');
-  assert.deepEqual(openChanges(linked), []);
+  assert.deepEqual(openChanges(linked), [{ id: 'stolen', unreadable: true }]);
   assert.equal(activePlan(linked, {}), null);
   const other = repo();
   mkdirSync(join(other, 'openspec/changes/foo'), { recursive: true });
   symlinkSync(join(outside, 'secret/tasks.md'), join(other, TASKS('foo')));
   assert.equal(activePlan(other, {}), null);
+  const env = repo();
+  put(env, '.env', '- [ ] 1.1 SECRET-IN-REPO\n');
+  mkdirSync(join(env, 'openspec/changes/foo'), { recursive: true });
+  symlinkSync(join(env, '.env'), join(env, TASKS('foo')));
+  assert.equal(activePlan(env, {}), null);
+});
+
+test('openspec import says when a plan is cut at MAX_ITEMS', async (t) => {
+  const { cli } = await importer(t);
+  const r = await cli('openspec', 'import', '--space', 'EO');
+  assert.ok(!r.out.some((l) => /truncated/.test(l)));
+  const { cli: cli2, dir } = await importer(t);
+  put(dir, TASKS('big'), Array.from({ length: MAX_ITEMS + 1 }, (_, i) => `- [ ] 1.${i + 1} item\n`).join(''));
+  const big = await cli2('openspec', 'import', '--space', 'EO');
+  assert.ok(big.out.includes(`big: plan truncated at ${MAX_ITEMS} items`));
 });
