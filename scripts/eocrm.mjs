@@ -1,7 +1,8 @@
+#!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dataDir, cliHarness, codexData, installData } from '../lib/paths.mjs';
+import { dataDir, cliHarness, cliData, codexData, installData } from '../lib/paths.mjs';
 import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { credentialStore, spawnWithStdin } from '../lib/credentials.mjs';
@@ -14,7 +15,7 @@ import { eventId } from '../lib/ids.mjs';
 import { taskFor } from '../lib/detect.mjs';
 import { worktreeOf, lastHookAt, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' } };
+const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
@@ -60,7 +61,7 @@ const need = (v, name) => {
 const commands = {
   async login({ values, positionals: [workspace], env, cwd, out, data, store, open, harness }) {
     const region = values.region ?? 'eu';
-    const result = await login({ data, region, workspace, env, store, harness, openBrowser: (u) => open(u, { print: out }) });
+    const result = await login({ data, region, workspace, env, store, harness, device: values.device, print: out, openBrowser: (u) => open(u, { print: out }) });
     const lines = [`signed in to ${result.workspace} (${region})`];
     if (result.storage === 'file') lines.push(`tokens stored in ${join(data, 'credentials.json')}: no keychain found`);
     lines.push(...pairingLines(result.pairing));
@@ -239,11 +240,11 @@ export async function main({
     if (values.session && !/^[\w-]+$/.test(values.session)) throw new Usage('invalid --session');
     let data;
     try {
-      data = dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : undefined });
+      data = dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : harness === 'cli' ? cliData(env) : undefined });
     } catch (e) {
       throw new Usage(e.message);
     }
-    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? credentialStore({ data }), open, spawnFlush, gh });
+    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? credentialStore({ data, service: harness === 'cli' ? 'eocrm-cli' : undefined }), open, spawnFlush, gh });
     return code ?? 0;
   } catch (e) {
     for (const line of e.lines ?? []) out(line);
