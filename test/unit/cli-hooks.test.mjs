@@ -146,6 +146,22 @@ test('the hook gives up after its time budget', async () => {
   assert.equal(await runHook(ctxOf(data, { hookMs: 0 }), 'post-commit', dir), 'timeout');
 });
 
+test('a hook git call killed at its own cap is a timeout, not an answer: nothing is queued', { skip: process.platform === 'win32' && 'a sh shim cannot stand in for git.exe' }, async (t) => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
+  const bin = tmp('slow-live-git');
+  const real = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\ncase "$*" in *--absolute-git-dir*) exec sleep 5 ;; esac\nexec '${real}' "$@"\n`, { mode: 0o755 });
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}:${saved}`;
+  t.after(() => {
+    process.env.PATH = saved;
+  });
+  assert.equal(await runHook(ctxOf(data, { env: { CURSOR_AGENT: '1' } }), 'post-commit', dir), 'timeout');
+  assert.equal(existsSync(join(data, 'cli-queue')), false);
+});
+
 test('run identity: one session per worktree and agent, a new run when the agent changes, after idle or on another branch', async () => {
   const dir = repo();
   const data = cliData();
