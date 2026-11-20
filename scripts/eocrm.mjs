@@ -6,21 +6,26 @@ import { endpoints } from '../lib/endpoints.mjs';
 import { createClient } from '../lib/api.mjs';
 import { storeFor, spawnWithStdin } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, pairing, plain } from '../lib/login.mjs';
-import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine } from '../lib/workspace.mjs';
-import { linkWorktree, runsOf, runClient } from '../lib/run.mjs';
+import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine, command as cmd, repoEntry, updateRepo } from '../lib/workspace.mjs';
+import { AGENTS } from '../lib/cli/attribute.mjs';
+import { hooksDir, install, installCopy, installed, uninstall } from '../lib/cli/hooks.mjs';
+import { agentFor, liveRuns, pluginLive, runHook, startRun, stopRuns, sync } from '../lib/cli/run.mjs';
+import { linkWorktree, runsOf, runClient, spawnFlush as realSpawnFlush } from '../lib/run.mjs';
 import { loadConventions } from '../lib/reconcile.mjs';
 import { enqueue } from '../lib/outbox.mjs';
 import { eventId } from '../lib/ids.mjs';
 import { taskFor } from '../lib/detect.mjs';
 import { worktreeOf, lastHookAt, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' } };
+const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' }, agent: { type: 'string' }, quiet: { type: 'boolean' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
 const CONVENTIONS_MS = 4000;
 const TRUST = 'Hooks have not run here yet. In Codex, open /hooks and trust the eocrm hooks.';
 const APPROVE = 'pairing requested: approve in Account → Agents within 15 minutes';
+const LIVE = 'a Claude Code or Codex session is reporting this worktree';
+const CLI_ONLY = (name) => `${name} is for the eocrm CLI (npx @eocrm/cli ${name})`;
 
 class Usage extends Error {
   exitCode = 2;
@@ -57,6 +62,18 @@ const need = (v, name) => {
   return v;
 };
 
+function cliStatus({ cwd, out, data }) {
+  const hooks = installed(cwd);
+  out(hooks.length ? `hooks ${hooks.join(', ')}` : 'hooks not installed: run eocrm init');
+  const agent = repoEntry(data, cwd).agent;
+  out(agent ? `agent ${agent}` : 'no agent set');
+  if (pluginLive(cwd, Date.now())) out(LIVE);
+  for (const r of liveRuns(data, cwd)) {
+    out(`run ${r.agent}${r.explicit ? ' (started)' : ''}${r.start?.task ? ` on ${r.start.task}` : ''}`);
+    if (r.outdated) out(`this CLI is below the minimum ${plain(r.outdated.minimum ?? 'version')}: run npx @eocrm/cli@latest init`);
+  }
+}
+
 const commands = {
   async login({ values, positionals: [workspace], env, cwd, out, data, store, open, harness }) {
     if (values.device && harness !== 'cli') throw new Usage('--device is for the eocrm CLI (npx @eocrm/cli login --device)');
@@ -66,11 +83,11 @@ const commands = {
     if (result.storage === 'file') lines.push(`tokens stored in ${join(data, 'credentials.json')}: no keychain found`);
     lines.push(...pairingLines(result.pairing));
     const { pending } = resolveWorkspace({ data, cwd });
-    if (pending) lines.push(committedLine(pending));
+    if (pending) lines.push(committedLine(pending, harness));
     lines.forEach((l) => out(l));
   },
 
-  async use({ values, positionals: [workspace], cwd, out, data }) {
+  async use({ values, positionals: [workspace], cwd, out, data, harness }) {
     if (values.accept || values.decline) {
       const file = answerCommitted({ data, cwd, accepted: Boolean(values.accept) });
       out(values.accept ? `this repository uses ${file.workspace} (.claude/eocrm.json)` : 'this repository keeps your default workspace');
@@ -79,13 +96,13 @@ const commands = {
     if (!workspace) throw new Usage('workspace required');
     useWorkspace({ data, cwd, workspace, here: values.here });
     out(values.here ? `this worktree uses ${workspace}` : `this repository uses ${workspace}`);
-    if (!(workspace in (loadAccount(data).workspaces ?? {}))) out(`run /eocrm:login ${workspace}`);
+    if (!(workspace in (loadAccount(data).workspaces ?? {}))) out(`run ${cmd(harness, 'login')} ${workspace}`);
   },
 
   async pair({ positionals: [id], env, cwd, out, data, store, harness }) {
     if (!id) throw new Usage('connection id required');
     const { workspace, region } = resolveWorkspace({ data, cwd });
-    if (!workspace || !region) throw new Usage('workspace required: run /eocrm:login first');
+    if (!workspace || !region) throw new Usage(`workspace required: run ${cmd(harness, 'login')} first`);
     const result = await requestPair(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }), id);
     recordPairing(data, workspace, result.status);
     pairingLines(result).forEach((l) => out(l));
@@ -96,19 +113,20 @@ const commands = {
     const account = loadAccount(data);
     const { workspace, region, source, pending } = resolveWorkspace({ data, cwd });
     const tokens = account.region ? await store.get(endpoints({ region: account.region, env }).key, { timeoutMs: 2500 }) : null;
-    out(tokens?.access_token ? `signed in (${account.region})` : 'signed out: run /eocrm:login');
+    out(tokens?.access_token ? `signed in (${account.region})` : `signed out: run ${cmd(harness, 'login')}`);
     if (harness === 'codex') {
       const ran = lastHookAt(data, worktreeOf(cwd).key);
       if (ran === null || ran < (account.signedInAt ?? 0)) out(TRUST);
     }
+    if (harness === 'cli') cliStatus({ cwd, out, data });
     if (!workspace) return;
     out(`workspace ${workspace} (${source})`);
     const known = account.workspaces?.[workspace];
-    if (region !== account.region) out(`run /eocrm:login --region ${region} ${workspace}`);
-    else if (!known) out(`run /eocrm:login ${workspace}`);
+    if (region !== account.region) out(`run ${cmd(harness, 'login')} --region ${region} ${workspace}`);
+    else if (!known) out(`run ${cmd(harness, 'login')} ${workspace}`);
     else if (known === 'requested') for (const l of await recheck({ data, env, store, workspace, region, harness })) out(l);
     else out(`pairing ${known}`);
-    if (pending) out(committedLine(pending));
+    if (pending) out(committedLine(pending, harness));
   },
 
   async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush, harness }) {
@@ -158,7 +176,64 @@ const commands = {
     out(JSON.stringify(compact));
   },
 
-  async logout({ env, out, data, store }) {
+  async init(ctx) {
+    const { values, positionals: [workspace], env, cwd, out, data, store, harness } = ctx;
+    if (harness !== 'cli') throw new Usage(CLI_ONLY('init'));
+    if (values.agent !== undefined && values.agent !== 'none' && !AGENTS.includes(values.agent)) throw new Usage(`--agent must be ${[...AGENTS, 'none'].join('|')}`);
+    hooksDir(cwd);
+    const account = loadAccount(data);
+    const tokens = account.region ? await store.get(endpoints({ region: account.region, env }).key, { timeoutMs: 2500 }) : null;
+    if (!tokens?.access_token || (workspace && !(workspace in (account.workspaces ?? {})))) await commands.login({ ...ctx, positionals: [workspace] });
+    if (workspace) useWorkspace({ data, cwd, workspace });
+    if (values.agent !== undefined) updateRepo(data, cwd, { agent: values.agent === 'none' ? null : values.agent });
+    const launcher = installCopy(data);
+    const { dir, done, skipped } = install(cwd, { launcher, data });
+    out(`git hooks in ${dir}: ${done.join(', ')}`);
+    for (const name of skipped) out(`${name} skipped: not a shell script, so eocrm cannot chain it`);
+    const agent = repoEntry(data, cwd).agent;
+    out(agent ? `commits without an agent signal count as ${agent}` : `no agent set: only commits with an agent signal are tracked (eocrm init --agent ${AGENTS.join('|')})`);
+  },
+
+  async uninstall({ cwd, out, harness }) {
+    if (harness !== 'cli') throw new Usage(CLI_ONLY('uninstall'));
+    const { dir, removed } = uninstall(cwd);
+    out(removed.length ? `removed eocrm from ${removed.join(', ')} in ${dir}` : 'no eocrm hooks here');
+  },
+
+  async hook({ positionals: [name, ...args], cwd, data, env, store, harness }) {
+    if (harness !== 'cli') throw new Usage(CLI_ONLY('hook'));
+    await runHook({ data, env, store, harness, now: Date.now }, name, cwd, args);
+  },
+
+  async sync({ values, cwd, out, data, env, store, harness }) {
+    if (harness !== 'cli') throw new Usage(CLI_ONLY('sync'));
+    const { quiet, runs, result } = await sync({ data, env, store, harness, now: Date.now }, cwd);
+    if (values.quiet) return;
+    if (quiet) out(LIVE);
+    else if (!runs) out('no active run here: eocrm run start');
+    else out(`sent ${result.sent}${result.retryable ? ', more queued' : ''}${result.signedOut ? ': signed out, run eocrm login' : ''}`);
+  },
+
+  async run({ values, positionals: [action], cwd, out, data, env, store, harness, spawnFlush }) {
+    if (harness !== 'cli') throw new Usage(CLI_ONLY('run'));
+    const ctx = { data, env, store, harness, now: Date.now, spawnFlush: spawnFlush ?? realSpawnFlush };
+    if (action === 'stop') {
+      const runs = await stopRuns(ctx, cwd);
+      out(runs.length ? `stopped ${runs.map((r) => r.agent).join(', ')}` : 'no active run here');
+      return;
+    }
+    if (action !== 'start') throw new Usage('usage: eocrm run start|stop [--agent <agent>]');
+    if (values.agent !== undefined && !AGENTS.includes(values.agent)) throw new Usage(`--agent must be ${AGENTS.join('|')}`);
+    if (pluginLive(cwd, Date.now())) throw Object.assign(new Error(LIVE), { exitCode: 3 });
+    const agent = values.agent ?? agentFor(ctx, cwd);
+    if (!agent) throw new Usage(`no agent: pass --agent ${AGENTS.join('|')}`);
+    const run = await startRun(ctx, cwd, agent, { explicit: true });
+    if (!run) throw new Usage(`no workspace: run ${cmd(harness, 'init')}`);
+    ctx.spawnFlush(ctx);
+    out(`run started for ${agent}`);
+  },
+
+  async logout({ env, out, data, store, harness }) {
     const account = loadAccount(data);
     const keys = new Set(Array.isArray(account.keys) ? account.keys : []);
     if (account.region) keys.add(endpoints({ region: account.region, env }).key);
@@ -172,7 +247,7 @@ const commands = {
       }
     }
     writeJsonAtomic(accountFile(data), { ...account, keys: failed });
-    if (failed.length) out('sign-out incomplete, run /eocrm:logout again');
+    if (failed.length) out(`sign-out incomplete, run ${cmd(harness, 'logout')} again`);
     else if (!keys.size) out('signed out');
   },
 
@@ -235,7 +310,7 @@ export async function main({
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
-    if (!command) throw new Usage('usage: eocrm login|use|pair|status|link|record|conventions|logout|smoke-seed --data <dir>');
+    if (!command) throw new Usage('usage: eocrm init|login|use|pair|status|link|record|conventions|sync|run|uninstall|logout|smoke-seed --data <dir>');
     const harness = forced ?? cliHarness({ flag: values.harness, env, script });
     if (harness === 'codex') values.session ||= env.CODEX_THREAD_ID;
     if (values.session && !/^[\w-]+$/.test(values.session)) throw new Usage('invalid --session');

@@ -55,6 +55,14 @@ test('snapshot is the pinned slice of eocrm 0.29.4', () => {
   assert.deepEqual(ops.sort(), OPERATIONS.map(([p, m]) => `${m} ${p}`).sort());
 });
 
+test('a CLI run start carries its agent_kind and the CLI User-Agent', async (t) => {
+  const { server, client } = await setup(t, { harness: 'cli', agent: 'cline' });
+  assert.equal((await client.startRun({ client_run_id: 'cli-k-cline', agent_kind: 'cline' })).status, 201);
+  const [req] = server.requests.filter((r) => r.path === '/v1/agent-runs');
+  assert.equal(req.body.agent_kind, 'cline');
+  assert.match(req.headers['user-agent'], /^eocrm-cli\/\d+\.\d+\.\d+ \(cline\)$/);
+});
+
 test('each method hits its documented path with the bearer', async (t) => {
   const { server, client } = await setup(t);
   const run = await client.startRun({ client_run_id: 's1', branch: 'feature/X-1', repo: 'o/r' });
