@@ -29,6 +29,16 @@ Then open `/hooks` in Codex and trust the eocrm hooks, listed under `eocrm: …`
 
 Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`. Without a GitHub SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so installs and updates clone over HTTPS.
 
+## Install (any other agent: the eocrm CLI)
+
+```
+npx @eocrm/cli init --agent cursor   # or cline, roo, opencode, aider, claude_code, codex, none
+```
+
+`init` signs in if needed (`--device` for a code on another device), maps the repo like `/eocrm:use`, and adds one line to the repo's `post-commit`, `pre-push` and `post-checkout` hooks, chaining husky, lefthook, `core.hooksPath` and hand-written shell hooks. It copies the CLI to `<data>/bin/<version>` with a launcher at `<data>/bin/eocrm.mjs`, so hooks keep working after npx clears its cache; run the same command with `@latest` to upgrade. `eocrm uninstall` removes exactly the added lines.
+
+Hooks only queue; a detached process sends. A commit counts for an agent when it carries one's signal (aider's author or co-author trailer; Cline's, Roo's, opencode's, Cursor's, Claude Code's or Codex's terminal variables), else for the repo's `--agent`; with neither it is a person's commit and starts no run. While a Claude Code or Codex session with the plugin is live in the worktree, the hooks stay quiet. `eocrm run start|stop`, `eocrm sync` (plans, reconcile, the branch's PR through `gh`) and `eocrm status` cover the rest.
+
 ## Use
 
 - `/eocrm:login` (a skill; in Codex, ask for the `login` skill) signs in through the browser (sign-in starts in the EU and eocrm resolves your home region; `--region ru` signs in to an RU workspace) and stores tokens in the OS keychain, or a 0600 file when no keychain is usable.

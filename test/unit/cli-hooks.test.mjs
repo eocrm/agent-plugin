@@ -190,10 +190,10 @@ test('lefthook, core.hooksPath and hand-written hooks are chained and restored e
   git(dir, ['config', 'core.hooksPath', 'githooks']);
   const files = {
     'post-commit': '#!/bin/sh\r\n# LEFTHOOK\r\ncall_lefthook run "post-commit" "$@"\r\n',
-    'pre-push': '#!/usr/bin/env bash\nexit 0',
+    'pre-push': '#!/usr/bin/env bash\n# caf\xe9 in latin1\nexit 0',
     'post-checkout': '#!/usr/bin/env python3\nprint("hi")\n',
   };
-  for (const [n, text] of Object.entries(files)) writeFileSync(join(hooks, n), text, { mode: 0o750 });
+  for (const [n, text] of Object.entries(files)) writeFileSync(join(hooks, n), Buffer.from(text, 'latin1'), { mode: 0o750 });
   const before = Object.fromEntries(Object.keys(files).map((n) => [n, bytes(join(hooks, n))]));
   const { done, skipped } = install(dir, fakeLauncher());
   assert.deepEqual([done, skipped], [['post-commit', 'pre-push'], ['post-checkout']]);
