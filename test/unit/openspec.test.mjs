@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -12,6 +12,7 @@ import { repoEntry, updateRepo } from '../../lib/workspace.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { main } from '../../scripts/eocrm.mjs';
+import { openChanges } from '../../lib/cli/openspec.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 
 const fx = (name) => readFileSync(new URL(`../fixtures/openspec/${name}`, import.meta.url), 'utf8');
@@ -248,4 +249,32 @@ test('eocrm link <change> <KEY> maps a change; none removes it', async (t) => {
   assert.equal((await cli('link', 'add-list-command', 'none')).code, 0);
   assert.deepEqual(repoEntry(data, dir).openspec, {});
   assert.equal((await cli('link', '../x', 'AB-5')).code, 2);
+});
+
+test('symlinks leading outside the repo are never read: tasks.md, proposal.md, a change dir or openspec/changes', async (t) => {
+  const outside = tmp('outside');
+  put(outside, 'secret/tasks.md', '- [ ] 1.1 SECRET-TASK\n');
+  put(outside, 'secret/proposal.md', '# SECRET-TITLE\n\n## Why\n\nSECRET-WHY\n');
+  put(outside, 'changes/stolen/tasks.md', '- [ ] 1.1 SECRET-TASK\n');
+  const { cli, imports, dir } = await importer(t);
+  mkdirSync(join(dir, 'openspec/changes/linked-file'));
+  symlinkSync(join(outside, 'secret/tasks.md'), join(dir, TASKS('linked-file')));
+  rmSync(join(dir, 'openspec/changes/add-list-command/proposal.md'));
+  symlinkSync(join(outside, 'secret/proposal.md'), join(dir, 'openspec/changes/add-list-command/proposal.md'));
+  symlinkSync(join(outside, 'secret'), join(dir, 'openspec/changes/linked-dir'));
+  assert.equal((await cli('openspec', 'import', '--space', 'EO')).code, 0);
+  const sent = JSON.stringify(imports().map((q) => q.body));
+  assert.doesNotMatch(sent, /SECRET/);
+  assert.equal(imports().find((q) => q.body.plan.path === TASKS('add-list-command')).body.title, 'add-list-command');
+  assert.ok(!imports().some((q) => /linked-/.test(q.body.plan.path)));
+
+  const linked = repo();
+  mkdirSync(join(linked, 'openspec'));
+  symlinkSync(join(outside, 'changes'), join(linked, 'openspec/changes'), 'dir');
+  assert.deepEqual(openChanges(linked), []);
+  assert.equal(activePlan(linked, {}), null);
+  const other = repo();
+  mkdirSync(join(other, 'openspec/changes/foo'), { recursive: true });
+  symlinkSync(join(outside, 'secret/tasks.md'), join(other, TASKS('foo')));
+  assert.equal(activePlan(other, {}), null);
 });
