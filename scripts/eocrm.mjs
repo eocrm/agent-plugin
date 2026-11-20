@@ -102,12 +102,14 @@ async function cliStatus({ cwd, out, data, env, store, harness, spawnFlush }) {
   if (runs.length || ended.length) (spawnFlush ?? realSpawnFlush)(ctx);
 }
 
+const who = (account, workspace) => `Signed in at ${new URL(account.issuer).host} — reporting to ${workspace}`;
+
 const commands = {
-  async login({ values, positionals: [workspace], env, cwd, out, data, store, open, harness }) {
+  async login({ values, positionals: [workspace], env, cwd, out, data, store, open, harness, sleep }) {
     if (values.device && harness !== 'cli') throw new Usage('--device is for the eocrm CLI (npx @eocrm/cli login --device)');
     const region = values.region ?? 'eu';
-    const result = await login({ data, region, workspace, env, store, harness, device: values.device, print: out, openBrowser: (u) => open(u, { print: out }) });
-    const lines = [`signed in to ${result.workspace} (${region})`];
+    const result = await login({ data, region, workspace, env, store, harness, device: values.device, sleep, print: out, openBrowser: (u) => open(u, { print: out }) });
+    const lines = [`signed in to ${result.workspace} (${region})`, who(loadAccount(data), result.workspace)];
     if (result.storage === 'file') lines.push(`tokens stored in ${join(data, 'credentials.json')}: no keychain found`);
     lines.push(...pairingLines(result.pairing));
     const { pending } = resolveWorkspace({ data, cwd });
@@ -149,6 +151,7 @@ const commands = {
     if (harness === 'cli') await cliStatus({ cwd, out, data, env, store, harness, spawnFlush });
     if (!workspace) return;
     out(`workspace ${workspace} (${source})`);
+    if (tokens?.access_token && account.issuer) out(who(account, workspace));
     const known = account.workspaces?.[workspace];
     if (region !== account.region) out(`run ${cmd(harness, 'login')} --region ${region} ${workspace}`);
     else if (!known) out(`run ${cmd(harness, 'login')} ${workspace}`);
@@ -220,8 +223,11 @@ const commands = {
     if (scope?.shared) out(`core.hooksPath is shared (${scope.scope} config): eocrm's line goes into ${dir} for every repository using it, and stays quiet where eocrm init never ran`);
     const account = loadAccount(data);
     const tokens = account.region ? await store.get(endpoints({ region: account.region, env }).key, { timeoutMs: 2500 }) : null;
-    if (!tokens?.access_token || (workspace && !(workspace in (account.workspaces ?? {})))) await commands.login({ ...ctx, positionals: [workspace] });
+    const signedIn = tokens?.access_token && !(workspace && !(workspace in (account.workspaces ?? {})));
+    if (!signedIn) await commands.login({ ...ctx, positionals: [workspace] });
     if (workspace) useWorkspace({ data, cwd, workspace });
+    const target = resolveWorkspace({ data, cwd }).workspace;
+    if (signedIn && account.issuer && target) out(who(account, target));
     const launcher = installCopy(data);
     const { done, skipped, lefthook } = install(cwd, { launcher, data });
     updateClone(data, cwd, { initialized: true, hooks: done });
@@ -350,6 +356,7 @@ export async function main({
   gh = (args, stdin) => spawnWithStdin('gh', args, stdin, { timeoutMs: 30000 }),
   script = fileURLToPath(import.meta.url),
   harness: forced,
+  sleep,
 } = {}) {
   if (!(Number(String(version).split('.')[0]) >= 20)) {
     err('eocrm needs Node 20+ on PATH');
@@ -372,7 +379,7 @@ export async function main({
     } catch (e) {
       throw new Usage(e.message);
     }
-    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? storeFor(data, harness), open, spawnFlush, gh });
+    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? storeFor(data, harness), open, spawnFlush, gh, sleep });
     return code ?? 0;
   } catch (e) {
     for (const line of e.lines ?? []) out(line);

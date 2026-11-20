@@ -261,3 +261,20 @@ test('eocrm login --device signs the CLI in to the XDG data dir as eocrm CLI', a
   assert.ok(!calls.some((c) => c.key === 'POST /oauth/register'));
   for (const c of calls) assert.match(c.ua, /^eocrm-cli\//);
 });
+
+test('device login prints the signed-in host and workspace, and no token text', async (t) => {
+  mockFetch(t, {
+    'GET /.well-known/oauth-authorization-server': [[404, {}]],
+    'POST /oauth/device/code': [[200, ISSUED]],
+    'POST /oauth/token': [[200, { access_token: 'secret-access', refresh_token: 'secret-refresh', expires_in: 3600 }]],
+    'GET /api/v1/agent-work/conventions': [[200, {}]],
+    'GET /api/v1/agent-runs/pairable': [[200, { items: [] }]],
+  });
+  const data = tmp('data');
+  const out = [];
+  const code = await main({ argv: ['login', '--device', '--data', data, 'acme'], harness: 'cli', cwd: data, env: {}, store: credentialStore({ data, platform: 'none' }), out: (l) => out.push(l), err: (l) => out.push(l), sleep: async () => {} });
+  const text = out.join('\n');
+  assert.equal(code, 0, text);
+  assert.match(text, /^Signed in at id\.eu\.eocrm\.io — reporting to acme$/m);
+  for (const secret of ['secret-access', 'secret-refresh']) assert.ok(!text.includes(secret), secret);
+});

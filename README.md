@@ -65,7 +65,7 @@ Attribution is display only, not a trust boundary.
 
 ### Sign in
 
-`eocrm login [workspace]` opens the browser; `eocrm login --device [workspace]` prints a code to approve on another device (SSH, containers). `--region ru` signs in to an RU workspace. `eocrm logout` signs out. Tokens go to the OS keychain, or a 0600 file when none is usable.
+`eocrm login [workspace]` opens the browser; `eocrm login --device [workspace]` prints a code to approve on another device (SSH, containers). `--region ru` signs in to an RU workspace. `eocrm logout` signs out. Tokens go to the OS keychain, or a 0600 file when none is usable. Login, `init` and `status` print `Signed in at <sign-in host> — reporting to <workspace>`; check the workspace there, since anyone who sees a `--device` code can answer it first (the server gives the CLI no account name).
 
 ### Commands
 

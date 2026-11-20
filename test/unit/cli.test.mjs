@@ -172,6 +172,7 @@ test('login without --region signs in through the EU endpoints', async (t) => {
   const { code, out } = await cli(['login', '--data', data, 'acme'], { env: server.endpointsEnv, store, openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) });
   assert.equal(code, 0);
   assert.match(out, /^signed in to acme \(eu\)$/m);
+  assert.match(out, /^Signed in at 127\.0\.0\.1:\d+ — reporting to acme$/m);
   assert.equal(JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).region, 'eu');
 });
 
@@ -257,13 +258,14 @@ test('login, pair, status and logout never print a token, code, verifier or stat
   assert.equal(runs[0].out, [
     runs[0].out.split('\n')[0],
     'signed in to acme (eu)',
+    `Signed in at ${new URL(server.url).host} — reporting to acme`,
     `tokens stored in ${join(data, 'credentials.json')}: no keychain found`,
     'pairing: choose a connection, then run pair <id>',
     'connection 01JZ0000000000000000000010 Claude [31m Code A',
     'connection 01JZ0000000000000000000002 Claude [2J Code B',
   ].join('\n'));
   assert.equal(runs[1].out, 'pairing requested: approve in Account → Agents within 15 minutes: https://workspace.example.test/account/agents');
-  assert.equal(runs[2].out, 'signed in (eu)\nworkspace acme (default)\npairing requested');
+  assert.equal(runs[2].out, `signed in (eu)\nworkspace acme (default)\nSigned in at ${new URL(server.url).host} — reporting to acme\npairing requested`);
   assert.equal(runs[3].out, `signed out of ${server.url}`);
   assert.match(runs[4].out, /^signed out: run \/eocrm:login$/m);
   assert.equal(await store.get(endpoints({ region: 'eu', env: server.endpointsEnv }).key), null);
