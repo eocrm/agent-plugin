@@ -11,13 +11,15 @@ import { prStatus } from '../../lib/git.mjs';
 import { handle, runClient } from '../../lib/run.mjs';
 import { outdatedNotice } from '../../lib/flush.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
-import { LIVE_MS, LockTimeout, git as stateGit, gitTimeout, liveDirOf, liveSession, loadRun, loadWorktree, saveRun, worktreeOf } from '../../lib/state.mjs';
+import { GitDeadline, LIVE_MS, LockTimeout, git as stateGit, gitTimeout, liveDirOf, liveSession, loadRun, loadWorktree, saveRun, worktreeOf } from '../../lib/state.mjs';
 import { updateClone, updateRepo } from '../../lib/workspace.mjs';
 import { VERSION } from '../../lib/api.mjs';
 import { main } from '../../scripts/eocrm.mjs';
 
 const tmp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), `eocrm-${p}-`)));
 const ENV = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', PATH: process.env.PATH, HOME: tmpdir() };
+// Git for Windows' sh gets forward slashes (hooks.mjs shq).
+const shPath = (p) => (process.platform === 'win32' ? p.replace(/\\/g, '/') : p);
 const git = (cwd, args, { env = {}, input } = {}) => execFileSync('git', args, { cwd, stdio: 'pipe', env: { ...ENV, ...env }, input, encoding: 'utf8' });
 
 function repo() {
@@ -141,6 +143,7 @@ test('the hook gives up after its time budget', async () => {
   const started = Date.now();
   assert.equal(await runHook(ctxOf(data, { hookMs: 100 }), 'post-commit', dir), 'timeout');
   assert.ok(Date.now() - started < 1000);
+  assert.equal(await runHook(ctxOf(data, { hookMs: 0 }), 'post-commit', dir), 'timeout');
 });
 
 test('run identity: one session per worktree and agent, a new run when the agent changes, after idle or on another branch', async () => {
@@ -276,7 +279,7 @@ test('husky: init chains its hook and uninstall restores it byte for byte', () =
   install(dir, fake);
   git(dir, ['commit', '-q', '--allow-empty', '-m', 'x']);
   assert.equal(readFileSync(join(dir, 'husky.log'), 'utf8'), 'husky\n');
-  assert.equal(readFileSync(fake.calls, 'utf8'), `hook post-commit --data ${fake.data}\n`);
+  assert.equal(readFileSync(fake.calls, 'utf8'), `hook post-commit --data ${shPath(fake.data)}\n`);
   uninstall(dir);
   assert.deepEqual(bytes(join(dir, '.husky', '_', 'post-commit')), before);
   assert.equal(existsSync(join(dir, '.husky', '_', 'pre-push')), false);
@@ -425,7 +428,7 @@ test('a shared core.hooksPath (global config) is refused without --shared-hooks'
   const dir = repo();
   const shared = tmp('shared-hooks');
   const global = join(tmp('gitconfig'), 'config');
-  writeFileSync(global, `[core]\n\thooksPath = ${shared}\n`);
+  writeFileSync(global, `[core]\n\thooksPath = ${shPath(shared)}\n`);
   const saved = process.env.GIT_CONFIG_GLOBAL;
   process.env.GIT_CONFIG_GLOBAL = global;
   t.after(() => {
@@ -484,10 +487,12 @@ test('binary and non-executable hooks are skipped and reported', () => {
   writeFileSync(join(hooks, 'post-commit'), Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0]), { mode: 0o755 });
   writeFileSync(join(hooks, 'pre-push'), '#!/bin/sh\nexit 0\n', { mode: 0o644 });
   const { done, skipped } = install(dir, fakeLauncher());
-  assert.deepEqual(done, ['post-checkout']);
-  assert.deepEqual(skipped.map((s) => s.split(':')[0]), ['post-commit', 'pre-push']);
+  // Git for Windows has no exec bit and runs every hook file.
+  const win = process.platform === 'win32';
+  assert.deepEqual(done, win ? ['pre-push', 'post-checkout'] : ['post-checkout']);
+  assert.deepEqual(skipped.map((s) => s.split(':')[0]), win ? ['post-commit'] : ['post-commit', 'pre-push']);
   assert.match(skipped[0], /not a script/);
-  assert.match(skipped[1], /not executable/);
+  if (!win) assert.match(skipped[1], /not executable/);
 });
 
 test('lefthook: the command also goes into a git-ignored lefthook-local.yml, and uninstall restores it and the exclude file exactly', () => {
@@ -500,7 +505,7 @@ test('lefthook: the command also goes into a git-ignored lefthook-local.yml, and
   assert.equal(lefthook, join(dir, 'lefthook-local.yml'));
   const local = readFileSync(lefthook, 'utf8');
   assert.match(local, /^# created by eocrm init # eocrm-cli\npost-commit: # eocrm-cli\n {2}commands: # eocrm-cli\n {4}eocrm: # eocrm-cli\n {6}run: '\( L=''/);
-  assert.ok(local.includes(`hook post-checkout --data ''${fake.data}'' {0} </dev/null`));
+  assert.ok(local.includes(`hook post-checkout --data ''${shPath(fake.data)}'' {0} </dev/null`));
   assert.equal(git(dir, ['check-ignore', 'lefthook-local.yml']).trim(), 'lefthook-local.yml');
   assert.equal(git(dir, ['status', '--porcelain', '--', 'lefthook-local.yml']), '');
   rmHookLines(dir);
@@ -697,7 +702,7 @@ test('past the hook deadline git is not run at all', () => {
     Object.assign(gitTimeout, { ms: 1000, deadline: Date.now() + 300 });
     assert.equal(stateGit('/w', ['status'], run), 'ok');
     Object.assign(gitTimeout, { deadline: Date.now() - 1 });
-    assert.equal(stateGit('/w', ['status'], run), '');
+    assert.throws(() => stateGit('/w', ['status'], run), GitDeadline);
   } finally {
     Object.assign(gitTimeout, saved);
   }
