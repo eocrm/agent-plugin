@@ -149,7 +149,7 @@ export async function startFixtureServer({ responses = {}, messages = [] } = {})
       if (!run) return noRun;
       const from = Number(query.cursor ?? 0);
       const next = from + 100 < run.events.length ? String(from + 100) : null;
-      return { status: 200, body: { items: run.events.slice(from, from + 100), next_cursor: next } };
+      return { status: 200, body: { items: run.events.slice(from, from + 100), next_cursor: next, details_pruned_at: null } };
     },
     'agentWork.workspaces': () => ({ status: 200, body: { items: [{ slug: 'acme', name: 'Acme', agent_work: true }] } }),
     'agentWorkConventions.show': () => ({ status: 200, body: recorded('agentWorkConventions.show') }),

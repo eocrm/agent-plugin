@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { AGENTS, agentOf, detectAgent } from '../../lib/cli/attribute.mjs';
-import { hookLine, install, installCopy, uninstall, launcherOf } from '../../lib/cli/hooks.mjs';
+import { hookLine, install, installCopy, installed, uninstall, launcherOf, launcherTarget } from '../../lib/cli/hooks.mjs';
 import { IDLE_MS, runHook, sessionOf, startRun, sync } from '../../lib/cli/run.mjs';
 import { prStatus } from '../../lib/git.mjs';
 import { handle, runClient } from '../../lib/run.mjs';
@@ -33,7 +33,13 @@ function cliData() {
   return data;
 }
 
-const ctxOf = (data, extra = {}) => ({ data, env: {}, harness: 'cli', now: Date.now, spawnSync: () => {}, spawnFlush: () => {}, ...extra });
+const ctxOf = (data, extra = {}) => ({ data, env: {}, harness: 'cli', now: Date.now, spawnSync: () => {}, spawnFlush: () => {}, store: { get: async () => null, update: async () => null }, clientFor: () => ({ conventions: async () => null, listEvents: async () => null }), prStatus: () => null, ...extra });
+const initRepo = (data, dir, extra = {}) => updateRepo(data, dir, { initialized: true, hooks: ['post-commit', 'pre-push', 'post-checkout'], ...extra });
+const commitHook = async (ctx, dir) => {
+  const result = await runHook(ctx, 'post-commit', dir);
+  await sync(ctx, dir);
+  return result;
+};
 const bytes = (f) => ({ text: readFileSync(f).toString('base64'), mode: statSync(f).mode });
 const commitEvents = (data) => readOutbox(data).filter((e) => e.kind === 'event' && e.event.type === 'commit');
 
@@ -57,7 +63,9 @@ test('attribution: each tool\'s own signal names it, and a bare VS Code terminal
     [{ env: { OPENCODE_CLIENT: 'cli' } }, 'opencode'],
     [{ env: { CURSOR_AGENT: '1' } }, 'cursor'],
     [{ env: { CURSOR_EXTENSION_HOST_ROLE: 'agent-exec' } }, 'cursor'],
-    [{ env: { CURSOR_TRACE_ID: 'abc' } }, 'cursor'],
+    [{ env: { CURSOR_TRACE_ID: 'abc', TERM_PROGRAM: 'vscode' } }, null],
+    [{ env: { CLAUDE_CODE: '1' } }, 'claude_code'],
+    [{ env: { CODEX_CI: '1' } }, 'codex'],
     [{ env: { CLAUDECODE: '1' } }, 'claude_code'],
     [{ env: { CODEX_THREAD_ID: 't' } }, 'codex'],
     [{ env: { TERM_PROGRAM: 'vscode' } }, null],
@@ -68,16 +76,18 @@ test('attribution: each tool\'s own signal names it, and a bare VS Code terminal
   assert.equal(agentOf({ env: { TERM_PROGRAM: 'vscode' }, commit: {}, setting: 'roo' }), 'roo');
   assert.equal(agentOf({ env: { CLINE_ACTIVE: '1' }, commit: {}, setting: 'roo' }), 'cline');
   assert.equal(agentOf({ env: {}, commit: {}, setting: 'gpt' }), null);
+  assert.equal(agentOf({ env: { CURSOR_TRACE_ID: 'abc' }, commit: {} }), null);
 });
 
 test('a commit with no agent signal and no repo setting starts no run and queues nothing', async () => {
   const dir = repo();
   const data = cliData();
-  assert.equal(await runHook(ctxOf(data, { env: { TERM_PROGRAM: 'vscode' } }), 'post-commit', dir), 'no agent');
+  initRepo(data, dir);
+  assert.equal(await commitHook(ctxOf(data, { env: { TERM_PROGRAM: 'vscode', CURSOR_TRACE_ID: 'x' } }), dir), 'no agent');
   assert.deepEqual(readOutbox(data), []);
   assert.equal(existsSync(join(data, 'runs')), false);
   updateRepo(data, dir, { agent: 'cursor' });
-  assert.equal(await runHook(ctxOf(data), 'post-commit', dir), 'queued');
+  assert.equal(await commitHook(ctxOf(data), dir), 'queued');
   const [start] = readOutbox(data).filter((e) => e.kind === 'start');
   const run = loadRun(data, start.sessionId);
   assert.equal(run.start.agent_kind, 'cursor');
@@ -97,48 +107,94 @@ test('hooks never touch the network: they queue and leave the send to a detached
   const dir = repo();
   const data = cliData();
   const spawned = [];
+  initRepo(data, dir);
   const ctx = ctxOf(data, { env: { CURSOR_AGENT: '1' }, spawnSync: () => spawned.push('sync'), spawnFlush: () => spawned.push('flush') });
   assert.equal(await runHook(ctx, 'post-commit', dir), 'queued');
-  assert.equal(await runHook(ctx, 'pre-push', dir), 'queued');
+  assert.equal(await runHook(ctx, 'post-commit', dir), 'duplicate');
+  assert.equal(await runHook(ctx, 'pre-push', dir), 'quiet');
   assert.equal(calls, 0);
-  assert.deepEqual(spawned, ['sync', 'sync']);
+  assert.deepEqual(spawned, ['sync']);
+  assert.equal(existsSync(join(data, 'runs')), false);
+  assert.deepEqual(readOutbox(data), []);
 });
 
-test('run identity: one session per worktree and agent, a new run when the agent changes or after idle', async () => {
+test('a repository where init never ran: the hook does nothing, even with an agent signal', async () => {
   const dir = repo();
   const data = cliData();
+  updateRepo(data, dir, { agent: 'roo' });
+  const spawned = [];
+  assert.equal(await runHook(ctxOf(data, { env: { CLINE_ACTIVE: 'true' }, spawnSync: () => spawned.push('sync') }), 'post-commit', dir), 'not initialized');
+  assert.deepEqual([spawned, existsSync(join(data, 'cli-queue'))], [[], false]);
+});
+
+test('the hook gives up after its time budget', async () => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
+  mkdirSync(liveDirOf(dir), { recursive: true });
+  writeFileSync(join(liveDirOf(dir), 'cc1'), String(Date.now()));
+  mkdirSync(join(data, '.lock'));
+  writeFileSync(join(data, '.lock', 'owner'), 'someone');
+  const started = Date.now();
+  assert.equal(await runHook(ctxOf(data, { hookMs: 100 }), 'post-commit', dir), 'timeout');
+  assert.ok(Date.now() - started < 1000);
+});
+
+test('run identity: one session per worktree and agent, a new run when the agent changes, after idle or on another branch', async () => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
   const key = worktreeOf(dir).key;
   let now = 1_000_000;
   const ctx = (env) => ctxOf(data, { env, now: () => now });
-  await runHook(ctx({ CURSOR_AGENT: '1' }), 'post-commit', dir);
+  const commit = async (m, env) => {
+    git(dir, ['commit', '-q', '--allow-empty', '-m', m]);
+    await commitHook(ctx(env), dir);
+  };
+  await commit('one', { CURSOR_AGENT: '1' });
   const cursor = sessionOf(key, 'cursor');
   assert.equal(cursor, `cli-${key}-cursor`);
   assert.equal(loadRun(data, cursor).clientRunId, cursor);
   saveRun(data, cursor, { runId: 'r1' });
-  git(dir, ['commit', '-q', '--allow-empty', '-m', 'two']);
   now += 60_000;
-  await runHook(ctx({ CURSOR_AGENT: '1' }), 'post-commit', dir);
+  await commit('two', { CURSOR_AGENT: '1' });
   assert.equal(loadRun(data, cursor).generation, 0);
   now += IDLE_MS + 1;
-  git(dir, ['commit', '-q', '--allow-empty', '-m', 'three']);
-  await runHook(ctx({ CURSOR_AGENT: '1' }), 'post-commit', dir);
+  await commit('three', { CURSOR_AGENT: '1' });
   assert.equal(loadRun(data, cursor).clientRunId, `${cursor}.1`);
   assert.ok(readOutbox(data).some((e) => e.kind === 'finish' && e.sessionId === `${cursor}--w0`));
-  git(dir, ['commit', '-q', '--allow-empty', '-m', 'four']);
-  await runHook(ctx({ CLINE_ACTIVE: '1' }), 'post-commit', dir);
+  await commit('four', { CLINE_ACTIVE: 'true' });
   assert.equal(loadRun(data, cursor).ended, true);
-  assert.equal(loadRun(data, sessionOf(key, 'cline')).start.agent_kind, 'cline');
+  const cline = sessionOf(key, 'cline');
+  assert.equal(loadRun(data, cline).start.agent_kind, 'cline');
+  git(dir, ['checkout', '-q', '-b', 'other']);
+  await sync(ctx({}), dir);
+  assert.equal(loadRun(data, cline).ended, true);
+});
+
+test('sync ends a commit-bounded run idle past IDLE_MS; an explicit run stays', async () => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
+  let now = 1_000_000;
+  const ctx = ctxOf(data, { now: () => now });
+  await startRun(ctx, dir, 'aider');
+  await startRun(ctx, dir, 'roo', { explicit: true });
+  now += IDLE_MS + 1;
+  await sync(ctx, dir);
+  const key = worktreeOf(dir).key;
+  assert.deepEqual([loadRun(data, sessionOf(key, 'aider')).ended, loadRun(data, sessionOf(key, 'roo')).ended], [true, false]);
 });
 
 test('a live Claude Code session in the worktree keeps the CLI quiet until the session ends', async () => {
   const dir = repo();
   const data = cliData();
   const plugin = cliData();
-  updateRepo(data, dir, { agent: 'cursor' });
+  initRepo(data, dir, { agent: 'cursor' });
   const pctx = { data: plugin, env: {}, harness: 'claude', now: Date.now, spawnFlush: () => {}, reconcile: async () => ({ enqueued: 0 }) };
   await handle('SessionStart', { session_id: 'cc1', cwd: dir, source: 'startup' }, pctx);
   assert.equal(liveSession(liveDirOf(dir), Date.now()), 'cc1');
-  assert.equal(await runHook(ctxOf(data), 'post-commit', dir), 'quiet');
+  assert.equal(await commitHook(ctxOf(data), dir), 'quiet');
   assert.equal(await runHook(ctxOf(data), 'pre-push', dir), 'quiet');
   assert.deepEqual(readOutbox(data), []);
   const quietSha = git(dir, ['rev-parse', 'HEAD']).trim();
@@ -146,7 +202,7 @@ test('a live Claude Code session in the worktree keeps the CLI quiet until the s
   await handle('SessionEnd', { session_id: 'cc1', cwd: dir }, pctx);
   assert.equal(liveSession(liveDirOf(dir), Date.now()), null);
   git(dir, ['commit', '-q', '--allow-empty', '-m', 'after']);
-  assert.equal(await runHook(ctxOf(data), 'post-commit', dir), 'queued');
+  assert.equal(await commitHook(ctxOf(data), dir), 'queued');
   assert.deepEqual(commitEvents(data).map((e) => e.event.sha), [git(dir, ['rev-parse', 'HEAD']).trim()]);
 });
 
@@ -196,7 +252,7 @@ test('lefthook, core.hooksPath and hand-written hooks are chained and restored e
   for (const [n, text] of Object.entries(files)) writeFileSync(join(hooks, n), Buffer.from(text, 'latin1'), { mode: 0o750 });
   const before = Object.fromEntries(Object.keys(files).map((n) => [n, bytes(join(hooks, n))]));
   const { done, skipped } = install(dir, fakeLauncher());
-  assert.deepEqual([done, skipped], [['post-commit', 'pre-push'], ['post-checkout']]);
+  assert.deepEqual([done, skipped], [['post-commit', 'pre-push'], ['post-checkout: not a shell script']]);
   const lines = readFileSync(join(hooks, 'post-commit'), 'utf8').split('\r\n');
   assert.equal(lines[0], '#!/bin/sh');
   assert.match(lines[1], /# eocrm-cli$/);
@@ -236,7 +292,10 @@ test('the stable copy: init installs a versioned copy and a launcher, and re-ini
   assert.ok(existsSync(join(data, 'bin', '9.9.8', 'lib', 'cli', 'run.mjs')));
   installCopy(data, { version: '9.9.9' });
   assert.deepEqual(readdirSync(join(data, 'bin')).sort(), ['9.9.9', 'eocrm.mjs']);
+  mkdirSync(join(data, 'bin', '9.9.9.dead.tmp'));
   installCopy(data, { from: join(data, 'bin', '9.9.9'), version: '9.9.9' });
+  assert.deepEqual(readdirSync(join(data, 'bin')).sort(), ['9.9.9', 'eocrm.mjs']);
+  assert.equal(launcherTarget(data), '9.9.9');
   const out = execFileSync(process.execPath, [launcher, 'status', '--data', data], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: tmpdir() } });
   assert.match(out, /signed out: run eocrm login/);
 });
@@ -256,6 +315,7 @@ test('eocrm init then a real commit queues it through the stable copy; uninstall
   git(dir, ['commit', '-q', '--allow-empty', '-m', 'tracked'], { env: { EOCRM_ENDPOINTS: JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' }) } });
   assert.ok(Date.now() - started < 5000);
   const sha = git(dir, ['rev-parse', 'HEAD']).trim();
+  for (let i = 0; i < 100 && !readOutbox(data).some((e) => e.kind === 'event' && e.event.sha === sha); i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(readOutbox(data).some((e) => e.kind === 'event' && e.event.sha === sha), JSON.stringify(readOutbox(data)));
   assert.equal(await main({ argv: ['uninstall'], cwd: dir, env, out: () => {}, err: () => {}, harness: 'cli' }), 0);
   assert.deepEqual(readdirSync(join(dir, '.git', 'hooks')).filter((n) => !n.endsWith('.sample')), []);
@@ -316,4 +376,153 @@ test('plugin: SessionStart marks the worktree live, SessionEnd clears it; nothin
   t.after(() => chmodSync(live, 0o700));
   await handle('SessionStart', { session_id: 'cx2', cwd: dir, source: 'startup' }, ctx);
   assert.equal(loadRun(plugin, 'cx2').ended, false);
+});
+
+test('a shared core.hooksPath (global config) is refused without --shared-hooks', async (t) => {
+  const dir = repo();
+  const shared = tmp('shared-hooks');
+  const global = join(tmp('gitconfig'), 'config');
+  writeFileSync(global, `[core]\n\thooksPath = ${shared}\n`);
+  const saved = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = global;
+  t.after(() => {
+    if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = saved;
+  });
+  const xdg = tmp('xdg');
+  mkdirSync(join(xdg, 'eocrm'));
+  writeFileSync(join(xdg, 'eocrm', 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  const run = async (argv) => {
+    const out = [];
+    const code = await main({ argv, cwd: dir, env: { XDG_DATA_HOME: xdg }, out: (l) => out.push(l), err: (l) => out.push(l), store: { get: async () => ({ access_token: 'at' }) }, harness: 'cli' });
+    return { code, out: out.join('\n') };
+  };
+  const refused = await run(['init']);
+  assert.equal(refused.code, 2);
+  assert.match(refused.out, /core\.hooksPath comes from your global git config.*--shared-hooks/);
+  assert.deepEqual(readdirSync(shared), []);
+  const ok = await run(['init', '--shared-hooks']);
+  assert.equal(ok.code, 0, ok.out);
+  assert.match(ok.out, /core\.hooksPath is shared \(global config\)/);
+  assert.ok(readdirSync(shared).includes('post-commit'));
+});
+
+test('a hook file tracked in git is skipped: no local paths go into committed files', () => {
+  const dir = repo();
+  mkdirSync(join(dir, 'githooks'));
+  writeFileSync(join(dir, 'githooks', 'post-commit'), '#!/bin/sh\necho team\n', { mode: 0o755 });
+  git(dir, ['add', 'githooks/post-commit']);
+  git(dir, ['commit', '-q', '-m', 'team hooks']);
+  git(dir, ['config', 'core.hooksPath', 'githooks']);
+  const { done, skipped } = install(dir, fakeLauncher());
+  assert.deepEqual(done, ['pre-push', 'post-checkout']);
+  assert.match(skipped[0], /^post-commit: tracked in git/);
+  assert.equal(readFileSync(join(dir, 'githooks', 'post-commit'), 'utf8'), '#!/bin/sh\necho team\n');
+});
+
+test('an eocrm-created hook keeps what the user added: re-init and uninstall strip only eocrm lines', () => {
+  const dir = repo();
+  const fake = fakeLauncher();
+  install(dir, fake);
+  const file = join(dir, '.git', 'hooks', 'post-commit');
+  writeFileSync(file, `${readFileSync(file, 'utf8')}echo mine\n`);
+  install(dir, fake);
+  const text = readFileSync(file, 'utf8');
+  assert.equal(text.split('\n').filter((l) => l.endsWith('# eocrm-cli')).length, 2);
+  assert.ok(text.endsWith('echo mine\n'));
+  uninstall(dir);
+  assert.equal(readFileSync(file, 'utf8'), '#!/bin/sh\necho mine\n');
+  assert.equal(existsSync(join(dir, '.git', 'hooks', 'pre-push')), false);
+});
+
+test('binary and non-executable hooks are skipped and reported', () => {
+  const dir = repo();
+  const hooks = join(dir, '.git', 'hooks');
+  writeFileSync(join(hooks, 'post-commit'), Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0]), { mode: 0o755 });
+  writeFileSync(join(hooks, 'pre-push'), '#!/bin/sh\nexit 0\n', { mode: 0o644 });
+  const { done, skipped } = install(dir, fakeLauncher());
+  assert.deepEqual(done, ['post-checkout']);
+  assert.deepEqual(skipped.map((s) => s.split(':')[0]), ['post-commit', 'pre-push']);
+  assert.match(skipped[0], /not a script/);
+  assert.match(skipped[1], /not executable/);
+});
+
+test('lefthook: the command also goes into a git-ignored lefthook-local.yml, and uninstall restores it and the exclude file exactly', () => {
+  const dir = repo();
+  writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit:\n  commands:\n    lint:\n      run: echo lint\n');
+  const exclude = join(dir, '.git', 'info', 'exclude');
+  const excludeBefore = bytes(exclude);
+  const fake = fakeLauncher();
+  const { lefthook } = install(dir, fake);
+  assert.equal(lefthook, join(dir, 'lefthook-local.yml'));
+  const local = readFileSync(lefthook, 'utf8');
+  assert.match(local, /^# created by eocrm init # eocrm-cli\npost-commit: # eocrm-cli\n {2}commands: # eocrm-cli\n {4}eocrm: # eocrm-cli\n {6}run: '\( L=''/);
+  assert.ok(local.includes(`hook post-checkout --data ''${fake.data}'' {0} </dev/null`));
+  assert.equal(git(dir, ['check-ignore', 'lefthook-local.yml']).trim(), 'lefthook-local.yml');
+  assert.equal(git(dir, ['status', '--porcelain', '--', 'lefthook-local.yml']), '');
+  rmHookLines(dir);
+  assert.deepEqual(installed(dir), ['post-commit', 'pre-push', 'post-checkout']);
+  install(dir, fake);
+  uninstall(dir);
+  assert.equal(existsSync(lefthook), false);
+  assert.deepEqual(bytes(exclude), excludeBefore);
+});
+
+test('lefthook: an existing lefthook-local.yml keeps its bytes; one that already defines a hook is left alone', () => {
+  const dir = repo();
+  writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit: {}\n');
+  writeFileSync(join(dir, '.gitignore'), 'lefthook-local.yml\n');
+  writeFileSync(join(dir, 'lefthook-local.yml'), 'pre-commit:\n  skip: true');
+  const before = bytes(join(dir, 'lefthook-local.yml'));
+  install(dir, fakeLauncher());
+  assert.ok(readFileSync(join(dir, 'lefthook-local.yml'), 'utf8').endsWith('# eocrm-cli\npre-commit:\n  skip: true'));
+  uninstall(dir);
+  assert.deepEqual(bytes(join(dir, 'lefthook-local.yml')), before);
+  writeFileSync(join(dir, 'lefthook-local.yml'), 'post-commit:\n  skip: true\n');
+  const { skipped } = install(dir, fakeLauncher());
+  assert.match(skipped.at(-1), /^lefthook-local: .*already defines post-commit/);
+});
+
+// Simulates a hook manager regenerating its hook files without the eocrm line.
+function rmHookLines(dir) {
+  for (const n of ['post-commit', 'pre-push', 'post-checkout']) {
+    const f = join(dir, '.git', 'hooks', n);
+    if (existsSync(f)) writeFileSync(f, readFileSync(f, 'utf8').split('\n').filter((l) => !l.includes('eocrm')).join('\n'));
+  }
+}
+
+test('status, sync and run start warn when a hook manager dropped the eocrm hooks; status names a broken stable copy', async () => {
+  const dir = repo();
+  const xdg = tmp('xdg');
+  const data = join(xdg, 'eocrm');
+  mkdirSync(data);
+  writeFileSync(join(data, 'account.json'), JSON.stringify({ region: 'eu', workspace: 'acme', workspaces: { acme: 'standalone' } }));
+  const run = async (argv) => {
+    const out = [];
+    await main({ argv, cwd: dir, env: { XDG_DATA_HOME: xdg }, out: (l) => out.push(l), err: (l) => out.push(l), store: { get: async () => ({ access_token: 'at' }), update: async () => null }, spawnFlush: () => {}, harness: 'cli' });
+    return out.join('\n');
+  };
+  await run(['init', '--agent', 'roo']);
+  assert.doesNotMatch(await run(['status']), /missing/);
+  rmHookLines(dir);
+  const warning = /eocrm hooks missing from post-commit, pre-push, post-checkout .*run eocrm init again/;
+  assert.match(await run(['status']), warning);
+  assert.match(await run(['run', 'start']), warning);
+  assert.match(await run(['sync']), warning);
+  const version = launcherTarget(data);
+  rmSync(join(data, 'bin', version), { recursive: true });
+  assert.match(await run(['status']), /copy of the CLI is missing or broken: run npx @eocrm\/cli@latest init/);
+});
+
+test('post-checkout to another branch spawns the sync that ends the old branch\'s run and checks its PR', async () => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
+  const spawned = [];
+  const ctx = ctxOf(data, { spawnSync: () => spawned.push('sync') });
+  assert.equal(await runHook(ctx, 'post-checkout', dir, ['a', 'b', '1']), 'quiet');
+  await startRun(ctx, dir, 'aider');
+  assert.equal(await runHook(ctx, 'post-checkout', dir, ['a', 'b', '0']), 'quiet');
+  assert.equal(await runHook(ctx, 'post-checkout', dir, ['a', 'b', '1']), 'queued');
+  assert.deepEqual(spawned, ['sync']);
 });

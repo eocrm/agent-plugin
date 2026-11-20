@@ -8,8 +8,8 @@ import { storeFor, spawnWithStdin } from '../lib/credentials.mjs';
 import { login, openBrowser, requestPair, recordPairing, pairing, plain } from '../lib/login.mjs';
 import { accountFile, loadAccount, resolveWorkspace, useWorkspace, answerCommitted, committedLine, command as cmd, repoEntry, updateRepo } from '../lib/workspace.mjs';
 import { AGENTS } from '../lib/cli/attribute.mjs';
-import { hooksDir, install, installCopy, installed, uninstall } from '../lib/cli/hooks.mjs';
-import { agentFor, liveRuns, pluginLive, runHook, startRun, stopRuns, sync } from '../lib/cli/run.mjs';
+import { hooksDir, hooksScope, install, installCopy, installed, launcherTarget, uninstall } from '../lib/cli/hooks.mjs';
+import { agentFor, endStale, liveRuns, pluginLive, queuePr, runHook, startRun, stopRuns, sync } from '../lib/cli/run.mjs';
 import { linkWorktree, runsOf, runClient, spawnFlush as realSpawnFlush } from '../lib/run.mjs';
 import { loadConventions } from '../lib/reconcile.mjs';
 import { enqueue } from '../lib/outbox.mjs';
@@ -17,7 +17,7 @@ import { eventId } from '../lib/ids.mjs';
 import { taskFor } from '../lib/detect.mjs';
 import { worktreeOf, lastHookAt, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
 
-const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' }, agent: { type: 'string' }, quiet: { type: 'boolean' } };
+const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' }, agent: { type: 'string' }, quiet: { type: 'boolean' }, 'shared-hooks': { type: 'boolean' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
@@ -62,16 +62,42 @@ const need = (v, name) => {
   return v;
 };
 
-function cliStatus({ cwd, out, data }) {
-  const hooks = installed(cwd);
-  out(hooks.length ? `hooks ${hooks.join(', ')}` : 'hooks not installed: run eocrm init');
-  const agent = repoEntry(data, cwd).agent;
-  out(agent ? `agent ${agent}` : 'no agent set');
-  if (pluginLive(cwd, Date.now())) out(LIVE);
-  for (const r of liveRuns(data, cwd)) {
+function missingHooks(data, cwd) {
+  const entry = repoEntry(data, cwd);
+  if (!entry.initialized) return [];
+  const have = installed(cwd);
+  return (entry.hooks ?? []).filter((h) => !have.includes(h));
+}
+
+const warnMissing = (data, cwd, out) => {
+  const missing = missingHooks(data, cwd);
+  if (missing.length) out(`eocrm hooks missing from ${missing.join(', ')} (a hook manager rewrote them?): run eocrm init again`);
+};
+
+async function cliStatus({ cwd, out, data, env, store, harness }) {
+  const ctx = { data, env, store, harness, now: Date.now };
+  const entry = repoEntry(data, cwd);
+  if (!entry.initialized) out('not set up in this repository: run eocrm init');
+  else {
+    const hooks = installed(cwd);
+    out(hooks.length ? `hooks ${hooks.join(', ')}` : 'hooks not installed: run eocrm init');
+    warnMissing(data, cwd, out);
+  }
+  if (!launcherTarget(data)) out('the hooks\' copy of the CLI is missing or broken: run npx @eocrm/cli@latest init');
+  out(entry.agent ? `agent ${entry.agent}` : 'no agent set');
+  if (pluginLive(cwd, Date.now())) {
+    out(LIVE);
+    return;
+  }
+  for (const r of await endStale(ctx, cwd)) out(`run ${r.agent} ended: idle or on another branch`);
+  const runs = liveRuns(data, cwd);
+  for (const r of runs) {
     out(`run ${r.agent}${r.explicit ? ' (started)' : ''}${r.start?.task ? ` on ${r.start.task}` : ''}`);
     if (r.outdated) out(`this CLI is below the minimum ${plain(r.outdated.minimum ?? 'version')}: run npx @eocrm/cli@latest init`);
+    const pr = await queuePr(ctx, cwd, r).catch(() => null);
+    if (pr) out(`pull request #${pr.number} ${pr.action}`);
   }
+  if (runs.length) realSpawnFlush(ctx);
 }
 
 const commands = {
@@ -118,7 +144,7 @@ const commands = {
       const ran = lastHookAt(data, worktreeOf(cwd).key);
       if (ran === null || ran < (account.signedInAt ?? 0)) out(TRUST);
     }
-    if (harness === 'cli') cliStatus({ cwd, out, data });
+    if (harness === 'cli') await cliStatus({ cwd, out, data, env, store, harness });
     if (!workspace) return;
     out(`workspace ${workspace} (${source})`);
     const known = account.workspaces?.[workspace];
@@ -180,23 +206,28 @@ const commands = {
     const { values, positionals: [workspace], env, cwd, out, data, store, harness } = ctx;
     if (harness !== 'cli') throw new Usage(CLI_ONLY('init'));
     if (values.agent !== undefined && values.agent !== 'none' && !AGENTS.includes(values.agent)) throw new Usage(`--agent must be ${[...AGENTS, 'none'].join('|')}`);
-    hooksDir(cwd);
+    const dir = hooksDir(cwd);
+    const scope = hooksScope(cwd);
+    if (scope?.shared && !values['shared-hooks']) throw new Usage(`core.hooksPath comes from your ${scope.scope} git config, so ${dir} is shared by other repositories: pass --shared-hooks to add eocrm there anyway`);
+    if (scope?.shared) out(`core.hooksPath is shared (${scope.scope} config): eocrm's line goes into ${dir} for every repository using it, and stays quiet where eocrm init never ran`);
     const account = loadAccount(data);
     const tokens = account.region ? await store.get(endpoints({ region: account.region, env }).key, { timeoutMs: 2500 }) : null;
     if (!tokens?.access_token || (workspace && !(workspace in (account.workspaces ?? {})))) await commands.login({ ...ctx, positionals: [workspace] });
     if (workspace) useWorkspace({ data, cwd, workspace });
-    if (values.agent !== undefined) updateRepo(data, cwd, { agent: values.agent === 'none' ? null : values.agent });
     const launcher = installCopy(data);
-    const { dir, done, skipped } = install(cwd, { launcher, data });
-    out(`git hooks in ${dir}: ${done.join(', ')}`);
-    for (const name of skipped) out(`${name} skipped: not a shell script, so eocrm cannot chain it`);
+    const { done, skipped, lefthook } = install(cwd, { launcher, data });
+    updateRepo(data, cwd, { initialized: true, hooks: done, ...(values.agent !== undefined ? { agent: values.agent === 'none' ? null : values.agent } : {}) });
+    out(`git hooks in ${dir}: ${done.join(', ') || 'none'}`);
+    if (lefthook) out(`lefthook: commands added to ${lefthook}`);
+    for (const why of skipped) out(`skipped ${why}`);
     const agent = repoEntry(data, cwd).agent;
     out(agent ? `commits without an agent signal count as ${agent}` : `no agent set: only commits with an agent signal are tracked (eocrm init --agent ${AGENTS.join('|')})`);
   },
 
-  async uninstall({ cwd, out, harness }) {
+  async uninstall({ data, cwd, out, harness }) {
     if (harness !== 'cli') throw new Usage(CLI_ONLY('uninstall'));
     const { dir, removed } = uninstall(cwd);
+    if (repoEntry(data, cwd).initialized) updateRepo(data, cwd, { initialized: false, hooks: [] });
     out(removed.length ? `removed eocrm from ${removed.join(', ')} in ${dir}` : 'no eocrm hooks here');
   },
 
@@ -209,6 +240,7 @@ const commands = {
     if (harness !== 'cli') throw new Usage(CLI_ONLY('sync'));
     const { quiet, runs, result } = await sync({ data, env, store, harness, now: Date.now }, cwd);
     if (values.quiet) return;
+    warnMissing(data, cwd, out);
     if (quiet) out(LIVE);
     else if (!runs) out('no active run here: eocrm run start');
     else out(`sent ${result.sent}${result.retryable ? ', more queued' : ''}${result.signedOut ? ': signed out, run eocrm login' : ''}`);
@@ -231,6 +263,7 @@ const commands = {
     if (!run) throw new Usage(`no workspace: run ${cmd(harness, 'init')}`);
     ctx.spawnFlush(ctx);
     out(`run started for ${agent}`);
+    warnMissing(data, cwd, out);
   },
 
   async logout({ env, out, data, store, harness }) {

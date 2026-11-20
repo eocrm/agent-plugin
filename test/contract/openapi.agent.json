@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "eocrm",
-    "version": "0.29.4"
+    "version": "0.32.0"
   },
   "paths": {
     "/v1/agent-runs": {
@@ -333,7 +333,7 @@
       },
       "get": {
         "operationId": "agentRun.events.index",
-        "description": "Oldest first, 100 per page, without `waiting`, `resumed` and `turn` signals; `task` narrows to one task's events. Pass `next_cursor` back as `cursor`.",
+        "description": "Oldest first, 100 per page, without `waiting`, `resumed` and `turn` signals; `task` narrows to one task's events, or to those on no task when `none`. Pass `next_cursor` back as `cursor`. `details_pruned_at`: when the run's details were last removed after a period without activity.",
         "summary": "List a run's events",
         "tags": [
           "AgentRun"
@@ -568,6 +568,14 @@
               "null"
             ],
             "maxLength": 200
+          },
+          "agent_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The coding tool driving the run (`claude_code`, `cursor`, `codex`, `cline`, `roo`, `opencode`, `aider`), shown in place of the connection's kind; any other value is ignored.",
+            "maxLength": 32
           }
         },
         "required": [
@@ -674,6 +682,12 @@
               "null"
             ]
           },
+          "details_pruned_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "messages": {
             "type": "array",
             "items": {
@@ -696,7 +710,8 @@
           "ended_at",
           "duration_seconds",
           "usage",
-          "model"
+          "model",
+          "details_pruned_at"
         ],
         "title": "AgentRunData"
       },
@@ -1147,11 +1162,18 @@
               "string",
               "null"
             ]
+          },
+          "details_pruned_at": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "items",
-          "next_cursor"
+          "next_cursor",
+          "details_pruned_at"
         ],
         "title": "AgentRunEventListData"
       },

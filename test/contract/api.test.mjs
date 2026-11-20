@@ -49,8 +49,8 @@ async function setup(t, { responses, tokens, ...opts } = {}) {
   return { server, store, client };
 }
 
-test('snapshot is the pinned slice of eocrm 0.29.4', () => {
-  assert.equal(snapshot.info.version, '0.29.4');
+test('snapshot is the pinned slice of eocrm 0.32.0', () => {
+  assert.equal(snapshot.info.version, '0.32.0');
   const ops = Object.entries(snapshot.paths).flatMap(([p, ms]) => Object.keys(ms).map((m) => `${m} ${p}`));
   assert.deepEqual(ops.sort(), OPERATIONS.map(([p, m]) => `${m} ${p}`).sort());
 });
@@ -61,6 +61,7 @@ test('a CLI run start carries its agent_kind and the CLI User-Agent', async (t) 
   const [req] = server.requests.filter((r) => r.path === '/v1/agent-runs');
   assert.equal(req.body.agent_kind, 'cline');
   assert.match(req.headers['user-agent'], /^eocrm-cli\/\d+\.\d+\.\d+ \(cline\)$/);
+  assert.equal((await client.startRun({ client_run_id: 'cli-k-x', agent_kind: 'x'.repeat(33) })).status, 422);
 });
 
 test('each method hits its documented path with the bearer', async (t) => {
