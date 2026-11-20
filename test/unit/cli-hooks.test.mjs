@@ -11,7 +11,7 @@ import { prStatus } from '../../lib/git.mjs';
 import { handle, runClient } from '../../lib/run.mjs';
 import { outdatedNotice } from '../../lib/flush.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
-import { LIVE_MS, LockTimeout, liveDirOf, liveSession, loadRun, loadWorktree, saveRun, worktreeOf } from '../../lib/state.mjs';
+import { LIVE_MS, LockTimeout, git as stateGit, gitTimeout, liveDirOf, liveSession, loadRun, loadWorktree, saveRun, worktreeOf } from '../../lib/state.mjs';
 import { updateClone, updateRepo } from '../../lib/workspace.mjs';
 import { VERSION } from '../../lib/api.mjs';
 import { main } from '../../scripts/eocrm.mjs';
@@ -603,7 +603,7 @@ test('the init gate is per clone: uninstall in one clone leaves another tracking
 });
 
 test('info/exclude is restored byte for byte: no trailing newline, or a file eocrm created', () => {
-  for (const before of ['# mine', null]) {
+  for (const before of ['mine.txt', null]) {
     const dir = repo();
     writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit: {}\n');
     const exclude = join(dir, '.git', 'info', 'exclude');
@@ -611,6 +611,7 @@ test('info/exclude is restored byte for byte: no trailing newline, or a file eoc
     else writeFileSync(exclude, before);
     install(dir, fakeLauncher());
     assert.equal(git(dir, ['check-ignore', 'lefthook-local.yml']).trim(), 'lefthook-local.yml');
+    if (before) assert.equal(git(dir, ['check-ignore', 'mine.txt']).trim(), 'mine.txt');
     uninstall(dir);
     assert.equal(existsSync(exclude) ? readFileSync(exclude, 'utf8') : null, before);
   }
@@ -649,4 +650,23 @@ test('status sends the finish of runs it ended as idle', async () => {
   await main({ argv: ['status'], cwd: dir, env: { XDG_DATA_HOME: xdg }, out: (l) => out.push(l), err: () => {}, store: { get: async () => ({ access_token: 'at' }) }, spawnFlush: () => flushes.push(1), harness: 'cli' });
   assert.match(out.join('\n'), /run aider ended: idle/);
   assert.equal(flushes.length, 1);
+});
+
+test('past the hook deadline git is not run at all', () => {
+  const calls = [];
+  const run = (cmd, args, opts) => {
+    calls.push(opts.timeout);
+    return 'ok';
+  };
+  const saved = { ...gitTimeout };
+  try {
+    Object.assign(gitTimeout, { ms: 1000, deadline: Date.now() + 300 });
+    assert.equal(stateGit('/w', ['status'], run), 'ok');
+    Object.assign(gitTimeout, { deadline: Date.now() - 1 });
+    assert.equal(stateGit('/w', ['status'], run), '');
+  } finally {
+    Object.assign(gitTimeout, saved);
+  }
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] <= 300);
 });
