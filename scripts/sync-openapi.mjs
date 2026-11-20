@@ -9,6 +9,7 @@ export const OPERATIONS = [
   ['/v1/agent-runs/{id}/events', 'post'],
   ['/v1/agent-runs/{id}/events', 'get'],
   ['/v1/agent-work/conventions', 'get'],
+  ['/v1/agent-work/tasks', 'post'],
   ['/v1/agent-runs/pairable', 'get'],
   ['/v1/agent-runs/pair', 'post'],
 ];

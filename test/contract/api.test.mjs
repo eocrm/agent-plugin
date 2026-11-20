@@ -64,6 +64,18 @@ test('a CLI run start carries its agent_kind and the CLI User-Agent', async (t) 
   assert.equal((await client.startRun({ client_run_id: 'cli-k-x', agent_kind: 'x'.repeat(33) })).status, 422);
 });
 
+test('importTask posts a scrubbed plan import; the same client_ref returns the same task', async (t) => {
+  const { server, client } = await setup(t);
+  const body = { client_ref: 'r1', space: 'EO', title: `t ${GHP}`, description: `## Why\n\n${GHP}`, plan: { source: 'openspec', path: 'openspec/changes/a/tasks.md', items: [{ key: '1.1', text: `a ${GHP}` }] } };
+  const first = await client.importTask(body);
+  assert.equal(first.status, 201);
+  assert.deepEqual(await client.importTask(body), { status: 200, body: first.body });
+  const sent = server.requests.filter((r) => r.path === '/v1/agent-work/tasks');
+  assert.equal(sent.length, 2);
+  assert.doesNotMatch(JSON.stringify(sent.map((r) => r.body)), /ghp_/);
+  assert.equal(sent[0].body.description.split('\n')[0], '## Why');
+});
+
 test('each method hits its documented path with the bearer', async (t) => {
   const { server, client } = await setup(t);
   const run = await client.startRun({ client_run_id: 's1', branch: 'feature/X-1', repo: 'o/r' });

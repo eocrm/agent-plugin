@@ -66,6 +66,7 @@ export async function startFixtureServer({ responses = {}, messages = [] } = {})
   const auth = { clientId: 'fixture-client', access: 'fixture-access-0', refresh: 'fixture-refresh-0' };
   const codes = new Map();
   const runs = new Map();
+  const imports = new Map();
 
   const tokenPair = () => {
     n += 1;
@@ -153,6 +154,13 @@ export async function startFixtureServer({ responses = {}, messages = [] } = {})
     },
     'agentWork.workspaces': () => ({ status: 200, body: { items: [{ slug: 'acme', name: 'Acme', agent_work: true }] } }),
     'agentWorkConventions.show': () => ({ status: 200, body: recorded('agentWorkConventions.show') }),
+    'agentWorkTasks.store': ({ body }) => {
+      const hit = imports.get(body.client_ref);
+      if (hit) return { status: 200, body: hit };
+      const task = { id: `01JZTASK${String(imports.size + 1).padStart(18, '0')}`, key: `EO-${imports.size + 1}` };
+      imports.set(body.client_ref, task);
+      return { status: 201, body: task };
+    },
     'agentRun.pairable': () => ({ status: 200, body: recorded('agentRun.pairable') }),
     'agentRun.pair': ({ body }) => recorded('agentRun.pairable').items.some((c) => c.id === body.connection_id)
       ? { status: 202, body: recorded('agentRun.pair') }

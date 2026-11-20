@@ -10,5 +10,6 @@
   "plan_import": false,
   "keep_project_current": false,
   "task_switch_check": "after_pause",
-  "workflows": []
+  "workflows": [],
+  "spaces": [{ "id": "01JZSPACE00000000000000000", "key": "EO", "name": "Engineering" }]
 }

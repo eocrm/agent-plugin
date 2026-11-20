@@ -16,8 +16,9 @@ import { enqueue } from '../lib/outbox.mjs';
 import { eventId } from '../lib/ids.mjs';
 import { taskFor } from '../lib/detect.mjs';
 import { worktreeOf, lastHookAt, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
+import { CHANGE_ID, importChanges, linkChange } from '../lib/cli/openspec.mjs';
 
-const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' }, agent: { type: 'string' }, quiet: { type: 'boolean' }, 'shared-hooks': { type: 'boolean' } };
+const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' }, agent: { type: 'string' }, quiet: { type: 'boolean' }, 'shared-hooks': { type: 'boolean' }, space: { type: 'string' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
@@ -156,7 +157,13 @@ const commands = {
     if (pending) out(committedLine(pending, harness));
   },
 
-  async link({ values, positionals: [answer], env, cwd, out, data, spawnFlush, harness }) {
+  async link({ values, positionals: [answer, change], env, cwd, out, data, spawnFlush, harness }) {
+    if (change !== undefined) {
+      if (!CHANGE_ID.test(answer) || (change !== 'none' && !LINK_KEY.test(change))) throw new Usage('usage: eocrm link <change> <KEY|none>');
+      linkChange(data, cwd, answer, change === 'none' ? null : change);
+      out(change === 'none' ? `${answer} not linked` : `${answer} linked to ${change}`);
+      return;
+    }
     if (answer !== 'none' && !LINK_KEY.test(answer ?? '')) throw new Usage('usage: eocrm link <KEY|none>');
     const taskKey = answer === 'none' ? null : answer;
     const { others, pending } = await linkWorktree({ data, env, now: Date.now, spawnFlush, harness }, cwd, taskKey, values.session);
@@ -268,6 +275,13 @@ const commands = {
     warnMissing(data, cwd, out);
   },
 
+  async openspec({ values, positionals: [action], cwd, out, data, env, store, harness }) {
+    if (action !== 'import') throw new Usage('usage: eocrm openspec import [--space <KEY>]');
+    const { workspace, region } = resolveWorkspace({ data, cwd });
+    if (!workspace || !region) throw new Usage(`workspace required: run ${cmd(harness, 'init')}`);
+    return importChanges({ client: createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }), data, cwd, space: values.space, out });
+  },
+
   async logout({ env, out, data, store, harness }) {
     const account = loadAccount(data);
     const keys = new Set(Array.isArray(account.keys) ? account.keys : []);
@@ -345,7 +359,7 @@ export async function main({
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
-    if (!command) throw new Usage('usage: eocrm init|login|use|pair|status|link|record|conventions|sync|run|uninstall|logout|smoke-seed --data <dir>');
+    if (!command) throw new Usage('usage: eocrm init|login|use|pair|status|link|record|conventions|sync|run|openspec|uninstall|logout|smoke-seed --data <dir>');
     const harness = forced ?? cliHarness({ flag: values.harness, env, script });
     if (harness === 'codex') values.session ||= env.CODEX_THREAD_ID;
     if (values.session && !/^[\w-]+$/.test(values.session)) throw new Usage('invalid --session');

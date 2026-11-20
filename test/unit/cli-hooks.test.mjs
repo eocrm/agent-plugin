@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync, spawnSync as runSync } from 'node:child_process';
 import { AGENTS, agentOf, detectAgent } from '../../lib/cli/attribute.mjs';
 import { hookLine, install, installCopy, installed, uninstall, launcherOf, launcherTarget } from '../../lib/cli/hooks.mjs';
-import { HOOK_MS, IDLE_MS, runHook, sessionOf, startRun, sync } from '../../lib/cli/run.mjs';
+import { HOOK_MS, IDLE_MS, runHook, sessionOf, startRun, stopRuns, sync } from '../../lib/cli/run.mjs';
 import { prStatus } from '../../lib/git.mjs';
 import { handle, runClient } from '../../lib/run.mjs';
 import { outdatedNotice } from '../../lib/flush.mjs';
@@ -165,7 +165,7 @@ test('run identity: one session per worktree and agent, a new run when the agent
   now += IDLE_MS + 1;
   await commit('three', { CURSOR_AGENT: '1' });
   assert.equal(loadRun(data, cursor).clientRunId, `${cursor}.1`);
-  assert.ok(readOutbox(data).some((e) => e.kind === 'finish' && e.sessionId === `${cursor}--w0`));
+  assert.equal(readOutbox(data).find((e) => e.kind === 'finish' && e.sessionId === `${cursor}--w0`).endedAt, new Date(1_060_000 + IDLE_MS).toISOString());
   await commit('four', { CLINE_ACTIVE: 'true' });
   assert.equal(loadRun(data, cursor).ended, true);
   const cline = sessionOf(key, 'cline');
@@ -193,6 +193,29 @@ test('sync ends a commit-bounded run idle past IDLE_MS; an explicit run stays', 
   now += 10 * IDLE_MS;
   await sync(ctx, dir);
   assert.equal(loadRun(data, sessionOf(key, 'roo')).ended, false);
+});
+
+test('idle and branch-switch ends are stamped at the last commit plus IDLE_MS, never after now; run stop is not', async () => {
+  const dir = repo();
+  const data = cliData();
+  initRepo(data, dir);
+  let now = 1_000_000;
+  const ctx = ctxOf(data, { now: () => now });
+  const key = worktreeOf(dir).key;
+  const finishOf = (agent) => readOutbox(data).find((e) => e.kind === 'finish' && e.sessionId === sessionOf(key, agent));
+  await startRun(ctx, dir, 'aider');
+  saveRun(data, sessionOf(key, 'aider'), { lastCommitAt: 1_500_000 });
+  now = 1_500_000 + 5 * IDLE_MS;
+  await sync(ctx, dir);
+  assert.equal(finishOf('aider').endedAt, new Date(1_500_000 + IDLE_MS).toISOString());
+  await startRun(ctx, dir, 'roo');
+  now += 1000;
+  git(dir, ['checkout', '-q', '-b', 'other']);
+  await sync(ctx, dir);
+  assert.equal(finishOf('roo').endedAt, new Date(now).toISOString());
+  await startRun(ctx, dir, 'cline', { explicit: true });
+  await stopRuns(ctx, dir);
+  assert.equal(finishOf('cline').endedAt, undefined);
 });
 
 test('a live Claude Code session in the worktree keeps the CLI quiet until the session ends', async () => {
