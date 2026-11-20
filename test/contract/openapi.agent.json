@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "eocrm",
-    "version": "0.29.4"
+    "version": "0.32.0"
   },
   "paths": {
     "/v1/agent-runs": {
@@ -333,7 +333,7 @@
       },
       "get": {
         "operationId": "agentRun.events.index",
-        "description": "Oldest first, 100 per page, without `waiting`, `resumed` and `turn` signals; `task` narrows to one task's events. Pass `next_cursor` back as `cursor`.",
+        "description": "Oldest first, 100 per page, without `waiting`, `resumed` and `turn` signals; `task` narrows to one task's events, or to those on no task when `none`. Pass `next_cursor` back as `cursor`. `details_pruned_at`: when the run's details were last removed after a period without activity.",
         "summary": "List a run's events",
         "tags": [
           "AgentRun"
@@ -398,7 +398,7 @@
     "/v1/agent-work/conventions": {
       "get": {
         "operationId": "agentWorkConventions.show",
-        "summary": "The workspace's conventions for agents. Null or [] means ask the member; status roles are hints, stage flags decide done and canceled",
+        "summary": "The workspace's conventions for agents. Null or [] means ask the member; status roles are hints, stage flags decide done and canceled. `spaces`: where the member can create tasks, empty without `tasks.manage`",
         "tags": [
           "Conventions"
         ],
@@ -421,6 +421,102 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFoundHttpException"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/agent-work/tasks": {
+      "post": {
+        "operationId": "agentWorkTasks.store",
+        "description": "Creates a task for a plan file, as the member: an epic when the workspace files a slice as one. Idempotent per member on `client_ref`: a retry returns the same task with 200, and a deleted one is created again. Needs `tasks.manage`.",
+        "summary": "Import a plan as a task",
+        "tags": [
+          "AgentTaskImport"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportAgentTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The task already existed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedAgentTaskData"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The task was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedAgentTaskData"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationException"
+          },
+          "403": {
+            "$ref": "#/components/responses/AuthorizationException"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundHttpException"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationException"
+          },
+          "426": {
+            "description": "The plugin is older than `minimum` (`plugin_outdated`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "minimum": {
+                      "type": "string"
+                    },
+                    "latest": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "update": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "code",
+                    "minimum",
+                    "latest",
+                    "update"
+                  ]
+                }
+              }
+            }
           }
         },
         "security": [
@@ -568,6 +664,14 @@
               "null"
             ],
             "maxLength": 200
+          },
+          "agent_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The coding tool driving the run (`claude_code`, `cursor`, `codex`, `cline`, `roo`, `opencode`, `aider`), shown in place of the connection's kind; any other value is ignored.",
+            "maxLength": 32
           }
         },
         "required": [
@@ -674,6 +778,12 @@
               "null"
             ]
           },
+          "details_pruned_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "messages": {
             "type": "array",
             "items": {
@@ -696,7 +806,8 @@
           "ended_at",
           "duration_seconds",
           "usage",
-          "model"
+          "model",
+          "details_pruned_at"
         ],
         "title": "AgentRunData"
       },
@@ -723,6 +834,11 @@
               "failed",
               "abandoned"
             ]
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the work ended, if earlier than this request; read only when `state` ends the run, and kept between the run's last activity and now."
           }
         },
         "title": "UpdateAgentRunRequest"
@@ -1042,6 +1158,7 @@
                     "superpowers",
                     "markdown",
                     "todo",
+                    "openspec",
                     null
                   ]
                 },
@@ -1147,11 +1264,18 @@
               "string",
               "null"
             ]
+          },
+          "details_pruned_at": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "items",
-          "next_cursor"
+          "next_cursor",
+          "details_pruned_at"
         ],
         "title": "AgentRunEventListData"
       },
@@ -1448,6 +1572,28 @@
                 "statuses"
               ]
             }
+          },
+          "spaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "key",
+                "name"
+              ]
+            }
           }
         },
         "required": [
@@ -1462,9 +1608,109 @@
           "plan_import",
           "keep_project_current",
           "task_switch_check",
-          "workflows"
+          "workflows",
+          "spaces"
         ],
         "title": "ResolvedConventionsData"
+      },
+      "ImportAgentTaskRequest": {
+        "type": "object",
+        "properties": {
+          "client_ref": {
+            "type": "string",
+            "description": "The client's own key for what it imports, such as the repo remote and change id; a retry by the same member returns the same task.",
+            "maxLength": 500
+          },
+          "space": {
+            "type": "string",
+            "description": "Space id or key (any case); one the member can see. `spaces` in the conventions lists them.",
+            "maxLength": 26
+          },
+          "title": {
+            "type": "string",
+            "description": "Cut to 255 characters, secrets redacted.",
+            "maxLength": 1020
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Markdown, cut to 10000 characters, secrets redacted.",
+            "maxLength": 40000
+          },
+          "plan": {
+            "type": "object",
+            "description": "The plan file as a `plan` event carries it ({source, path, items}), with a path; `todo` plans have no file and are refused. Becomes the checklist when the workspace imports plans, unless the task is an epic awaiting its PR subtasks.",
+            "properties": {
+              "path": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "superpowers",
+                  "markdown",
+                  "openspec"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:-]{1,100}$"
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "text"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 200
+              },
+              "restored": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "path",
+              "source",
+              "items"
+            ]
+          }
+        },
+        "required": [
+          "client_ref",
+          "space",
+          "title",
+          "plan"
+        ],
+        "title": "ImportAgentTaskRequest"
+      },
+      "ImportedAgentTaskData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key"
+        ],
+        "title": "ImportedAgentTaskData"
       },
       "PairableConnectionListData": {
         "type": "object",

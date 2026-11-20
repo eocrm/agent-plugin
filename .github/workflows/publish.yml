@@ -1,0 +1,30 @@
+name: publish
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:contract
+      - name: Tag matches package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: test "$TAG" = "v$(node -p "require('./package.json').version")"
+      - name: Require npm with trusted publishing
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016
+          node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); if (a < 11 || (a === 11 && (b < 5 || (b === 5 && c < 1)))) { console.error(`::error::npm ${process.argv[1]} lacks trusted publishing (needs >= 11.5.1)`); process.exit(1); }' "$(npm --version)"
+      - run: npm publish --@eocrm:registry=https://registry.npmjs.org --provenance --access public

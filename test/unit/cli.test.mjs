@@ -171,7 +171,8 @@ test('login without --region signs in through the EU endpoints', async (t) => {
   const store = credentialStore({ data, platform: 'none' });
   const { code, out } = await cli(['login', '--data', data, 'acme'], { env: server.endpointsEnv, store, openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) });
   assert.equal(code, 0);
-  assert.match(out, /^signed in to acme \(eu\)$/m);
+  assert.match(out, /^Signed in at 127\.0\.0\.1:\d+ — reporting to acme \(eu\)$/m);
+  assert.doesNotMatch(out, /^signed in to /m);
   assert.equal(JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).region, 'eu');
 });
 
@@ -210,6 +211,27 @@ test('status on a requested pairing survives a 500 and an unreachable server', a
   const r = await cli(['status', '--data', data], { env: { EOCRM_ENDPOINTS: JSON.stringify({ issuer: 'http://127.0.0.1:1', api: 'http://127.0.0.1:1/{workspace}/api' }) }, store: credentialStore({ data, platform: 'none' }) });
   assert.equal(r.code, 0);
   assert.match(r.out, /^pairing requested$/m);
+});
+
+test('status names the signed-in host only for a known workspace in the account region', async (t) => {
+  const server = await startFixtureServer({});
+  t.after(() => server.close());
+  const store = credentialStore({ data: tmp('data'), platform: 'none' });
+  await store.set(endpoints({ region: 'eu', env: server.endpointsEnv }).key, { access_token: server.auth.access, refresh_token: server.auth.refresh, client_id: server.auth.clientId });
+  const status = async (extra, files) => {
+    const data = tmp('data');
+    account(data, extra);
+    const dir = repo('https://github.com/acme/widgets');
+    if (files) { committed(dir, files); await cli(['use', '--data', data, '--accept'], { cwd: dir }); }
+    return (await cli(['status', '--data', data], { cwd: dir, env: server.endpointsEnv, store })).out;
+  };
+  assert.match(await status({}), /^Signed in at /m);
+  const unknown = await status({ workspaces: {} });
+  assert.doesNotMatch(unknown, /^Signed in at /m);
+  assert.match(unknown, /^run eocrm login acme$|^run \/eocrm:login acme$/m);
+  const other = await status({ workspaces: { acme: 'standalone', beta: 'standalone' } }, { workspace: 'beta', region: 'ru' });
+  assert.doesNotMatch(other, /^Signed in at /m);
+  assert.match(other, /login --region ru beta$/m);
 });
 
 test('status makes no pairing request for paired or standalone', async (t) => {
@@ -256,14 +278,14 @@ test('login, pair, status and logout never print a token, code, verifier or stat
   assert.match(runs[0].out, /^open http:\/\/127\.0\.0\.1:5368[234]\/start to sign in\n/);
   assert.equal(runs[0].out, [
     runs[0].out.split('\n')[0],
-    'signed in to acme (eu)',
+    `Signed in at ${new URL(server.url).host} — reporting to acme (eu)`,
     `tokens stored in ${join(data, 'credentials.json')}: no keychain found`,
     'pairing: choose a connection, then run pair <id>',
     'connection 01JZ0000000000000000000010 Claude [31m Code A',
     'connection 01JZ0000000000000000000002 Claude [2J Code B',
   ].join('\n'));
   assert.equal(runs[1].out, 'pairing requested: approve in Account → Agents within 15 minutes: https://workspace.example.test/account/agents');
-  assert.equal(runs[2].out, 'signed in (eu)\nworkspace acme (default)\npairing requested');
+  assert.equal(runs[2].out, `signed in (eu)\nworkspace acme (default)\nSigned in at ${new URL(server.url).host} — reporting to acme\npairing requested`);
   assert.equal(runs[3].out, `signed out of ${server.url}`);
   assert.match(runs[4].out, /^signed out: run \/eocrm:login$/m);
   assert.equal(await store.get(endpoints({ region: 'eu', env: server.endpointsEnv }).key), null);

@@ -19,7 +19,7 @@ async function main() {
     const { event, harness } = parseArgs(argv);
     const ctx = { data, env: process.env, now: Date.now, harness };
     if (event === 'flush') {
-      await flush({ data, clientFor: runClient(ctx) });
+      await flush({ data, clientFor: runClient(ctx), harness });
       return;
     }
     gitTimeout.ms = HOOK_GIT_MS;

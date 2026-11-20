@@ -13,5 +13,6 @@
   "ended_at": null,
   "duration_seconds": 0,
   "usage": { "input_tokens": 0, "output_tokens": 0, "cost_usd": null, "wall_ms": 0 },
-  "model": null
+  "model": null,
+  "details_pruned_at": null
 }

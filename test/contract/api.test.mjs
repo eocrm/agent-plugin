@@ -49,10 +49,31 @@ async function setup(t, { responses, tokens, ...opts } = {}) {
   return { server, store, client };
 }
 
-test('snapshot is the pinned slice of eocrm 0.29.4', () => {
-  assert.equal(snapshot.info.version, '0.29.4');
+test('snapshot is the pinned slice of eocrm 0.32.0', () => {
+  assert.equal(snapshot.info.version, '0.32.0');
   const ops = Object.entries(snapshot.paths).flatMap(([p, ms]) => Object.keys(ms).map((m) => `${m} ${p}`));
   assert.deepEqual(ops.sort(), OPERATIONS.map(([p, m]) => `${m} ${p}`).sort());
+});
+
+test('a CLI run start carries its agent_kind and the CLI User-Agent', async (t) => {
+  const { server, client } = await setup(t, { harness: 'cli', agent: 'cline' });
+  assert.equal((await client.startRun({ client_run_id: 'cli-k-cline', agent_kind: 'cline' })).status, 201);
+  const [req] = server.requests.filter((r) => r.path === '/v1/agent-runs');
+  assert.equal(req.body.agent_kind, 'cline');
+  assert.match(req.headers['user-agent'], /^eocrm-cli\/\d+\.\d+\.\d+ \(cline\)$/);
+  assert.equal((await client.startRun({ client_run_id: 'cli-k-x', agent_kind: 'x'.repeat(33) })).status, 422);
+});
+
+test('importTask posts a scrubbed plan import; the same client_ref returns the same task', async (t) => {
+  const { server, client } = await setup(t);
+  const body = { client_ref: 'r1', space: 'EO', title: `t ${GHP}`, description: `## Why\n\n${GHP}`, plan: { source: 'openspec', path: 'openspec/changes/a/tasks.md', items: [{ key: '1.1', text: `a ${GHP}` }] } };
+  const first = await client.importTask(body);
+  assert.equal(first.status, 201);
+  assert.deepEqual(await client.importTask(body), { status: 200, body: first.body });
+  const sent = server.requests.filter((r) => r.path === '/v1/agent-work/tasks');
+  assert.equal(sent.length, 2);
+  assert.doesNotMatch(JSON.stringify(sent.map((r) => r.body)), /ghp_/);
+  assert.equal(sent[0].body.description.split('\n')[0], '## Why');
 });
 
 test('each method hits its documented path with the bearer', async (t) => {

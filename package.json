@@ -1,9 +1,23 @@
 {
-  "name": "eocrm-claude-plugin",
-  "version": "0.3.1",
+  "name": "@eocrm/cli",
+  "version": "0.4.0",
   "license": "Apache-2.0",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eocrm/agent-plugin.git"
+  },
   "type": "module",
+  "bin": {
+    "eocrm": "scripts/cli.mjs"
+  },
+  "files": [
+    "scripts/cli.mjs",
+    "scripts/eocrm.mjs",
+    "hooks/dispatch.mjs",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },

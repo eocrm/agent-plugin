@@ -265,6 +265,15 @@ test('a settled finish marks the run ended', async (t) => {
   assert.equal(loadRun(data, SID).ended, true);
 });
 
+test('a finish carrying endedAt sends it as ended_at', async (t) => {
+  const { server, data, go } = await setup(t);
+  saveRun(data, SID, { start: {} });
+  await enqueue(data, { kind: 'start', sessionId: SID });
+  await enqueue(data, { kind: 'finish', sessionId: SID, endedAt: '2026-11-20T10:30:00.000Z' });
+  assert.equal((await go()).sent, 2);
+  assert.deepEqual(server.requests.at(-1).body, { state: 'finished', ended_at: '2026-11-20T10:30:00.000Z' });
+});
+
 test('a dropped finish (409) also marks the run ended', async (t) => {
   const { data, go } = await setup(t, { 'agentRun.update': { status: 409, body: { code: 'run_ended', message: 'ended' } } });
   saveRun(data, SID, { runId: '01JZGONE0000000000000000000' });
