@@ -261,9 +261,18 @@ test('openspec import reports a plan another member owns and carries on', async 
     responses: { 'agentWorkTasks.store': ({ body }) => (body.plan.path === TASKS('add-list-command') ? { status: 422, body: { message: 'taken', code: 'plan_on_other_task', errors: { plan: ['taken'] } } } : undefined) },
   });
   const r = await cli('openspec', 'import', '--space', 'EO');
-  assert.equal(r.code, 1);
-  assert.ok(r.out.some((l) => /add-list-command: .*another task/.test(l)));
+  assert.equal(r.code, 0);
+  assert.ok(r.out.some((l) => /add-list-command: .*another task \(taken\)/.test(l)));
   assert.deepEqual(Object.keys(repoEntry(data, dir).openspec), ['install-skills-globally']);
+});
+
+test('openspec import still fails when a real error sits beside a plan already on a task', async (t) => {
+  const { cli } = await importer(t, {
+    responses: { 'agentWorkTasks.store': ({ body }) => (body.plan.path === TASKS('add-list-command') ? { status: 422, body: { message: 'taken', code: 'plan_on_other_task', errors: { plan: ['taken'] } } } : { status: 500, body: { message: 'boom' } }) },
+  });
+  const r = await cli('openspec', 'import', '--space', 'EO');
+  assert.equal(r.code, 1);
+  assert.ok(r.out.some((l) => /install-skills-globally: not imported \(HTTP 500/.test(l)));
 });
 
 test('eocrm link <change> <KEY> maps a change; none removes it', async (t) => {
