@@ -214,6 +214,12 @@ test('the hook passes pre-push refs to the chained hook and still runs it when t
   install(dir, { launcher: join(tmp('gone'), 'eocrm.mjs'), data: tmp('d') });
   git(dir, ['push', '-q', 'origin', 'main']);
   assert.match(readFileSync(join(dir, '.git', 'refs.log'), 'utf8'), /^refs\/heads\/main [0-9a-f]{40} refs\/heads\/main /);
+  const greedy = join(tmp('greedy'), 'eocrm.mjs');
+  writeFileSync(greedy, "import { readFileSync } from 'node:fs';\nreadFileSync(0);\n");
+  install(dir, { launcher: greedy, data: tmp('d') });
+  git(dir, ['commit', '-q', '--allow-empty', '-m', 'again']);
+  git(dir, ['push', '-q', 'origin', 'main']);
+  assert.match(readFileSync(join(dir, '.git', 'refs.log'), 'utf8'), /^refs\/heads\/main [0-9a-f]{40} refs\/heads\/main /);
 });
 
 test('on Windows the hook calls the absolute node and launcher in sh-safe quoting', () => {
