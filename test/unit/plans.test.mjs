@@ -232,3 +232,20 @@ test('activePlan on the default branch: plan files from the run\'s own commits; 
   git(dir, 'commit', '-q', '-am', 'code');
   assert.equal(activePlan(dir, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] }), null);
 });
+
+test('activePlan off the default branch ignores the run\'s own commits: the branch diff decides', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'main');
+  put(dir, 'docs/superpowers/plans/a.md', '- [ ] a\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'a');
+  git(dir, 'checkout', '-q', '-b', 'feat');
+  put(dir, 'docs/superpowers/plans/a.md', '- [x] a\n');
+  git(dir, 'commit', '-q', '-am', 'tick a');
+  const own = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'revert', '--no-edit', 'HEAD');
+  put(dir, 'docs/superpowers/plans/b.md', '- [ ] b\n', new Date(2020, 0, 1));
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'b');
+  assert.equal(activePlan(dir, { ownCommits: [own] }).path, 'docs/superpowers/plans/b.md');
+});
