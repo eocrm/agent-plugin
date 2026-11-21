@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches: [main, fix/cli-e2e]
+    branches: [main]
   pull_request:
 permissions:
   contents: read
