@@ -41,7 +41,9 @@ function pairingLines(p) {
 
 async function recheck({ data, env, store, workspace, region, harness }) {
   try {
-    const result = await pairing(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }));
+    const client = createClient({ endpoints: endpoints({ region, env }), workspace, store, harness });
+    let result = await pairing(client);
+    if (result.status === 'choose' && result.candidates.length === 1) result = await requestPair(client, result.candidates[0].id);
     if (result.status === 'choose' || result.refused) return ['pairing requested'];
     recordPairing(data, workspace, result.status);
     return pairingLines(result);

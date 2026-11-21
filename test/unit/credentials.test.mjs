@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync, existsSync, readFileSync, writeFileSync, readdirSync, rmSync, mkdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { credentialStore, spawnWithStdin } from '../../lib/credentials.mjs';
+import { credentialStore, storeFor, spawnWithStdin } from '../../lib/credentials.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'eocrm-cred-'));
 const ISSUER = 'https://id.eu.eocrm.io';
@@ -330,4 +330,22 @@ test('del with when deletes only while the stored tokens still match', async () 
   assert.equal((await store.get(ISSUER)).access_token, TOKENS.access_token);
   assert.equal(await store.del(ISSUER, { when: (t) => t?.access_token === TOKENS.access_token }), true);
   assert.equal(await store.get(ISSUER), null);
+});
+
+test('claude, codex and cli keychain entries are separate services', async () => {
+  const kc = new Map();
+  const { run } = fakeRun((cmd, args, stdin) => {
+    const key = `${args[args.indexOf('service') + 1]}|${args[args.indexOf('account') + 1]}`;
+    if (args[0] === 'store') { kc.set(key, stdin); return { code: 0, stdout: '' }; }
+    if (args[0] === 'lookup') return kc.has(key) ? { code: 0, stdout: kc.get(key) } : { code: 1, stdout: '' };
+    return { code: 0, stdout: '' };
+  });
+  const of = (h) => storeFor(tmp(), h, { platform: 'linux', run });
+  await of('codex').set(ISSUER, TOKENS);
+  assert.deepEqual(await of('codex').get(ISSUER), TOKENS);
+  assert.equal(await of('claude').get(ISSUER), null);
+  assert.equal(await of('cli').get(ISSUER), null);
+  assert.deepEqual([...kc.keys()], [`eocrm-codex-plugin|${ISSUER}`]);
+  await of('claude').set(ISSUER, TOKENS);
+  assert.ok(kc.has(`eocrm-claude-plugin|${ISSUER}`));
 });
