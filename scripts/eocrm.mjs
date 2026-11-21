@@ -118,6 +118,10 @@ const commands = {
     if (values.device && harness !== 'cli') throw new Usage('--device is for the eocrm CLI (npx @eocrm/cli login --device)');
     const region = values.region ?? 'eu';
     const result = await login({ data, region, workspace, env, store, harness, device: values.device, sleep, print: out, openBrowser: (u) => open(u, { print: out }) });
+    if (!result.workspace) {
+      [`Signed in at ${new URL(result.issuer).host} (${region})`, ...result.choices, 'choose one: eocrm init <workspace> in a repository, or eocrm login <workspace> for your default'].forEach((l) => out(l));
+      return null;
+    }
     const lines = [`${who(loadAccount(data), result.workspace)} (${region})`];
     if (result.storage === 'file') lines.push(`tokens stored in ${join(data, 'credentials.json')}: no keychain found`);
     lines.push(...pairingLines(result.pairing));
@@ -236,6 +240,7 @@ const commands = {
     if (!signedIn) await commands.login({ ...ctx, positionals: [workspace] });
     if (workspace) useWorkspace({ data, cwd, workspace });
     const target = resolveWorkspace({ data, cwd }).workspace;
+    if (!target) throw new Usage('workspace required: eocrm init <workspace>');
     if (signedIn && account.issuer && target) out(who(account, target));
     const launcher = installCopy(data);
     const { done, skipped, lefthook } = install(cwd, { launcher, data });
