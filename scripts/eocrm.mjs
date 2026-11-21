@@ -41,9 +41,18 @@ function pairingLines(p) {
 
 async function recheck({ data, env, store, workspace, region, harness }) {
   try {
-    const result = await pairing(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }));
-    if (result.status === 'choose' || result.refused) return ['pairing requested'];
-    recordPairing(data, workspace, result.status);
+    const client = createClient({ endpoints: endpoints({ region, env }), workspace, store, harness });
+    let result = await pairing(client);
+    const target = loadAccount(data).pairTargets?.[workspace];
+    if (result.status === 'choose') {
+      if (!result.candidates.some((c) => c.id === target)) {
+        if (target) recordPairing(data, workspace, 'requested');
+        return pairingLines(result);
+      }
+      result = await requestPair(client, target);
+    }
+    if (result.refused) return ['pairing requested'];
+    recordPairing(data, workspace, result.status, target);
     return pairingLines(result);
   } catch {
     return ['pairing requested'];
@@ -134,7 +143,7 @@ const commands = {
     const { workspace, region } = resolveWorkspace({ data, cwd });
     if (!workspace || !region) throw new Usage(`workspace required: run ${cmd(harness, 'login')} first`);
     const result = await requestPair(createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }), id);
-    recordPairing(data, workspace, result.status);
+    recordPairing(data, workspace, result.status, id);
     pairingLines(result).forEach((l) => out(l));
     return result.status === 'standalone' ? 3 : 0;
   },
@@ -375,7 +384,7 @@ export async function main({
       // The CLI ignores plugin data env, so its sign-in never lands in a plugin's dir.
       data = harness === 'cli'
         ? dataDir({ argv: [], env: {}, data: values.data || cliData(env) })
-        : dataDir({ argv, env, data: values.data, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : undefined });
+        : dataDir({ argv, env, data: values.data, harness, fallback: harness === 'codex' ? installData(script) ?? codexData(env) : undefined });
     } catch (e) {
       throw new Usage(e.message);
     }

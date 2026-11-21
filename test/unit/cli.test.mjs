@@ -176,16 +176,19 @@ test('login without --region signs in through the EU endpoints', async (t) => {
   assert.equal(JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).region, 'eu');
 });
 
-async function statusOf(t, local, responses = {}) {
+const TARGET = '01JZ0000000000000000000002';
+
+async function statusOf(t, local, responses = {}, extra = { pairTargets: { acme: TARGET } }) {
   const server = await startFixtureServer({ responses });
   t.after(() => server.close());
   const data = tmp('data');
-  account(data, { workspaces: { acme: local } });
+  account(data, { workspaces: { acme: local }, ...extra });
   const store = credentialStore({ data, platform: 'none' });
   await store.set(endpoints({ region: 'eu', env: server.endpointsEnv }).key, { access_token: server.auth.access, refresh_token: server.auth.refresh, client_id: server.auth.clientId });
   const run = await cli(['status', '--data', data], { env: server.endpointsEnv, store });
   const pairs = server.requests.filter((r) => r.path.endsWith('/pairable') || r.path.endsWith('/pair'));
-  return { ...run, pairs, saved: JSON.parse(readFileSync(join(data, 'account.json'), 'utf8')).workspaces.acme };
+  const stored = JSON.parse(readFileSync(join(data, 'account.json'), 'utf8'));
+  return { ...run, pairs, saved: stored.workspaces.acme, target: stored.pairTargets?.acme };
 }
 const alreadyPaired = { 'agentRun.pair': { status: 422, body: { code: 'agent_already_paired', message: 'm' } } };
 
@@ -193,6 +196,41 @@ test('status on a requested pairing that was approved reads already paired and r
   const r = await statusOf(t, 'requested', alreadyPaired);
   assert.match(r.out, /^already paired$/m);
   assert.equal(r.saved, 'paired');
+});
+
+const cand = (id) => ({ id, label: `Claude Code ${id.slice(-1)}`, created_at: '2026-10-30T09:00:00+00:00' });
+const posts = (r) => r.pairs.filter((x) => x.path.endsWith('/pair'));
+
+test('status re-posts only the connection the member chose, even among several', async (t) => {
+  const r = await statusOf(t, 'requested', { 'agentRun.pairable': { status: 200, body: { items: [cand('01JZ0000000000000000000001'), cand(TARGET)] } }, ...alreadyPaired }, { pairTargets: { acme: TARGET } });
+  assert.deepEqual(posts(r).map((x) => x.body.connection_id), [TARGET]);
+  assert.match(r.out, /^already paired$/m);
+});
+
+test('status never posts a connection other than the chosen one once it is gone', async (t) => {
+  const other = '01JZ0000000000000000000001';
+  const r = await statusOf(t, 'requested', { 'agentRun.pairable': { status: 200, body: { items: [cand(other)] } } }, { pairTargets: { acme: TARGET } });
+  assert.equal(posts(r).length, 0);
+  assert.match(r.out, new RegExp(`^connection ${other} `, 'm'));
+  assert.equal(r.target, undefined);
+});
+
+test('a legacy bare requested pairing posts nothing and lists the candidates', async (t) => {
+  const r = await statusOf(t, 'requested', {}, {});
+  assert.equal(posts(r).length, 0);
+  assert.match(r.out, /^pairing: choose a connection, then run pair <id>$/m);
+});
+
+test('pair stores the chosen connection for later status checks', async (t) => {
+  const server = await startFixtureServer({});
+  t.after(() => server.close());
+  const data = tmp('data');
+  account(data, {});
+  const store = credentialStore({ data, platform: 'none' });
+  await store.set(endpoints({ region: 'eu', env: server.endpointsEnv }).key, { access_token: server.auth.access, refresh_token: server.auth.refresh, client_id: server.auth.clientId });
+  await cli(['pair', '--data', data, TARGET], { env: server.endpointsEnv, store });
+  const stored = JSON.parse(readFileSync(join(data, 'account.json'), 'utf8'));
+  assert.deepEqual([stored.workspaces.acme, stored.pairTargets.acme], ['requested', TARGET]);
 });
 
 test('status on a still-pending pairing prints the request line', async (t) => {
@@ -285,7 +323,7 @@ test('login, pair, status and logout never print a token, code, verifier or stat
     'connection 01JZ0000000000000000000002 Claude [2J Code B',
   ].join('\n'));
   assert.equal(runs[1].out, 'pairing requested: approve in Account → Agents within 15 minutes: https://workspace.example.test/account/agents');
-  assert.equal(runs[2].out, `signed in (eu)\nworkspace acme (default)\nSigned in at ${new URL(server.url).host} — reporting to acme\npairing requested`);
+  assert.equal(runs[2].out, `signed in (eu)\nworkspace acme (default)\nSigned in at ${new URL(server.url).host} — reporting to acme\npairing requested: approve in Account → Agents within 15 minutes: https://workspace.example.test/account/agents`);
   assert.equal(runs[3].out, `signed out of ${server.url}`);
   assert.match(runs[4].out, /^signed out: run \/eocrm:login$/m);
   assert.equal(await store.get(endpoints({ region: 'eu', env: server.endpointsEnv }).key), null);

@@ -221,7 +221,7 @@ test('a detached flush uses the eocrm-cli keychain entry and CLI User-Agent only
     await exec(process.execPath, [script('hooks/dispatch.mjs'), 'flush', '--data', data, ...(harness === 'cli' ? ['--harness', 'cli'] : [])], { env });
     services.push([...new Set(readFileSync(log, 'utf8').trim().split('\n').map((l) => l.split(' ')[2]))]);
   }
-  assert.deepEqual(services, [['eocrm-cli'], ['eocrm-claude-plugin']]);
+  assert.deepEqual(services, [['eocrm-cli'], ['eocrm-claude-code-plugin']]);
   assert.deepEqual(seen.map((ua) => ua.split('/')[0]), ['eocrm-cli', 'eocrm-plugin']);
 });
 
@@ -235,7 +235,7 @@ test('the CLI keeps its keychain entry apart from the plugin\'s', async () => {
   await credentialStore({ data, platform: 'linux', run: fake }).get(ISSUER);
   await credentialStore({ data, platform: 'linux', run: fake, service: 'eocrm-cli' }).get(ISSUER);
   assert.equal(typeof storeFor(data, 'cli').get, 'function');
-  assert.deepEqual(calls, [['lookup', 'service', 'eocrm-claude-plugin', 'account', ISSUER], ['lookup', 'service', 'eocrm-cli', 'account', ISSUER]]);
+  assert.deepEqual(calls, [['lookup', 'service', 'eocrm-claude-code-plugin', 'account', ISSUER], ['lookup', 'service', 'eocrm-cli', 'account', ISSUER]]);
 });
 
 test('eocrm login --device signs the CLI in to the XDG data dir as eocrm CLI', async (t) => {

@@ -104,9 +104,11 @@ This copies the new version and repoints the hooks; `status` warns when the hook
 
 The CLI sends the same metadata as the plugin (see "What is sent"): branch, repo, task key, plan items, commit sha and subject, PR links, run boundaries; never prompts, replies or file contents, scrubbed for secrets. OpenSpec import sends titles, the Why text and plan items; OpenSpec import identifies the repo by a hash; run and PR events carry the repository's owner/name, never its remote URL.
 
+Updating to 0.4.2 asks you to sign in once more: Claude Code and Codex now keep separate keychain entries.
+
 ## Pair with your tools connection
 
-The plugin's sign-in can only report and read runs; it can't change tasks. If your tools (`eocrm-mcp`) are already signed in, the plugin's sign-in sends a pairing request: in eocrm open Account → Agents and select **Approve**, so both show as one agent. If you signed in the tools afterwards, select **Merge into…** on the new connection there instead. Claude Code pairs with Claude Code, Codex with Codex; a request expires after 15 minutes. Someone who uses both signs in twice and sees two agents.
+The plugin's sign-in can only report and read runs; it can't change tasks. If your tools (`eocrm-mcp`) are already signed in, the plugin's sign-in lists it; pick it with `pair <id>` to send a pairing request, then in eocrm open Account → Agents and select **Approve**, so both show as one agent. If you signed in the tools afterwards, select **Merge into…** on the new connection there instead. Claude Code pairs with Claude Code, Codex with Codex; a request expires after 15 minutes. Someone who uses both signs in twice and sees two agents.
 
 Agent work must be on in the workspace (Settings → Modules); it needs Tasks and AI assistants. What runs show, the conventions and alerts: [Agent work help](https://docs.eocrm.io/help/agent-work/).
 

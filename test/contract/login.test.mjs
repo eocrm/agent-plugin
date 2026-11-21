@@ -6,12 +6,12 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createServer, request } from 'node:http';
 import { connect } from 'node:net';
-import { login, LoginError, PORTS } from '../../lib/login.mjs';
+import { login, requestPair, LoginError, PORTS } from '../../lib/login.mjs';
 import { credentialStore } from '../../lib/credentials.mjs';
 import { endpoints } from '../../lib/endpoints.mjs';
 import { startFixtureServer } from '../support/fixture-server.mjs';
 import { main } from '../../scripts/eocrm.mjs';
-import { userAgent } from '../../lib/api.mjs';
+import { createClient, userAgent } from '../../lib/api.mjs';
 
 const browse = (url) => { fetch(url).catch(() => fetch(url)).catch(() => {}); };
 
@@ -59,7 +59,7 @@ test('registers once, signs in with PKCE S256 and stores tokens under the endpoi
   assert.deepEqual(result, {
     workspace: 'acme',
     storage: 'file',
-    pairing: { status: 'requested', approveUrl: 'https://workspace.example.test/account/agents' },
+    pairing: { status: 'choose', candidates: [{ id: '01JZ0000000000000000000002', label: 'Claude Code', created_at: '2026-10-30T09:00:00+00:00' }] },
   });
   const saved = await store.get(key);
   assert.equal(saved.access_token, server.auth.access);
@@ -68,7 +68,7 @@ test('registers once, signs in with PKCE S256 and stores tokens under the endpoi
   assert.deepEqual({ ...account, workspaces: undefined, signedInAt: undefined }, { region: 'eu', issuer: server.url, clients: { [server.url]: 'fixture-client' }, keys: [key], workspace: 'acme', workspaces: undefined, signedInAt: undefined });
   assert.ok(account.signedInAt <= Date.now());
   assert.equal(saved.expires_at > Date.now() / 1000, true);
-  assert.equal(account.workspaces.acme, 'requested');
+  assert.equal(account.workspaces.acme, 'choose');
   await assert.rejects(fetch(`http://127.0.0.1:${ports[0]}/start`), 'the callback server closes after one valid callback');
 });
 
@@ -171,17 +171,25 @@ for (const status of [404, 403]) {
 const pairable = (items) => ({ 'agentRun.pairable': { status: 200, body: { items } } });
 const conn = (n) => ({ id: `01JZ00000000000000000000${n}0`, label: `Claude Code ${n}`, created_at: '2026-10-30T09:00:00+00:00' });
 
+test('a successful login asks the store to drop the legacy entry', async (t) => {
+  const { run, store, key } = await setup(t);
+  const dropped = [];
+  await run({ store: Object.assign(Object.create(store), { dropLegacy: async (k) => { dropped.push(k); } }) });
+  assert.deepEqual(dropped, [key]);
+});
+
 test('pairing: no candidates stands alone', async (t) => {
   const { run, calls } = await setup(t, { responses: pairable([]) });
   assert.deepEqual((await run()).pairing, { status: 'standalone' });
   assert.equal(calls('POST', '/v1/agent-runs/pair').length, 0);
 });
 
-test('pairing: one candidate is paired and awaits approval', async (t) => {
+test('pairing: one candidate asks the member, without pairing', async (t) => {
   const { run, calls } = await setup(t);
   const { pairing } = await run();
-  assert.deepEqual(pairing, { status: 'requested', approveUrl: 'https://workspace.example.test/account/agents' });
-  assert.deepEqual(calls('POST', '/v1/agent-runs/pair')[0].body, { connection_id: '01JZ0000000000000000000002' });
+  assert.equal(pairing.status, 'choose');
+  assert.equal(pairing.candidates.length, 1);
+  assert.equal(calls('POST', '/v1/agent-runs/pair').length, 0);
 });
 
 test('pairing: two candidates ask the member, without pairing', async (t) => {
@@ -192,19 +200,22 @@ test('pairing: two candidates ask the member, without pairing', async (t) => {
 
 const pairRefusal = (code) => ({ 'agentRun.pair': { status: 422, body: { code, message: 'm' } } });
 
-test('pairing: an unavailable target stands alone and names the code', async (t) => {
-  const { run } = await setup(t, { responses: pairRefusal('pair_target_unavailable') });
-  assert.deepEqual((await run()).pairing, { status: 'standalone', refused: 'pair_target_unavailable' });
+async function pairOutcome(t, code) {
+  const { server, run, store } = await setup(t, { responses: pairRefusal(code) });
+  await run();
+  return requestPair(createClient({ endpoints: endpoints({ region: 'eu', env: server.endpointsEnv }), workspace: 'acme', store }), '01JZ0000000000000000000002');
+}
+
+test('requestPair: an unavailable target stands alone and names the code', async (t) => {
+  assert.deepEqual(await pairOutcome(t, 'pair_target_unavailable'), { status: 'standalone', refused: 'pair_target_unavailable' });
 });
 
-test('pairing: an already waiting request reads as requested', async (t) => {
-  const { run } = await setup(t, { responses: pairRefusal('pair_request_unavailable') });
-  assert.deepEqual((await run()).pairing, { status: 'requested', approveUrl: null });
+test('requestPair: an already waiting request reads as requested', async (t) => {
+  assert.deepEqual(await pairOutcome(t, 'pair_request_unavailable'), { status: 'requested', approveUrl: null });
 });
 
-test('pairing: an existing pairing reads as paired', async (t) => {
-  const { run } = await setup(t, { responses: pairRefusal('agent_already_paired') });
-  assert.deepEqual((await run()).pairing, { status: 'paired' });
+test('requestPair: an existing pairing reads as paired', async (t) => {
+  assert.deepEqual(await pairOutcome(t, 'agent_already_paired'), { status: 'paired' });
 });
 
 const workspaces = (items) => ({ 'agentWork.workspaces': { status: 200, body: { items } } });

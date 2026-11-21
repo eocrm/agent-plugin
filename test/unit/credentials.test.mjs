@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync, existsSync, readFileSync, writeFileSync, readdirSync, rmSync, mkdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { credentialStore, spawnWithStdin } from '../../lib/credentials.mjs';
+import { credentialStore, storeFor, spawnWithStdin } from '../../lib/credentials.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'eocrm-cred-'));
 const ISSUER = 'https://id.eu.eocrm.io';
@@ -31,7 +31,7 @@ test('darwin set goes through security -i with the secret only on stdin', async 
   const { run, calls } = fakeRun((cmd, args, stdin) => {
     assert.equal(cmd, 'security');
     if (args[0] === '-i') {
-      const m = stdin.match(/^add-generic-password -U -s "eocrm-claude-plugin" -a "([^"]+)" -w "([^"]+)"\n$/);
+      const m = stdin.match(/^add-generic-password -U -s "eocrm-claude-code-plugin" -a "([^"]+)" -w "([^"]+)"\n$/);
       assert.ok(m, stdin);
       kc.set(m[1], m[2]);
       return { code: 0, stdout: '' };
@@ -49,7 +49,7 @@ test('darwin set goes through security -i with the secret only on stdin', async 
   assert.deepEqual(calls[0].args, ['-i']);
   assert.ok(calls[0].stdin.includes(Buffer.from(JSON.stringify(TOKENS)).toString('base64')));
   assert.deepEqual(await store.get(ISSUER), TOKENS);
-  assert.ok(calls.some((c) => c.args[0] === 'find-generic-password' && c.args.includes('-s') && c.args.includes('eocrm-claude-plugin')));
+  assert.ok(calls.some((c) => c.args[0] === 'find-generic-password' && c.args.includes('-s') && c.args.includes('eocrm-claude-code-plugin')));
   noSecretInArgs(calls);
   assert.equal(existsSync(join(data, 'credentials.json')), false);
 });
@@ -66,10 +66,10 @@ test('linux set calls secret-tool store with the secret on stdin', async () => {
   });
   const store = credentialStore({ data: tmp(), platform: 'linux', run });
   assert.equal(await store.set(ISSUER, TOKENS), 'keychain');
-  assert.deepEqual(calls[0].args, ['store', '--label=eocrm-claude-plugin', 'service', 'eocrm-claude-plugin', 'account', ISSUER]);
+  assert.deepEqual(calls[0].args, ['store', '--label=eocrm-claude-code-plugin', 'service', 'eocrm-claude-code-plugin', 'account', ISSUER]);
   assert.ok(calls[0].stdin.length > 0);
   assert.deepEqual(await store.get(ISSUER), TOKENS);
-  assert.deepEqual(calls.at(-1).args, ['lookup', 'service', 'eocrm-claude-plugin', 'account', ISSUER]);
+  assert.deepEqual(calls.at(-1).args, ['lookup', 'service', 'eocrm-claude-code-plugin', 'account', ISSUER]);
   noSecretInArgs(calls);
 });
 
@@ -202,7 +202,7 @@ test('del removes the keychain entry and the file', async () => {
 test('darwin del calls delete-generic-password', async () => {
   const { run, calls } = fakeRun(() => ({ code: 0, stdout: '' }));
   await credentialStore({ data: tmp(), platform: 'darwin', run }).del(ISSUER);
-  assert.deepEqual(calls[0].args, ['delete-generic-password', '-s', 'eocrm-claude-plugin', '-a', ISSUER]);
+  assert.deepEqual(calls[0].args, ['delete-generic-password', '-s', 'eocrm-claude-code-plugin', '-a', ISSUER]);
 });
 
 test('get returns null for a missing or corrupt entry', async () => {
@@ -330,4 +330,57 @@ test('del with when deletes only while the stored tokens still match', async () 
   assert.equal((await store.get(ISSUER)).access_token, TOKENS.access_token);
   assert.equal(await store.del(ISSUER, { when: (t) => t?.access_token === TOKENS.access_token }), true);
   assert.equal(await store.get(ISSUER), null);
+});
+
+test('claude, codex and cli keychain entries are separate services', async () => {
+  const kc = new Map();
+  const { run } = fakeRun((cmd, args, stdin) => {
+    const key = `${args[args.indexOf('service') + 1]}|${args[args.indexOf('account') + 1]}`;
+    if (args[0] === 'store') { kc.set(key, stdin); return { code: 0, stdout: '' }; }
+    if (args[0] === 'lookup') return kc.has(key) ? { code: 0, stdout: kc.get(key) } : { code: 1, stdout: '' };
+    return { code: 0, stdout: '' };
+  });
+  const of = (h) => storeFor(tmp(), h, { platform: 'linux', run });
+  await of('codex').set(ISSUER, TOKENS);
+  assert.deepEqual(await of('codex').get(ISSUER), TOKENS);
+  assert.equal(await of('claude').get(ISSUER), null);
+  assert.equal(await of('cli').get(ISSUER), null);
+  assert.deepEqual([...kc.keys()], [`eocrm-codex-plugin|${ISSUER}`]);
+  await of('claude').set(ISSUER, TOKENS);
+  assert.ok(kc.has(`eocrm-claude-code-plugin|${ISSUER}`));
+  assert.equal(new Set(['eocrm-cli', 'eocrm-codex-plugin', 'eocrm-claude-code-plugin']).size, 3);
+  assert.ok(![...kc.keys()].some((k) => k.startsWith('eocrm-claude-plugin|')));
+});
+
+test('a token under the legacy shared service is never returned by the claude store', async () => {
+  const kc = new Map();
+  const { run } = fakeRun((cmd, args, stdin) => {
+    const key = `${args[args.indexOf('service') + 1]}|${args[args.indexOf('account') + 1]}`;
+    if (args[0] === 'store') { kc.set(key, stdin); return { code: 0, stdout: '' }; }
+    return args[0] === 'lookup' && kc.has(key) ? { code: 0, stdout: kc.get(key) } : { code: 1, stdout: '' };
+  });
+  await credentialStore({ data: tmp(), platform: 'linux', run, service: 'eocrm-claude-plugin' }).set(ISSUER, TOKENS);
+  for (const h of ['claude', 'codex']) assert.equal(await storeFor(tmp(), h, { platform: 'linux', run }).get(ISSUER), null);
+});
+
+test('darwin codex and claude use different security services', async () => {
+  const seen = [];
+  const { run } = fakeRun((cmd, args, stdin) => {
+    seen.push(`${args.join(' ')} ${stdin}`);
+    return { code: 0, stdout: '' };
+  });
+  for (const h of ['codex', 'claude']) await storeFor(tmp(), h, { platform: 'darwin', run }).set(ISSUER, TOKENS);
+  assert.ok(seen.some((l) => l.includes('-s "eocrm-codex-plugin"')));
+  assert.ok(seen.some((l) => l.includes('-s "eocrm-claude-code-plugin"')));
+  assert.ok(!seen.some((l) => l.includes('"eocrm-claude-plugin"')));
+});
+
+test('dropLegacy deletes only the legacy entry and ignores failure', async () => {
+  const { run, calls } = fakeRun(() => ({ code: 1, stdout: '' }));
+  await storeFor(tmp(), 'claude', { platform: 'darwin', run }).dropLegacy(ISSUER);
+  assert.deepEqual(calls.map((c) => c.args), [['delete-generic-password', '-s', 'eocrm-claude-plugin', '-a', ISSUER]]);
+  await storeFor(tmp(), 'codex', { platform: 'linux', run: async () => { throw new Error('boom'); } }).dropLegacy(ISSUER);
+  const none = fakeRun(() => ({ code: 0, stdout: '' }));
+  await storeFor(tmp(), 'cli', { platform: 'darwin', run: none.run }).dropLegacy(ISSUER);
+  assert.equal(none.calls.length, 0);
 });
