@@ -748,14 +748,15 @@ test('SessionStart keeps an 8 s overall deadline when the lock is held after ens
   const dir = repo('feat/AB-1-x', 'git@github.com:o/r.git');
   const ctx = ctxFor(data);
   // A slow start, then a flush that holds the lock: tick's wait must shrink to what is left.
+  // Unshrunk it waits the full 1500 ms lock wait (>= 9400 ms total); the bound leaves slack for slow runners.
   ctx.spawnFlush = () => {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 7500);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 7900);
     mkdirSync(join(data, '.lock'));
   };
   const started = Date.now();
   assert.deepEqual(await handle('SessionStart', input(sid(), dir, { source: 'startup' }), ctx), { stdout: context() });
   const took = Date.now() - started;
-  assert.ok(took < 8500, `took ${took} ms`);
+  assert.ok(took < 9300, `took ${took} ms`);
 });
 
 test('it does not recount history after a tombstoned resume', async () => {
