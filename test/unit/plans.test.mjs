@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, utimesSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, utimesSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -218,7 +218,8 @@ test('activePlan on the default branch: plan files from the run\'s own commits; 
   git(dir, 'commit', '-q', '-am', 'tick');
   const tick = git(dir, 'rev-parse', 'HEAD');
   assert.equal(activePlan(dir, {}), null);
-  const p = activePlan(dir, { ownCommits: ['--all', tick] });
+  const p = activePlan(dir, { ownCommits: [`--output=${join(dir, 'out')}`, tick] });
+  assert.ok(!existsSync(join(dir, 'out')), 'a stored sha is never a git option');
   assert.equal(p.path, 'openspec/changes/c1/tasks.md');
   assert.equal(p.link, 'EO-1');
   assert.deepEqual([...p.done], ['1.1']);
