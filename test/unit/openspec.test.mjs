@@ -168,6 +168,23 @@ test('linking: branch key, then the proposal comment, then the per-remote mappin
   assert.deepEqual(await taskOf(dir, { repos }), { event: 'AB-1', run: [] });
 });
 
+test('a CLI commit on main reports the mapped change\'s plan, ticks and task', async () => {
+  const dir = repo();
+  git(dir, 'checkout', '-q', 'main');
+  put(dir, TASKS('foo'), '- [ ] 1.1 a\n- [ ] 1.2 b\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'change');
+  put(dir, TASKS('foo'), '- [x] 1.1 a\n- [ ] 1.2 b\n');
+  git(dir, 'commit', '-q', '-am', 'tick');
+  const { data, sid, go, queued } = reconciling(dir, { repos: { openspec: { foo: 'AB-9' } } });
+  saveRun(data, sid, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] });
+  await go();
+  const events = queued().filter((e) => e.kind === 'event').map((e) => e.event);
+  assert.equal(events.find((e) => e.type === 'plan')?.path, TASKS('foo'));
+  assert.deepEqual(events.filter((e) => e.plan_key).map((e) => [e.plan_key, e.task_key]), [['1.1', 'AB-9']]);
+  assert.deepEqual(queued().filter((e) => e.kind === 'task').map((e) => e.task), ['AB-9']);
+});
+
 test('a plugin session links through the mapping the CLI wrote in its own data dir, reading it only', async () => {
   const dir = repo();
   put(dir, TASKS('foo'), '- [ ] 1.1 a\n');

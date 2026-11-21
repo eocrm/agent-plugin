@@ -206,3 +206,28 @@ test('a symlink resolving outside the repo is not read', (t) => {
   put(dir, 'in.md', '- [ ] inside\n');
   assert.equal(activePlan(dir, { written: [join(dir, 'in.md'), join(dir, 'link.md')] }).path, 'in.md');
 });
+
+test('activePlan on the default branch: plan files from the run\'s own commits; a touched change finds its tasks.md', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'main');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [ ] 1.1 a\n- [ ] 1.2 b\n');
+  put(dir, 'openspec/changes/c1/proposal.md', '# C1\n<!-- eocrm: EO-1 -->\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'change');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n- [ ] 1.2 b\n');
+  git(dir, 'commit', '-q', '-am', 'tick');
+  const tick = git(dir, 'rev-parse', 'HEAD');
+  assert.equal(activePlan(dir, {}), null);
+  const p = activePlan(dir, { ownCommits: ['--all', tick] });
+  assert.equal(p.path, 'openspec/changes/c1/tasks.md');
+  assert.equal(p.link, 'EO-1');
+  assert.deepEqual([...p.done], ['1.1']);
+  put(dir, 'openspec/changes/c1/design.md', 'd\n');
+  put(dir, 'src.txt', 's\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'design');
+  assert.equal(activePlan(dir, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] }).change, 'c1');
+  put(dir, 'src.txt', 't\n');
+  git(dir, 'commit', '-q', '-am', 'code');
+  assert.equal(activePlan(dir, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] }), null);
+});
