@@ -621,3 +621,39 @@ test('a Codex skill command with --harness codex works even under an inherited C
   assert.equal(r.code, 0, r.err);
   assert.equal(loadRun(data, 'thread-1').start.task, 'ABC-1');
 });
+
+test('eocrm login with several workspaces signs in, lists them and exits 0; the plugin harness still asks', async (t) => {
+  const server = await startFixtureServer({ responses: { 'agentWork.workspaces': { status: 200, body: { items: [{ slug: 'acme', name: 'Acme', agent_work: true }, { slug: 'beta', name: 'Beta', agent_work: true }] } } } });
+  t.after(() => server.close());
+  const spawn = (cmd, args) => {
+    fetch(args.at(-1)).catch(() => {});
+    return Object.assign(new EventEmitter(), { unref() {} });
+  };
+  const signIn = (argv, harness) => {
+    const data = tmp('data');
+    const opts = { env: server.endpointsEnv, store: credentialStore({ data, platform: 'none' }), sleep: async () => {}, openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) };
+    return { data, opts, run: (more = []) => cli([...argv, '--data', data, ...more], { ...opts, harness }) };
+  };
+  const listed = (region, flag = '') => new RegExp(`^Signed in at 127\\.0\\.0\\.1:\\d+ \\(${region}\\)\nworkspace acme Acme\nworkspace beta Beta\nchoose one: eocrm init${flag} <workspace> in a repository, or eocrm login${flag} <workspace> for your default$`, 'm');
+  let mine;
+  for (const [more, region, flag] of [[[], 'eu', ''], [['--device'], 'eu', ''], [['--region', 'ru'], 'ru', ' --region ru']]) {
+    mine = signIn(['login'], 'cli');
+    const before = server.requests.length;
+    const r = await mine.run(more);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, listed(region, flag));
+    assert.equal(r.err, '');
+    const device = server.requests.slice(before).some((q) => q.path === '/oauth/device/code');
+    assert.equal(device, more[0] === '--device', 'device sign-in runs only for --device');
+    if (device) assert.match(r.out, /enter the code BCDFGHJK/);
+  }
+  mine = signIn(['login'], 'cli');
+  await mine.run();
+  assert.equal(JSON.parse(readFileSync(join(mine.data, 'account.json'), 'utf8')).workspace, undefined);
+  const dir = repo();
+  const init = await cli(['init', '--data', mine.data], { ...mine.opts, cwd: dir, harness: 'cli' });
+  assert.deepEqual([init.code, init.err], [2, 'eocrm: workspace required: eocrm init <workspace>']);
+  assert.ok(!existsSync(join(dir, '.git', 'hooks', 'post-commit')));
+  const plugin = await signIn(['login'], 'claude').run();
+  assert.deepEqual([plugin.code, plugin.out.split('\n').slice(-2).join('\n'), plugin.err], [2, 'workspace acme Acme\nworkspace beta Beta', 'eocrm: workspace required']);
+});

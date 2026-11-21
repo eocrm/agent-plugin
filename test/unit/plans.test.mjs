@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, utimesSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, utimesSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -205,4 +205,89 @@ test('a symlink resolving outside the repo is not read', (t) => {
   assert.equal(activePlan(dir, { written: [join(dir, 'link.md'), join(dir, 'docs/superpowers/plans/x.md')] }), null);
   put(dir, 'in.md', '- [ ] inside\n');
   assert.equal(activePlan(dir, { written: [join(dir, 'in.md'), join(dir, 'link.md')] }).path, 'in.md');
+});
+
+test('activePlan on the default branch: plan files from the run\'s own commits; a touched change finds its tasks.md', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'main');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [ ] 1.1 a\n- [ ] 1.2 b\n');
+  put(dir, 'openspec/changes/c1/proposal.md', '# C1\n<!-- eocrm: EO-1 -->\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'change');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n- [ ] 1.2 b\n');
+  git(dir, 'commit', '-q', '-am', 'tick');
+  const tick = git(dir, 'rev-parse', 'HEAD');
+  assert.equal(activePlan(dir, {}), null);
+  const p = activePlan(dir, { ownCommits: [`--output=${join(dir, 'out')}`, tick] });
+  assert.ok(!existsSync(join(dir, 'out')), 'a stored sha is never a git option');
+  assert.equal(p.path, 'openspec/changes/c1/tasks.md');
+  assert.equal(p.link, 'EO-1');
+  assert.deepEqual([...p.done], ['1.1']);
+  put(dir, 'openspec/changes/c1/design.md', 'd\n');
+  put(dir, 'src.txt', 's\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'design');
+  assert.equal(activePlan(dir, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] }).change, 'c1');
+  put(dir, 'src.txt', 't\n');
+  git(dir, 'commit', '-q', '-am', 'code');
+  assert.equal(activePlan(dir, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] }), null);
+});
+
+test('activePlan off the default branch ignores the run\'s own commits: the branch diff decides', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'main');
+  put(dir, 'docs/superpowers/plans/a.md', '- [ ] a\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'a');
+  git(dir, 'checkout', '-q', '-b', 'feat');
+  put(dir, 'docs/superpowers/plans/a.md', '- [x] a\n');
+  git(dir, 'commit', '-q', '-am', 'tick a');
+  const own = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'revert', '--no-edit', 'HEAD');
+  put(dir, 'docs/superpowers/plans/b.md', '- [ ] b\n', new Date(2020, 0, 1));
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'b');
+  assert.equal(activePlan(dir, { ownCommits: [own] }).path, 'docs/superpowers/plans/b.md');
+});
+
+test('activePlan: own commits count only on the default branch itself, and only when HEAD reaches them', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'main');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [ ] 1.1 a\n');
+  put(dir, 'docs/superpowers/plans/old.md', '- [ ] old\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'change');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n');
+  git(dir, 'commit', '-q', '-am', 'tick');
+  const tick = git(dir, 'rev-parse', 'HEAD');
+  const own = { ownCommits: [tick] };
+  assert.equal(activePlan(dir, own).path, 'openspec/changes/c1/tasks.md');
+  git(dir, 'checkout', '-q', '-b', 'code');
+  put(dir, 'src.txt', 's\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'code');
+  assert.equal(activePlan(dir, own), null, 'a feature branch without plan changes');
+  git(dir, 'checkout', '-q', '-b', 'drop', 'main');
+  git(dir, 'rm', '-q', 'docs/superpowers/plans/old.md');
+  git(dir, 'commit', '-q', '-m', 'drop');
+  assert.equal(activePlan(dir, own), null, 'a branch that only deletes a plan');
+  git(dir, 'checkout', '-q', '-b', 'side', 'main~1');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n');
+  git(dir, 'commit', '-q', '-am', 'tick on side');
+  const side = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'checkout', '-q', 'main');
+  git(dir, 'reset', '-q', '--hard', 'main~1');
+  assert.equal(activePlan(dir, { ownCommits: [side] }), null, 'a commit HEAD does not reach');
+  assert.equal(activePlan(dir, { ownCommits: ['f'.repeat(40), side] }), null, 'an unknown sha beside it');
+  git(dir, 'reset', '-q', '--hard', tick);
+  assert.equal(activePlan(dir, { ownCommits: ['f'.repeat(40), tick] })?.path, 'openspec/changes/c1/tasks.md', 'an unknown sha is skipped');
+});
+
+test('activePlan without any base branch counts the run\'s own commits', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'trunk');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'tick');
+  assert.equal(activePlan(dir, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] })?.path, 'openspec/changes/c1/tasks.md');
 });

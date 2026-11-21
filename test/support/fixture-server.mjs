@@ -91,7 +91,9 @@ export async function startFixtureServer({ responses = {}, messages = [] } = {})
       if (query.state) to.searchParams.set('state', query.state);
       return { status: 302, location: to.href };
     },
+    'oauth.device': ({ headers }) => ({ status: 200, body: { device_code: 'fixture-device', user_code: 'BCDFGHJK', verification_uri: `http://${headers.host}/oauth/device`, expires_in: 600, interval: 1 } }),
     'oauth.token': ({ body }) => {
+      if (body?.grant_type === 'urn:ietf:params:oauth:grant-type:device_code') return body.device_code === 'fixture-device' ? tokenPair() : invalidGrant;
       if (body?.grant_type === 'refresh_token') {
         return body.refresh_token === auth.refresh && body.client_id === auth.clientId ? tokenPair() : invalidGrant;
       }
@@ -168,6 +170,7 @@ export async function startFixtureServer({ responses = {}, messages = [] } = {})
   };
 
   function route(method, pathname) {
+    if (pathname === '/oauth/device/code') return { name: 'oauth.device', workspace: null, path: pathname };
     const m = /^\/oauth\/(register|authorize|token)$/.exec(pathname);
     if (m) return { name: `oauth.${m[1]}`, workspace: null, path: pathname };
     if (method === 'GET' && pathname === '/api/v1/agent-work/workspaces') return { name: 'agentWork.workspaces', pending: true, workspace: null, path: '/v1/agent-work/workspaces' };
