@@ -197,6 +197,86 @@ test('a plugin session links through the mapping the CLI wrote in its own data d
   assert.equal(readFileSync(join(cli, 'repos.json'), 'utf8'), before);
 });
 
+async function nextChange(dir, opts, bar = '- [x] 1.1 b\n- [ ] 1.2 c\n') {
+  put(dir, TASKS('foo'), '- [x] 1.1 a\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'foo');
+  const r = reconciling(dir, opts);
+  await r.go();
+  put(dir, TASKS('bar'), bar);
+  utimesSync(join(dir, TASKS('bar')), new Date(2030, 0, 1), new Date(2030, 0, 1));
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'bar');
+  await r.go();
+  return r;
+}
+const plans = (queued) => queued().filter((e) => e.event?.type === 'plan').map((e) => [e.event.path, e.event.task_key]);
+const ticks = (queued) => queued().filter((e) => e.event?.plan_key).map((e) => [e.event.plan_key, e.event.task_key]);
+
+test('a change not yet imported holds its plan instead of landing on the previous change\'s task', async () => {
+  const dir = repo();
+  const { data, sid, go, queued } = await nextChange(dir, { repos: { openspec: { foo: 'AB-9' } } });
+  assert.deepEqual(plans(queued), [[TASKS('foo'), 'AB-9']]);
+  assert.deepEqual(ticks(queued), [['1.1', 'AB-9']]);
+  assert.ok(!queued().some((e) => e.kind === 'step'));
+  assert.ok(queued().some((e) => e.event?.type === 'commit' && e.event.task_key === 'AB-9'));
+  updateRepo(data, dir, { openspec: { foo: 'AB-9', bar: 'AB-10' } });
+  await go();
+  assert.deepEqual(plans(queued), [[TASKS('foo'), 'AB-9'], [TASKS('bar'), 'AB-10']]);
+  assert.deepEqual(ticks(queued), [['1.1', 'AB-9'], ['1.1', 'AB-10']]);
+  assert.deepEqual(queued().filter((e) => e.kind === 'step').map((e) => e.step), ['c']);
+  assert.equal(queued().filter((e) => e.kind === 'task').at(-1).task, 'AB-10');
+  assert.equal(loadRun(data, sid).start.task, 'AB-10');
+  assert.equal((await go()).enqueued, 0);
+});
+
+test('a hand-linked task still gets a change not yet imported', async () => {
+  const dir = repo();
+  put(dir, TASKS('bar'), '- [ ] 1.1 b\n');
+  const { data, sid, go, queued } = reconciling(dir);
+  saveRun(data, sid, { start: { task: 'AB-3' } });
+  await go();
+  assert.deepEqual(plans(queued), [[TASKS('bar'), 'AB-3']]);
+});
+
+test('a task linked by hand after a mapping set it still gets a change not yet imported', async () => {
+  const dir = repo();
+  const { data, sid, queued, go } = await nextChange(dir, { repos: { openspec: { foo: 'AB-9' } } });
+  saveRun(data, sid, { start: { ...loadRun(data, sid).start, task: 'AB-3' } });
+  await go();
+  assert.deepEqual(plans(queued).at(-1), [TASKS('bar'), 'AB-3']);
+});
+
+test('a branch task key after a mapping still gets a change not yet imported', async () => {
+  const dir = repo();
+  const { go, queued } = await nextChange(dir, { repos: { openspec: { foo: 'AB-9' } } });
+  git(dir, 'checkout', '-q', '-b', 'AB-1-y');
+  await go();
+  assert.deepEqual(plans(queued).at(-1), [TASKS('bar'), 'AB-1']);
+});
+
+test('a superpowers plan after a mapped change still goes to that change\'s task', async () => {
+  const dir = repo();
+  put(dir, TASKS('foo'), '- [ ] 1.1 a\n');
+  const { go, queued } = reconciling(dir, { repos: { openspec: { foo: 'AB-9' } } });
+  await go();
+  put(dir, 'docs/superpowers/plans/p.md', '# P\n\n### Task 1: One\n- [ ] a\n');
+  utimesSync(join(dir, 'docs/superpowers/plans/p.md'), new Date(2030, 0, 1), new Date(2030, 0, 1));
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'p');
+  await go();
+  assert.deepEqual(plans(queued).at(-1), ['docs/superpowers/plans/p.md', 'AB-9']);
+});
+
+test('a held change keeps its truncation note until it is imported', async () => {
+  const dir = repo();
+  const many = Array.from({ length: MAX_ITEMS + 1 }, (_, i) => `- [ ] 1.${i + 1} t${i}\n`).join('');
+  const { data, go, queued } = await nextChange(dir, { repos: { openspec: { foo: 'AB-9' } } }, many);
+  updateRepo(data, dir, { openspec: { foo: 'AB-9', bar: 'AB-10' } });
+  await go();
+  assert.equal(queued().find((e) => /truncated/.test(e.event?.label ?? ''))?.event.task_key, 'AB-10');
+});
+
 test('a branch with a superpowers plan and an OpenSpec change reports the newer one', () => {
   const dir = repo();
   put(dir, 'docs/superpowers/plans/p.md', '### Task 1: A\n- [ ] s\n');
