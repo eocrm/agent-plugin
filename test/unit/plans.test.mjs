@@ -278,6 +278,16 @@ test('activePlan: own commits count only on the default branch itself, and only 
   git(dir, 'checkout', '-q', 'main');
   git(dir, 'reset', '-q', '--hard', 'main~1');
   assert.equal(activePlan(dir, { ownCommits: [side] }), null, 'a commit HEAD does not reach');
+  assert.equal(activePlan(dir, { ownCommits: ['f'.repeat(40), side] }), null, 'an unknown sha beside it');
   git(dir, 'reset', '-q', '--hard', tick);
   assert.equal(activePlan(dir, { ownCommits: ['f'.repeat(40), tick] })?.path, 'openspec/changes/c1/tasks.md', 'an unknown sha is skipped');
+});
+
+test('activePlan without any base branch counts the run\'s own commits', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'trunk');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'tick');
+  assert.equal(activePlan(dir, { ownCommits: [git(dir, 'rev-parse', 'HEAD')] })?.path, 'openspec/changes/c1/tasks.md');
 });
