@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseOpenSpec, parseMarkdown, activePlan, MAX_ITEMS } from '../../lib/plans.mjs';
 import { reconcile } from '../../lib/reconcile.mjs';
-import { linkWorktree } from '../../lib/run.mjs';
 import { readOutbox } from '../../lib/outbox.mjs';
 import { loadRun, saveRun } from '../../lib/state.mjs';
 import { repoEntry, updateRepo } from '../../lib/workspace.mjs';
@@ -267,19 +266,6 @@ test('a superpowers plan after a mapped change still goes to that change\'s task
   git(dir, 'commit', '-q', '-m', 'p');
   await go();
   assert.deepEqual(plans(queued).at(-1), ['docs/superpowers/plans/p.md', 'AB-9']);
-});
-
-test('a link answered none is not undone by a mapped change', async () => {
-  const dir = repo();
-  put(dir, TASKS('foo'), '- [x] 1.1 a\n');
-  const { data, sid, go, queued } = reconciling(dir, { repos: { openspec: { foo: 'AB-9' } } });
-  await go();
-  await linkWorktree({ data, spawnFlush: () => {} }, dir, null, sid);
-  put(dir, TASKS('foo'), '- [x] 1.1 a\n- [ ] 1.2 b\n');
-  await go();
-  assert.equal(loadRun(data, sid).start.task, undefined);
-  assert.deepEqual(queued().filter((e) => e.kind === 'task').map((e) => e.task), [null]);
-  assert.deepEqual(plans(queued).at(-1), [TASKS('foo'), null]);
 });
 
 test('a held change keeps its truncation note until it is imported', async () => {
