@@ -45,7 +45,7 @@ test('--data=<dir> and a parsed value are honoured', () => {
 
 test('PLUGIN_DATA is the fallback when no --data and no CLAUDE_PLUGIN_DATA', () => {
   const dir = tmp();
-  assert.equal(dataDir({ argv: [], env: { PLUGIN_DATA: dir } }), dir);
+  assert.equal(dataDir({ argv: [], env: { PLUGIN_DATA: dir }, harness: 'codex' }), dir);
 });
 
 test('the CLI harness: flag, then plugin env, then install path; codex data under CODEX_HOME', () => {
@@ -71,4 +71,10 @@ test('installData maps a plugin cache script to its data dir; CODEX_THREAD_ID me
   assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't' }, script: join(tmpdir(), 'x/scripts/eocrm.mjs') }), 'codex');
   assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't', CLAUDE_PLUGIN_DATA: '/d' }, script: '/x' }), 'claude');
   assert.equal(cliHarness({ env: { CODEX_THREAD_ID: 't', CLAUDECODE: '1' }, script: '/x' }), 'claude');
+});
+
+test('each harness reads only its own data env var', () => {
+  const dir = tmp();
+  assert.throws(() => dataDir({ argv: [], env: { CLAUDE_PLUGIN_DATA: dir }, harness: 'codex' }), /no data dir/);
+  assert.throws(() => dataDir({ argv: [], env: { PLUGIN_DATA: dir } }), /no data dir/);
 });

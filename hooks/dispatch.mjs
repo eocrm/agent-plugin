@@ -15,8 +15,8 @@ async function main() {
   const argv = process.argv.slice(2);
   let data;
   try {
-    data = dataDir({ argv, env: process.env });
     const { event, harness } = parseArgs(argv);
+    data = dataDir({ argv, env: process.env, harness });
     const ctx = { data, env: process.env, now: Date.now, harness };
     if (event === 'flush') {
       await flush({ data, clientFor: runClient(ctx), harness });

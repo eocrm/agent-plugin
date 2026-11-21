@@ -171,6 +171,13 @@ for (const status of [404, 403]) {
 const pairable = (items) => ({ 'agentRun.pairable': { status: 200, body: { items } } });
 const conn = (n) => ({ id: `01JZ00000000000000000000${n}0`, label: `Claude Code ${n}`, created_at: '2026-10-30T09:00:00+00:00' });
 
+test('a successful login asks the store to drop the legacy entry', async (t) => {
+  const { run, store, key } = await setup(t);
+  const dropped = [];
+  await run({ store: Object.assign(Object.create(store), { dropLegacy: async (k) => { dropped.push(k); } }) });
+  assert.deepEqual(dropped, [key]);
+});
+
 test('pairing: no candidates stands alone', async (t) => {
   const { run, calls } = await setup(t, { responses: pairable([]) });
   assert.deepEqual((await run()).pairing, { status: 'standalone' });

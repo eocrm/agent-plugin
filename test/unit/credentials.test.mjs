@@ -362,3 +362,25 @@ test('a token under the legacy shared service is never returned by the claude st
   await credentialStore({ data: tmp(), platform: 'linux', run, service: 'eocrm-claude-plugin' }).set(ISSUER, TOKENS);
   for (const h of ['claude', 'codex']) assert.equal(await storeFor(tmp(), h, { platform: 'linux', run }).get(ISSUER), null);
 });
+
+test('darwin codex and claude use different security services', async () => {
+  const seen = [];
+  const { run } = fakeRun((cmd, args, stdin) => {
+    seen.push(`${args.join(' ')} ${stdin}`);
+    return { code: 0, stdout: '' };
+  });
+  for (const h of ['codex', 'claude']) await storeFor(tmp(), h, { platform: 'darwin', run }).set(ISSUER, TOKENS);
+  assert.ok(seen.some((l) => l.includes('-s "eocrm-codex-plugin"')));
+  assert.ok(seen.some((l) => l.includes('-s "eocrm-claude-code-plugin"')));
+  assert.ok(!seen.some((l) => l.includes('"eocrm-claude-plugin"')));
+});
+
+test('dropLegacy deletes only the legacy entry and ignores failure', async () => {
+  const { run, calls } = fakeRun(() => ({ code: 1, stdout: '' }));
+  await storeFor(tmp(), 'claude', { platform: 'darwin', run }).dropLegacy(ISSUER);
+  assert.deepEqual(calls.map((c) => c.args), [['delete-generic-password', '-s', 'eocrm-claude-plugin', '-a', ISSUER]]);
+  await storeFor(tmp(), 'codex', { platform: 'linux', run: async () => { throw new Error('boom'); } }).dropLegacy(ISSUER);
+  const none = fakeRun(() => ({ code: 0, stdout: '' }));
+  await storeFor(tmp(), 'cli', { platform: 'darwin', run: none.run }).dropLegacy(ISSUER);
+  assert.equal(none.calls.length, 0);
+});
