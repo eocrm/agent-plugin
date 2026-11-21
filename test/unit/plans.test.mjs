@@ -249,3 +249,35 @@ test('activePlan off the default branch ignores the run\'s own commits: the bran
   git(dir, 'commit', '-q', '-m', 'b');
   assert.equal(activePlan(dir, { ownCommits: [own] }).path, 'docs/superpowers/plans/b.md');
 });
+
+test('activePlan: own commits count only on the default branch itself, and only when HEAD reaches them', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'main');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [ ] 1.1 a\n');
+  put(dir, 'docs/superpowers/plans/old.md', '- [ ] old\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'change');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n');
+  git(dir, 'commit', '-q', '-am', 'tick');
+  const tick = git(dir, 'rev-parse', 'HEAD');
+  const own = { ownCommits: [tick] };
+  assert.equal(activePlan(dir, own).path, 'openspec/changes/c1/tasks.md');
+  git(dir, 'checkout', '-q', '-b', 'code');
+  put(dir, 'src.txt', 's\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'code');
+  assert.equal(activePlan(dir, own), null, 'a feature branch without plan changes');
+  git(dir, 'checkout', '-q', '-b', 'drop', 'main');
+  git(dir, 'rm', '-q', 'docs/superpowers/plans/old.md');
+  git(dir, 'commit', '-q', '-m', 'drop');
+  assert.equal(activePlan(dir, own), null, 'a branch that only deletes a plan');
+  git(dir, 'checkout', '-q', '-b', 'side', 'main~1');
+  put(dir, 'openspec/changes/c1/tasks.md', '- [x] 1.1 a\n');
+  git(dir, 'commit', '-q', '-am', 'tick on side');
+  const side = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'checkout', '-q', 'main');
+  git(dir, 'reset', '-q', '--hard', 'main~1');
+  assert.equal(activePlan(dir, { ownCommits: [side] }), null, 'a commit HEAD does not reach');
+  git(dir, 'reset', '-q', '--hard', tick);
+  assert.equal(activePlan(dir, { ownCommits: ['f'.repeat(40), tick] })?.path, 'openspec/changes/c1/tasks.md', 'an unknown sha is skipped');
+});

@@ -631,17 +631,24 @@ test('eocrm login with several workspaces signs in, lists them and exits 0; the 
   };
   const signIn = (argv, harness) => {
     const data = tmp('data');
-    const opts = { env: server.endpointsEnv, store: credentialStore({ data, platform: 'none' }), openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) };
+    const opts = { env: server.endpointsEnv, store: credentialStore({ data, platform: 'none' }), sleep: async () => {}, openBrowser: (u, o) => openBrowser(u, { ...o, platform: 'linux', wsl: false, spawn }) };
     return { data, opts, run: (more = []) => cli([...argv, '--data', data, ...more], { ...opts, harness }) };
   };
-  const listed = /^Signed in at 127\.0\.0\.1:\d+ \(eu\)\nworkspace acme Acme\nworkspace beta Beta\nchoose one: eocrm init <workspace> in a repository, or eocrm login <workspace> for your default$/m;
-  const mine = signIn(['login'], 'cli');
-  for (const more of [[], ['--device']]) {
+  const listed = (region, flag = '') => new RegExp(`^Signed in at 127\\.0\\.0\\.1:\\d+ \\(${region}\\)\nworkspace acme Acme\nworkspace beta Beta\nchoose one: eocrm init${flag} <workspace> in a repository, or eocrm login${flag} <workspace> for your default$`, 'm');
+  let mine;
+  for (const [more, region, flag] of [[[], 'eu', ''], [['--device'], 'eu', ''], [['--region', 'ru'], 'ru', ' --region ru']]) {
+    mine = signIn(['login'], 'cli');
+    const before = server.requests.length;
     const r = await mine.run(more);
     assert.equal(r.code, 0, r.err);
-    assert.match(r.out, listed);
+    assert.match(r.out, listed(region, flag));
     assert.equal(r.err, '');
+    const device = server.requests.slice(before).some((q) => q.path === '/oauth/device/code');
+    assert.equal(device, more[0] === '--device', 'device sign-in runs only for --device');
+    if (device) assert.match(r.out, /enter the code BCDFGHJK/);
   }
+  mine = signIn(['login'], 'cli');
+  await mine.run();
   assert.equal(JSON.parse(readFileSync(join(mine.data, 'account.json'), 'utf8')).workspace, undefined);
   const dir = repo();
   const init = await cli(['init', '--data', mine.data], { ...mine.opts, cwd: dir, harness: 'cli' });

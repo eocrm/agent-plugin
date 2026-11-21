@@ -119,7 +119,8 @@ const commands = {
     const region = values.region ?? 'eu';
     const result = await login({ data, region, workspace, env, store, harness, device: values.device, sleep, print: out, openBrowser: (u) => open(u, { print: out }) });
     if (!result.workspace) {
-      [`Signed in at ${new URL(result.issuer).host} (${region})`, ...result.choices, 'choose one: eocrm init <workspace> in a repository, or eocrm login <workspace> for your default'].forEach((l) => out(l));
+      const flag = region === 'eu' ? '' : ` --region ${region}`;
+      [`Signed in at ${new URL(result.issuer).host} (${region})`, ...result.choices, `choose one: eocrm init${flag} <workspace> in a repository, or eocrm login${flag} <workspace> for your default`].forEach((l) => out(l));
       return null;
     }
     const lines = [`${who(loadAccount(data), result.workspace)} (${region})`];
