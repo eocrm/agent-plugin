@@ -488,3 +488,28 @@ test('reconcile saves fetched conventions with conventionsAt and keeps them on a
   assert.deepEqual(loadRun(data, sid).conventions, NEW);
   assert.equal(loadRun(data, sid).conventionsAt, 1);
 });
+
+test('on the default branch the plan committed in the session is found and its commit sent; earlier commits are not', async () => {
+  const dir = tmp('repo');
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
+  mkdirSync(join(dir, 'docs/superpowers/plans'), { recursive: true });
+  writeFileSync(join(dir, 'docs/superpowers/plans/old.md'), PLAN_TEXT);
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'before');
+  const data = tmp('data');
+  const sid = `rec-${process.pid}-${++n}`;
+  const client = { conventions: async () => ({ status: 200, body: { plan_import: true } }), listEvents: async () => ({ status: 200, body: { items: [], next_cursor: null } }) };
+  saveRun(data, sid, { startedAt: 1, runId: 'r1', clientRunId: sid, workspace: 'acme', region: 'eu', startHead: git(dir, 'rev-parse', 'HEAD'), startHeadAt: 0 });
+  writeFileSync(join(dir, PLAN), PLAN_TEXT);
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-q', '-m', 'session');
+  const go = (harness) => reconcile({ data, cwd: dir, now: () => 1_000_000, clientFor: () => client, harness }, loadRun(data, sid));
+  const evts = () => readOutbox(data).filter((e) => e.sessionId === sid && e.kind === 'event').map((e) => e.event);
+  await go('cli');
+  assert.deepEqual(evts().filter((e) => e.type === 'commit'), [], 'the CLI records its own commits');
+  writeOutbox(data, []);
+  await go();
+  assert.equal(evts().find((e) => e.type === 'plan')?.path, PLAN);
+  assert.deepEqual(evts().filter((e) => e.type === 'commit').map((e) => e.subject), ['session']);
+});

@@ -227,6 +227,38 @@ test('a failed Bash call that committed still reports the commit and a failing t
   assert.deepEqual(events(data, s, 'test_run').map((t) => [t.exit_code, t.result_line]), [[1, '1 failed']]);
 });
 
+test('on the default branch a commit is reported once it is the session\'s own; commits from before it are not', async () => {
+  const data = signedIn();
+  const dir = tmp('repo');
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'before');
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
+  await fire('PostToolUse', bash('git commit -m mine', ''));
+  assert.deepEqual(events(data, s, 'commit').map((c) => c.subject), ['mine']);
+});
+
+test('on the default branch commits pulled in during the session but made before it are not its own', async () => {
+  const data = signedIn();
+  const up = tmp('up');
+  git(up, 'init', '-q', '-b', 'main');
+  git(up, 'commit', '-q', '--allow-empty', '-m', 'init');
+  const dir = join(tmp('clone'), 'c');
+  git(up, 'clone', '-q', up, dir);
+  const { ctx, s, fire } = session(data, dir);
+  ctx.now = () => Date.now();
+  await fire('SessionStart', { source: 'startup' });
+  execFileSync('git', ['-c', 'user.name=o', '-c', 'user.email=o@o', 'commit', '-q', '--allow-empty', '-m', 'theirs'], { cwd: up, env: { ...process.env, GIT_COMMITTER_DATE: '2001-01-01T00:00:00Z' } });
+  git(dir, 'pull', '-q', '--ff-only');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
+  git(up, 'pull', '-q', '--ff-only', dir, 'main');
+  git(dir, 'fetch', '-q');
+  await fire('PostToolUse', bash('git pull && git commit -m mine && git push', ''));
+  assert.deepEqual(events(data, s, 'commit').map((c) => c.subject), ['mine']);
+});
+
 test('test-run ids are unique per tool use and per run generation', async () => {
   const data = signedIn();
   const dir = branchRepo();

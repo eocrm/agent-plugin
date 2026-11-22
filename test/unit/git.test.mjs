@@ -17,7 +17,7 @@ test('branchCommits lists the branch past its merge-base with main, oldest first
   git(dir, 'checkout', '-q', '-b', 'feat');
   commit(dir, 'one');
   commit(dir, 'two');
-  const got = branchCommits(dir);
+  const got = branchCommits(dir, 200, undefined, { head: git(dir, 'rev-parse', 'HEAD~1'), at: 0 });
   assert.deepEqual(got.map((c) => c.subject), ['one', 'two']);
   assert.equal(got[1].sha, git(dir, 'rev-parse', 'HEAD'));
   assert.deepEqual(branchCommits(dir, 1).map((c) => c.subject), ['two']);
@@ -67,4 +67,15 @@ test('branchCommits finds the base with one ref lookup and one merge-base', () =
   };
   branchCommits('/w', 200, run);
   assert.deepEqual(calls, ['for-each-ref', 'merge-base', 'log']);
+});
+
+test('branchCommits on the default branch lists only commits past the session start HEAD and time', () => {
+  const dir = tmp();
+  git(dir, 'init', '-q', '-b', 'main');
+  commit(dir, 'init');
+  const head = git(dir, 'rev-parse', 'HEAD');
+  commit(dir, 'one');
+  assert.deepEqual(branchCommits(dir), []);
+  assert.deepEqual(branchCommits(dir, 200, undefined, { head, at: 0 }).map((c) => c.subject), ['one']);
+  assert.deepEqual(branchCommits(dir, 200, undefined, { head, at: Date.now() + 60_000 }), []);
 });
