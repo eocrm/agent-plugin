@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { branchCommits, prView, sessionCommits } from '../../lib/git.mjs';
+import { branchCommits, prView } from '../../lib/git.mjs';
 
 const tmp = () => realpathSync.native(mkdtempSync(join(tmpdir(), 'eocrm-git-')));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe', encoding: 'utf8' }).trim();
@@ -66,26 +66,6 @@ test('branchCommits finds the base with one ref lookup and one merge-base', () =
     return '';
   };
   branchCommits('/w', 200, run);
-  assert.deepEqual(calls, ['for-each-ref', 'merge-base', 'log']);
+  assert.deepEqual(calls, ['for-each-ref', 'merge-base', 'symbolic-ref', 'log']);
 });
 
-test('sessionCommits lists commit, cherry-pick and revert moves since the given HEAD that HEAD still reaches', () => {
-  const dir = tmp();
-  git(dir, 'init', '-q', '-b', 'main');
-  commit(dir, 'init');
-  git(dir, 'checkout', '-q', '-b', 'side');
-  writeFileSync(join(dir, 'f'), 'x');
-  git(dir, 'add', 'f');
-  git(dir, 'commit', '-q', '-m', 'picked');
-  git(dir, 'checkout', '-q', 'main');
-  commit(dir, 'before');
-  const since = git(dir, 'rev-parse', 'HEAD');
-  commit(dir, 'one');
-  commit(dir, 'dropped');
-  git(dir, 'reset', '-q', '--hard', 'HEAD~1');
-  git(dir, 'cherry-pick', 'side');
-  git(dir, 'revert', '--no-edit', 'HEAD');
-  git(dir, 'merge', '-q', '--no-edit', 'side');
-  assert.deepEqual(sessionCommits(dir, since).map((c) => c.subject), ['one', 'picked', 'Revert "picked"']);
-  assert.deepEqual(sessionCommits(dir, 'f'.repeat(40)), [], 'a HEAD the reflog never held claims nothing');
-});

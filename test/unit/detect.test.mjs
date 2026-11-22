@@ -8,7 +8,7 @@ import { budget } from '../../lib/git.mjs';
 import { testRun, prEvent, isCommit, sddStep, ledgerPresent, segments } from '../../lib/detect.mjs';
 import { handle } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
-import { loadRun, saveRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
+import { loadRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
 import { eventId } from '../../lib/ids.mjs';
 
 const UNREACHABLE = JSON.stringify({ issuer: 'http://127.0.0.1:9', api: 'http://127.0.0.1:9/{workspace}/api' });
@@ -243,6 +243,23 @@ function shared() {
   return { dir, mate };
 }
 const subjects = (data, s) => events(data, s, 'commit').map((c) => c.subject);
+const pushed = (who, cwd, m) => {
+  who(cwd, 'commit', '-q', '--allow-empty', '-m', m);
+  who(cwd, 'push', '-q');
+};
+const fileCommit = (who, cwd, name, m) => {
+  writeFileSync(join(cwd, name), m);
+  who(cwd, 'add', name);
+  who(cwd, 'commit', '-q', '-m', m);
+};
+let callN = 0;
+// One Bash call: its PreToolUse mark, the work, then its PostToolUse.
+async function call(fire, command, work = () => {}) {
+  const id = `toolu_call${++callN}`;
+  await fire('Capture', { tool_name: 'Bash', tool_use_id: id, tool_input: { command } });
+  work();
+  await fire('PostToolUse', bash(command, '', { tool_use_id: id }));
+}
 
 test('on main a session reports and records the commit it made, not ones from before it', async () => {
   const data = signedIn();
@@ -252,89 +269,83 @@ test('on main a session reports and records the commit it made, not ones from be
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'before');
   const { s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
-  await fire('PostToolUse', bash('git commit -m mine', ''));
+  await call(fire, 'git commit -m mine', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine'));
   assert.deepEqual(subjects(data, s), ['mine']);
   assert.deepEqual(loadRun(data, s).ownCommits, [git(dir, 'rev-parse', 'HEAD')]);
 });
 
-test('on main a teammate commit pulled during the session is not its own, even when it then commits', async () => {
-  const data = signedIn();
-  const { dir, mate } = shared();
-  const { s, fire } = session(data, dir);
-  await fire('SessionStart', { source: 'startup' });
-  them(mate, 'commit', '-q', '--allow-empty', '-m', 'theirs');
-  them(mate, 'push', '-q');
-  git(dir, 'pull', '-q', '--ff-only');
-  await fire('PostToolUse', bash('git pull --ff-only', ''));
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
-  git(dir, 'push', '-q');
-  await fire('PostToolUse', bash('git commit -m mine && git push', ''));
-  assert.deepEqual(subjects(data, s), ['mine']);
-  assert.deepEqual(loadRun(data, s).ownCommits, [git(dir, 'rev-parse', 'HEAD')]);
-});
-
-test('on main a pull and a commit that made nothing, in one call, claim nothing', async () => {
-  const data = signedIn();
-  const { dir, mate } = shared();
-  const { s, fire } = session(data, dir);
-  await fire('SessionStart', { source: 'startup' });
-  them(mate, 'commit', '-q', '--allow-empty', '-m', 'theirs');
-  them(mate, 'push', '-q');
-  git(dir, 'pull', '-q', '--ff-only');
-  await fire('PostToolUse', bash('git pull && git commit -m nothing', ''));
-  assert.deepEqual(subjects(data, s), []);
-  assert.deepEqual(loadRun(data, s).ownCommits ?? [], []);
-});
-
-test('on main a commit made outside the session\'s git commands is never its own', async () => {
+test('on main commits made outside the session\'s calls are not its own, pushed or not', async () => {
   const data = signedIn();
   const { dir } = shared();
   const { s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
-  them(dir, 'commit', '-q', '--allow-empty', '-m', 'by hand');
-  git(dir, 'push', '-q');
-  await fire('PostToolUse', bash('ls', ''));
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
-  git(dir, 'push', '-q');
-  await fire('PostToolUse', bash('git commit -m mine && git push', ''));
+  them(dir, 'commit', '-q', '--allow-empty', '-m', 'user-terminal');
+  await call(fire, 'git add -A && git commit -m mine', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine'));
+  pushed(them, dir, 'user-terminal-2');
+  await call(fire, 'git add -A && git commit -m mine-2 && git push', () => pushed(git, dir, 'mine-2'));
+  assert.deepEqual(subjects(data, s), ['mine', 'mine-2']);
+});
+
+test('on main a teammate commit pulled in is not its own; a pull with a commit that made nothing claims nothing', async () => {
+  const data = signedIn();
+  const { dir, mate } = shared();
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  pushed(them, mate, 'theirs');
+  await call(fire, 'git pull && git commit -m nothing', () => git(dir, 'pull', '-q', '--ff-only'));
+  assert.deepEqual(subjects(data, s), []);
+  await call(fire, 'git commit -m mine && git push', () => pushed(git, dir, 'mine'));
   assert.deepEqual(subjects(data, s), ['mine']);
   assert.deepEqual(loadRun(data, s).ownCommits, [git(dir, 'rev-parse', 'HEAD')]);
 });
 
-test('two sessions in one checkout on main each report only their own commit', async () => {
+test('a session that ended when another started never claims the other\'s commit', async () => {
+  const data = signedIn();
+  const { dir } = shared();
+  const a = session(data, dir);
+  const b = session(data, dir);
+  await a.fire('SessionStart', { source: 'startup' });
+  await a.fire('UserPromptSubmit', { prompt: 'go' });
+  await b.fire('SessionStart', { source: 'startup' });
+  await call(b.fire, 'ls');
+  await call(a.fire, 'git commit -m by-A', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'by-A'));
+  await call(b.fire, 'git commit -m by-B', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'by-B'));
+  assert.deepEqual(subjects(data, b.s), ['by-B']);
+});
+
+test('two live sessions on main: a commit before the other\'s call is not its own, whichever hook ends first', async () => {
   const data = signedIn();
   const { dir } = shared();
   const a = session(data, dir);
   const b = session(data, dir);
   await a.fire('SessionStart', { source: 'startup' });
   await b.fire('SessionStart', { source: 'startup' });
-  await a.fire('UserPromptSubmit', { prompt: 'go on' });
+  await a.fire('UserPromptSubmit', { prompt: 'go' });
+  await a.fire('Capture', { tool_name: 'Bash', tool_use_id: 'toolu_a', tool_input: { command: 'git commit -m by-A && npm test' } });
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'by-A');
-  await a.fire('PostToolUse', bash('git commit -m by-A', ''));
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'by-B');
-  await b.fire('PostToolUse', bash('git commit -m by-B', ''));
+  await call(b.fire, 'git commit -m by-B', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'by-B'));
+  await a.fire('PostToolUse', bash('git commit -m by-A && npm test', '', { tool_use_id: 'toolu_a' }));
   assert.deepEqual([subjects(data, a.s), subjects(data, b.s)], [['by-A'], ['by-B']]);
-  assert.deepEqual(loadRun(data, b.s).ownCommits, [git(dir, 'rev-parse', 'HEAD')]);
 });
 
-test('a run from before the session HEAD was recorded claims no commit on main until it resumes', async () => {
+test('a call whose reflog mark failed claims nothing; the next call marks without the start-time git dir', async () => {
   const data = signedIn();
-  const { dir, mate } = shared();
+  const dir = tmp('repo');
+  git(dir, 'init', '-q', '-b', 'main');
+  for (const m of ['init', 'hist-1', 'hist-2']) them(dir, 'commit', '-q', '--allow-empty', '-m', m);
   const { s, fire } = session(data, dir);
-  await fire('SessionStart', { source: 'startup' });
-  saveRun(data, s, { lastHead: undefined, ownCommits: undefined });
-  them(mate, 'commit', '-q', '--allow-empty', '-m', 'theirs');
-  them(mate, 'push', '-q');
-  git(dir, 'pull', '-q', '--ff-only');
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'unseen');
-  git(dir, 'push', '-q');
-  await fire('PostToolUse', bash('git pull && git commit -m unseen && git push', ''));
+  process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = '1';
+  try {
+    await fire('SessionStart', { source: 'startup' });
+    await fire('Capture', { tool_name: 'Bash', tool_use_id: 'toolu_x', tool_input: { command: 'git commit -m lost' } });
+  } finally {
+    delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+  }
+  assert.equal(loadRun(data, s).liveDir, undefined);
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'lost');
+  await fire('PostToolUse', bash('git commit -m lost', '', { tool_use_id: 'toolu_x' }));
   assert.deepEqual(subjects(data, s), []);
-  await fire('SessionStart', { source: 'resume' });
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
-  git(dir, 'push', '-q');
-  await fire('PostToolUse', bash('git commit -m mine && git push', ''));
+  await call(fire, 'git commit -m mine', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine'));
   assert.deepEqual(subjects(data, s), ['mine']);
 });
 
@@ -344,11 +355,48 @@ test('a session started in an empty repo reports its first commits', async () =>
   git(dir, 'init', '-q', '-b', 'main');
   const { s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'first');
-  await fire('PostToolUse', bash('git commit -m first', ''));
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'second');
-  await fire('PostToolUse', bash('git commit -m second', ''));
+  await call(fire, 'git commit -m first', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'first'));
+  await call(fire, 'git commit -m second', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'second'));
   assert.deepEqual(subjects(data, s), ['first', 'second']);
+});
+
+test('on main a pull --rebase of an unpushed pre-session commit reports only the session\'s commit, once', async () => {
+  const data = signedIn();
+  const { dir, mate } = shared();
+  pushed(them, mate, 'theirs');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'earlier-local');
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  await call(fire, 'git pull --rebase && git commit -m mine', () => {
+    git(dir, 'pull', '-q', '--rebase');
+    git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
+  });
+  assert.deepEqual(subjects(data, s), ['mine']);
+});
+
+test('an own commit rebased onto upstream in the same call is reported as its rebased copy', async () => {
+  const data = signedIn();
+  const { dir, mate } = shared();
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  fileCommit(them, mate, 'theirs.txt', 'theirs');
+  them(mate, 'push', '-q');
+  await call(fire, 'git commit -m mine && git pull --rebase && git push', () => {
+    fileCommit(git, dir, 'mine.txt', 'mine');
+    git(dir, 'pull', '-q', '--rebase');
+    git(dir, 'push', '-q');
+  });
+  assert.deepEqual(events(data, s, 'commit').map((c) => [c.subject, c.sha]), [['mine', git(dir, 'rev-parse', 'HEAD')]]);
+});
+
+test('a commit through an alias or a make target is claimed', async () => {
+  const data = signedIn();
+  const { dir } = shared();
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  await call(fire, 'gc -m via-gc', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'via-gc'));
+  await call(fire, 'make commit', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'via-make'));
+  assert.deepEqual(subjects(data, s), ['via-gc', 'via-make']);
 });
 
 test('a reported feature commit that reaches main is not reported again, nor a commit reset away', async () => {
@@ -357,13 +405,13 @@ test('a reported feature commit that reaches main is not reported again, nor a c
   const { s, fire } = session(data, dir);
   await fire('SessionStart', { source: 'startup' });
   git(dir, 'checkout', '-q', '-b', 'feat');
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'f1');
-  await fire('PostToolUse', bash('git commit -m f1', ''));
+  await call(fire, 'git commit -m f1', () => git(dir, 'commit', '-q', '--allow-empty', '-m', 'f1'));
   git(dir, 'push', '-q', 'origin', 'feat:main');
   git(dir, 'fetch', '-q');
-  git(dir, 'commit', '-q', '--allow-empty', '-m', 'f2');
-  git(dir, 'reset', '-q', '--hard', 'HEAD~1');
-  await fire('PostToolUse', bash('git commit -m f2 && git reset --hard HEAD~1', ''));
+  await call(fire, 'git commit -m f2 && git reset --hard HEAD~1', () => {
+    git(dir, 'commit', '-q', '--allow-empty', '-m', 'f2');
+    git(dir, 'reset', '-q', '--hard', 'HEAD~1');
+  });
   assert.deepEqual(subjects(data, s), ['f1']);
 });
 

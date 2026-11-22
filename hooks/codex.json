@@ -48,6 +48,18 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/hooks/dispatch.mjs\" --harness codex Capture",
+            "statusMessage": "eocrm: mark the reflog",
+            "async": false,
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
