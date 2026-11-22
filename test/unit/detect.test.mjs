@@ -335,12 +335,14 @@ test('a call whose reflog mark failed claims nothing; the next call marks withou
   git(dir, 'init', '-q', '-b', 'main');
   for (const m of ['init', 'hist-1', 'hist-2']) them(dir, 'commit', '-q', '--allow-empty', '-m', m);
   const { s, fire } = session(data, dir);
-  process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = '1';
+  // git unreachable, not a refused repo: a runner's safe.directory=* would let a dubious-ownership repo through.
+  const path = process.env.PATH;
+  process.env.PATH = tmp('nogit');
   try {
     await fire('SessionStart', { source: 'startup' });
     await fire('Capture', { tool_name: 'Bash', tool_use_id: 'toolu_x', tool_input: { command: 'git commit -m lost' } });
   } finally {
-    delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+    process.env.PATH = path;
   }
   assert.equal(loadRun(data, s).liveDir, undefined);
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'lost');
