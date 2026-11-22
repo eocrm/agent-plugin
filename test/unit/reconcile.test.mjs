@@ -489,27 +489,46 @@ test('reconcile saves fetched conventions with conventionsAt and keeps them on a
   assert.equal(loadRun(data, sid).conventionsAt, 1);
 });
 
-test('on the default branch the plan committed in the session is found and its commit sent; earlier commits are not', async () => {
+function onMain() {
   const dir = tmp('repo');
   git(dir, 'init', '-q', '-b', 'main');
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
-  mkdirSync(join(dir, 'docs/superpowers/plans'), { recursive: true });
-  writeFileSync(join(dir, 'docs/superpowers/plans/old.md'), PLAN_TEXT);
-  git(dir, 'add', '.');
-  git(dir, 'commit', '-q', '-m', 'before');
   const data = tmp('data');
   const sid = `rec-${process.pid}-${++n}`;
   const client = { conventions: async () => ({ status: 200, body: { plan_import: true } }), listEvents: async () => ({ status: 200, body: { items: [], next_cursor: null } }) };
-  saveRun(data, sid, { startedAt: 1, runId: 'r1', clientRunId: sid, workspace: 'acme', region: 'eu', startHead: git(dir, 'rev-parse', 'HEAD'), startHeadAt: 0 });
-  writeFileSync(join(dir, PLAN), PLAN_TEXT);
-  git(dir, 'add', '.');
-  git(dir, 'commit', '-q', '-m', 'session');
-  const go = (harness) => reconcile({ data, cwd: dir, now: () => 1_000_000, clientFor: () => client, harness }, loadRun(data, sid));
+  const go = () => reconcile({ data, cwd: dir, now: () => 1_000_000, clientFor: () => client }, loadRun(data, sid));
   const evts = () => readOutbox(data).filter((e) => e.sessionId === sid && e.kind === 'event').map((e) => e.event);
-  await go('cli');
-  assert.deepEqual(evts().filter((e) => e.type === 'commit'), [], 'the CLI records its own commits');
-  writeOutbox(data, []);
+  const commitPlan = (name, msg) => {
+    mkdirSync(join(dir, 'docs/superpowers/plans'), { recursive: true });
+    writeFileSync(join(dir, `docs/superpowers/plans/${name}`), PLAN_TEXT);
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-q', '-m', msg);
+    return git(dir, 'rev-parse', 'HEAD');
+  };
+  return { dir, data, sid, go, evts, commitPlan };
+}
+
+test('on main only a plan in a commit the run recorded is found; others\' commits are neither found nor sent', async () => {
+  const { data, sid, go, evts, commitPlan } = onMain();
+  saveRun(data, sid, { startedAt: 1, runId: 'r1', clientRunId: sid, workspace: 'acme', region: 'eu', startHead: commitPlan('theirs.md', 'teammate work + plan'), ownCommits: [] });
+  await go();
+  assert.deepEqual(evts().filter((e) => e.type === 'plan' || e.type === 'commit'), []);
+  const own = commitPlan('p.md', 'session');
+  saveRun(data, sid, { ownCommits: [own] });
   await go();
   assert.equal(evts().find((e) => e.type === 'plan')?.path, PLAN);
-  assert.deepEqual(evts().filter((e) => e.type === 'commit').map((e) => e.subject), ['session']);
+  assert.deepEqual(evts().filter((e) => e.type === 'commit'), [], 'the detector reports it');
+});
+
+test('a run whose start HEAD is off the checked-out branch re-derives none of its reported commits', async () => {
+  const { dir, data, sid, go, evts } = onMain();
+  git(dir, 'checkout', '-q', '-b', 'old');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'o1');
+  git(dir, 'checkout', '-q', 'main');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'x');
+  saveRun(data, sid, { startedAt: 1, runId: 'r1', clientRunId: sid, workspace: 'acme', region: 'eu', startHead: git(dir, 'rev-parse', 'HEAD') });
+  git(dir, 'checkout', '-q', 'old');
+  saveWorktree(data, worktreeOf(dir).key, { reportedCommits: [git(dir, 'rev-parse', 'HEAD')] });
+  await go();
+  assert.deepEqual(evts().filter((e) => e.type === 'commit'), []);
 });
