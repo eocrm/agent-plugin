@@ -287,6 +287,21 @@ test('on main a pull and a commit that made nothing, in one call, claim nothing'
   assert.deepEqual(loadRun(data, s).ownCommits ?? [], []);
 });
 
+test('on main a commit made outside the session\'s git commands is never its own', async () => {
+  const data = signedIn();
+  const { dir } = shared();
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  them(dir, 'commit', '-q', '--allow-empty', '-m', 'by hand');
+  git(dir, 'push', '-q');
+  await fire('PostToolUse', bash('ls', ''));
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'mine');
+  git(dir, 'push', '-q');
+  await fire('PostToolUse', bash('git commit -m mine && git push', ''));
+  assert.deepEqual(subjects(data, s), ['mine']);
+  assert.deepEqual(loadRun(data, s).ownCommits, [git(dir, 'rev-parse', 'HEAD')]);
+});
+
 test('two sessions in one checkout on main each report only their own commit', async () => {
   const data = signedIn();
   const { dir } = shared();
