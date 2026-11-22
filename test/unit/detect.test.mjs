@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { budget } from '../../lib/git.mjs';
-import { testRun, prEvent, isCommit, sddStep, ledgerPresent, segments } from '../../lib/detect.mjs';
+import { testRun, prEvent, isCommit, sddStep, ledgerPresent, segments, takeCall } from '../../lib/detect.mjs';
 import { handle } from '../../lib/run.mjs';
 import { readOutbox, writeOutbox } from '../../lib/outbox.mjs';
 import { loadRun, loadWorktree, worktreeOf } from '../../lib/state.mjs';
@@ -387,6 +388,55 @@ test('an own commit rebased onto upstream in the same call is reported as its re
     git(dir, 'push', '-q');
   });
   assert.deepEqual(events(data, s, 'commit').map((c) => [c.subject, c.sha]), [['mine', git(dir, 'rev-parse', 'HEAD')]]);
+});
+
+test('a commit made while a parallel call of the session ended first is still claimed', async () => {
+  const data = signedIn();
+  const { dir } = shared();
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  const cap = (id, command) => fire('Capture', { tool_name: 'Bash', tool_use_id: id, tool_input: { command } });
+  await cap('toolu_pa', 'git commit -m par2');
+  await cap('toolu_pb', 'ls');
+  await fire('PostToolUse', bash('ls', '', { tool_use_id: 'toolu_pb' }));
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'par2');
+  await fire('PostToolUse', bash('git commit -m par2', '', { tool_use_id: 'toolu_pa' }));
+  assert.deepEqual(subjects(data, s), ['par2']);
+});
+
+test('concurrent Capture hooks each keep their mark', async () => {
+  const data = signedIn();
+  const { dir } = shared();
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  const dispatch = fileURLToPath(new URL('../../hooks/dispatch.mjs', import.meta.url));
+  const one = (id) => new Promise((done) => {
+    const c = spawn(process.execPath, [dispatch, 'Capture', '--data', data], { stdio: ['pipe', 'ignore', 'ignore'] });
+    c.on('exit', done);
+    c.stdin.end(JSON.stringify({ session_id: s, cwd: dir, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: id }));
+  });
+  const ids = Array.from({ length: 16 }, (_, i) => `toolu_race${i}`);
+  for (let i = 0; i < ids.length; i += 4) await Promise.all(ids.slice(i, i + 4).map(one));
+  assert.deepEqual(ids.filter((id) => !takeCall(data, s, id)), []);
+});
+
+test('a rebase in the call maps an own commit to its pick, not to a look-alike pulled in', async () => {
+  const data = signedIn();
+  const { dir, mate } = shared();
+  const same = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'pipe', env: { ...process.env, GIT_AUTHOR_DATE: '1700000000 +0000' } });
+  writeFileSync(join(mate, 'a'), 'other');
+  git(mate, 'add', 'a');
+  same(mate, 'commit', '-q', '-m', 'fix lint');
+  git(mate, 'push', '-q');
+  const { s, fire } = session(data, dir);
+  await fire('SessionStart', { source: 'startup' });
+  await call(fire, 'git commit -m "fix lint" && git pull --rebase', () => {
+    writeFileSync(join(dir, 'b'), 'mine');
+    git(dir, 'add', 'b');
+    same(dir, 'commit', '-q', '-m', 'fix lint');
+    git(dir, 'pull', '-q', '--rebase');
+  });
+  assert.deepEqual(events(data, s, 'commit').map((c) => c.sha), [git(dir, 'rev-parse', 'HEAD')]);
 });
 
 test('a commit through an alias or a make target is claimed', async () => {
