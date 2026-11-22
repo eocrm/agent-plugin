@@ -56,7 +56,7 @@ test('codex hooks call dispatch with --harness codex for every event', () => {
   const { hooks } = json('hooks/codex.json');
   assert.deepEqual(Object.keys(hooks), ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'PostModelRequest', 'Stop', 'SessionEnd']);
   for (const [event, groups] of Object.entries(hooks)) {
-    for (const g of groups) for (const h of g.hooks) assert.match(h.command, new RegExp(`^node "\\$PLUGIN_ROOT/hooks/dispatch\\.mjs" --harness codex (${event}|Remind)$`));
+    for (const g of groups) for (const h of g.hooks) assert.match(h.command, new RegExp(`^node "\\$PLUGIN_ROOT/hooks/dispatch\\.mjs" --harness codex (${event}|Remind|Capture)$`));
   }
   assert.equal(hooks.SessionStart[0].matcher, 'startup|resume|clear|compact|fork');
   assert.equal(hooks.SessionStart[0].hooks[0].async, false);

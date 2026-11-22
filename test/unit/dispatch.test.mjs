@@ -70,6 +70,7 @@ test('hooks.json declares exactly the planned hooks', () => {
     ['UserPromptSubmit', 'UserPromptSubmit', null, true, null],
     ['UserPromptSubmit', 'Remind', null, false, 5],
     ['PreToolUse', 'PreToolUse', 'Agent|Task', true, null],
+    ['PreToolUse', 'Capture', 'Bash', false, 5],
     ['PostToolUse', 'PostToolUse', 'Bash|Write|Edit|MultiEdit|TodoWrite|TaskCreate|TaskUpdate|Agent|Task', true, null],
     ['PostToolUse', 'Resume', '*', true, null],
     ['PostToolUse', 'Remind', 'Bash|mcp__.*eocrm.*__tasks_(create|move_stage)', false, 5],

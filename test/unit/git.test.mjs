@@ -66,5 +66,6 @@ test('branchCommits finds the base with one ref lookup and one merge-base', () =
     return '';
   };
   branchCommits('/w', 200, run);
-  assert.deepEqual(calls, ['for-each-ref', 'merge-base', 'log']);
+  assert.deepEqual(calls, ['for-each-ref', 'merge-base', 'symbolic-ref', 'log']);
 });
+
