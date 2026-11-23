@@ -95,7 +95,7 @@ With `openspec/changes/<id>/tasks.md` in the repo, each open change becomes a pl
 
 ### Upload
 
-`eocrm upload <file…> --to task:<id>` attaches files to a record (`--to <entity_type>:<id>`; a task key is refused, so get the id from the MCP `tasks_get` tool) and prints each file's id and a Markdown snippet to paste into a rich-text field. `--group <id>` picks a file group; `--json` prints one array of `{file, id, rich_text}` or `{file, error}`. Accepted: PDF, images (PNG, JPEG, GIF, WebP, HEIC, TIFF), text, Markdown, CSV, JSON, YAML, Office documents and ZIP, up to the workspace's file size limit. A failed file doesn't stop the rest; the exit code is 1 if any failed.
+`eocrm upload <file…> --to task:<id>` attaches files to a record (`--to <entity_type>:<id>`; a task key is refused, so get the id from the MCP `tasks_get` tool) and prints each file's id and a Markdown snippet to paste into a rich-text field. `--group <id>` picks a file group; `--json` prints one array of `{file, id, rich_text}` or `{file, error}`. Any file type is accepted, up to the workspace's file size limit; images, PDF and text open in the browser and everything else downloads. A failed file doesn't stop the rest; the exit code is 1 if any failed.
 
 ### Upgrading
 
