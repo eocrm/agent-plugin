@@ -77,16 +77,22 @@ test('the happy path requests, posts to storage without auth, completes, and pri
   assert.equal(r.out, `${join(dir, 'shot.png')}: id-shot.png\n${richText('id-shot.png', 'shot.png', 'image/png')}`);
 });
 
-test('an unknown extension, a missing file and an empty file are refused before any request', async () => {
-  const { data, dir } = setup({ 'x.exe': 'MZ', 'empty.txt': '' });
+test('a missing file and an empty file are refused before any request', async () => {
+  const { data, dir } = setup({ 'empty.txt': '' });
   mkdirSync(join(dir, 'd.txt'));
-  const r = await run(['upload', join(dir, 'x.exe'), join(dir, 'nope.pdf'), join(dir, 'empty.txt'), join(dir, 'd.txt'), '--to', 'task:1'], { cwd: dir, data });
+  const r = await run(['upload', join(dir, 'nope.pdf'), join(dir, 'empty.txt'), join(dir, 'd.txt'), '--to', 'task:1'], { cwd: dir, data });
   assert.equal(r.code, 1);
   assert.equal(r.calls.length, 0);
-  assert.match(r.err, /x\.exe: unsupported file type; accepted: pdf, png/);
   assert.match(r.err, /nope\.pdf: no such file/);
   assert.match(r.err, /empty\.txt: file is empty/);
   assert.match(r.err, /d\.txt: not a regular file/);
+});
+
+test('an unknown extension uploads as application/octet-stream', async () => {
+  const { data, dir } = setup({ 'x.exe': 'MZ' });
+  const r = await run(['upload', join(dir, 'x.exe'), '--to', 'task:1'], { cwd: dir, data });
+  assert.equal(r.code, 0, r.err);
+  assert.deepEqual(JSON.parse(r.calls[0].body), { entity_type: 'task', entity_id: '1', filename: 'x.exe', content_type: 'application/octet-stream', size: 2 });
 });
 
 test('the API\'s own message is shown on 422 and 403', async () => {
