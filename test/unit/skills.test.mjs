@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const NAMES = ['link-run', 'file-human-work', 'pick-type', 'record-judgement', 'login', 'status', 'use'];
+const NAMES = ['link-run', 'file-human-work', 'pick-type', 'record-judgement', 'login', 'status', 'use', 'attach'];
 
 function parse(name, dir = 'skills') {
   const text = readFileSync(join(root, dir, name, 'SKILL.md'), 'utf8');

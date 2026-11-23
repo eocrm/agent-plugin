@@ -17,8 +17,9 @@ import { eventId } from '../lib/ids.mjs';
 import { taskFor } from '../lib/detect.mjs';
 import { worktreeOf, lastHookAt, writeJsonAtomic, withLock, saveRun } from '../lib/state.mjs';
 import { CHANGE_ID, importChanges, linkChange } from '../lib/cli/openspec.mjs';
+import { parseTarget, uploadAll } from '../lib/upload.mjs';
 
-const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' }, agent: { type: 'string' }, quiet: { type: 'boolean' }, 'shared-hooks': { type: 'boolean' }, space: { type: 'string' } };
+const OPTIONS = { data: { type: 'string' }, device: { type: 'boolean' }, harness: { type: 'string' }, region: { type: 'string' }, here: { type: 'boolean' }, accept: { type: 'boolean' }, decline: { type: 'boolean' }, what: { type: 'string' }, why: { type: 'string' }, 'cost-if-wrong': { type: 'string' }, severity: { type: 'string' }, summary: { type: 'string' }, outcome: { type: 'string' }, session: { type: 'string' }, refresh: { type: 'boolean' }, repo: { type: 'string' }, agent: { type: 'string' }, quiet: { type: 'boolean' }, 'shared-hooks': { type: 'boolean' }, space: { type: 'string' }, to: { type: 'string' }, group: { type: 'string' }, json: { type: 'boolean' } };
 const SEVERITIES = ['critical', 'important', 'minor', 'theoretical'];
 const OUTCOMES = ['open', 'fixed', 'accepted', 'disputed', 'dropped'];
 const LINK_KEY = /^[A-Z][A-Z0-9]{1,9}-[0-9]+$/;
@@ -303,6 +304,20 @@ const commands = {
     return importChanges({ client: createClient({ endpoints: endpoints({ region, env }), workspace, store, harness }), data, cwd, space: values.space, out });
   },
 
+  async upload({ values, positionals: files, cwd, out, err, data, env, store, harness }) {
+    if (!files.length) throw new Usage('usage: eocrm upload <file…> --to <entity_type>:<id> [--group <id>] [--json]');
+    let target;
+    try {
+      target = parseTarget(need(values.to, 'to'));
+    } catch (e) {
+      throw new Usage(e.message);
+    }
+    const { workspace, region } = resolveWorkspace({ data, cwd });
+    if (!workspace || !region) throw new Usage(`workspace required: run ${cmd(harness, 'login')} first`);
+    const client = createClient({ endpoints: endpoints({ region, env }), workspace, store, harness });
+    return uploadAll({ client, files, target, group: values.group, json: values.json, login: cmd(harness, 'login'), out, err });
+  },
+
   async logout({ env, out, data, store, harness }) {
     const account = loadAccount(data);
     const keys = new Set(Array.isArray(account.keys) ? account.keys : []);
@@ -381,7 +396,7 @@ export async function main({
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [name, ...rest] = positionals;
     const command = Object.hasOwn(commands, name) ? commands[name] : null;
-    if (!command) throw new Usage('usage: eocrm init|login|use|pair|status|link|record|conventions|sync|run|openspec|uninstall|logout|smoke-seed --data <dir>');
+    if (!command) throw new Usage('usage: eocrm init|login|use|pair|status|link|record|conventions|sync|run|openspec|upload|uninstall|logout|smoke-seed --data <dir>');
     const harness = forced ?? cliHarness({ flag: values.harness, env, script });
     if (harness === 'codex') values.session ||= env.CODEX_THREAD_ID;
     if (values.session && !/^[\w-]+$/.test(values.session)) throw new Usage('invalid --session');
@@ -394,7 +409,7 @@ export async function main({
     } catch (e) {
       throw new Usage(e.message);
     }
-    const code = await command({ values, positionals: rest, env, cwd, out, data, harness, store: store ?? storeFor(data, harness), open, spawnFlush, gh, sleep });
+    const code = await command({ values, positionals: rest, env, cwd, out, err, data, harness, store: store ?? storeFor(data, harness), open, spawnFlush, gh, sleep });
     return code ?? 0;
   } catch (e) {
     for (const line of e.lines ?? []) out(line);

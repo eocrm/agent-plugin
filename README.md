@@ -38,7 +38,7 @@ Prerequisites for `eocrm` (agent work): Node 20+ on PATH, `git`, optionally `gh`
 - `/eocrm:login` (a skill; in Codex, ask for the `login` skill) signs in through the browser (sign-in starts in the EU and eocrm resolves your home region; `--region ru` signs in to an RU workspace) and stores tokens in the OS keychain, or a 0600 file when no keychain is usable.
 - `/eocrm:use` maps the current repo to a workspace. The mapping is stored per repo, and `.claude/eocrm.json` (workspace slug and region only) can be committed to share it; each user confirms it once. With a single workspace the plugin picks it automatically.
 - Reminders: on session start, resume or `/clear`, on a new branch, or when work moves to another task, the plugin reminds Claude of the linked task. The Conventions **Task switch check** sets how often it checks for a task switch: Every prompt, After a pause (the default), or Signals only.
-- Four skills: `pick-type`, `link-run`, `record-judgement`, `file-human-work`.
+- Five skills: `pick-type`, `link-run`, `record-judgement`, `file-human-work`, `attach` (uploads files to the linked task).
 - `/eocrm:status` (Codex: the `status` skill) shows sign-in, workspace and pairing.
 
 ## Use with any agent (CLI)
@@ -82,6 +82,7 @@ Attribution is display only, not a trust boundary.
 | `eocrm link <KEY\|none>` | link this worktree to a task |
 | `eocrm link <change> <KEY\|none>` | link an OpenSpec change to a task |
 | `eocrm openspec import --space KEY` | create tasks for unlinked OpenSpec changes |
+| `eocrm upload <file…> --to <type>:<id> [--group <id>] [--json]` | attach files to a record |
 | `eocrm uninstall` | remove exactly the lines `init` added |
 
 ### Hooks
@@ -91,6 +92,10 @@ Hooks only queue an event and return; a detached process sends it. They never fa
 ### OpenSpec
 
 With `openspec/changes/<id>/tasks.md` in the repo, each open change becomes a plan on a task. `eocrm openspec import --space KEY` creates a task per unlinked change (title from `proposal.md`, the Why section as description) and records the mapping per repo; without `--space` it lists your spaces. To link a change to an existing task use `eocrm link <change> <KEY>`, or put `<!-- eocrm: KEY -->` in its `proposal.md`. Checked-off items in `tasks.md` mark plan items done; lines inside code fences are ignored.
+
+### Upload
+
+`eocrm upload <file…> --to task:<id>` attaches files to a record (`--to <entity_type>:<id>`; a task key is refused, so get the id from the MCP `tasks_get` tool) and prints each file's id and a Markdown snippet to paste into a rich-text field. `--group <id>` picks a file group; `--json` prints one array of `{file, id, rich_text}` or `{file, error}`. Accepted: PDF, images (PNG, JPEG, GIF, WebP, HEIC, TIFF), text, Markdown, CSV, JSON, YAML, Office documents and ZIP, up to the workspace's file size limit. A failed file doesn't stop the rest; the exit code is 1 if any failed.
 
 ### Upgrading
 
